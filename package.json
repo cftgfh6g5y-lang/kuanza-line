@@ -1,0 +1,8 @@
+{
+  "name": "kuanza-line",
+  "version": "0.7.0",
+  "private": true,
+  "description": "Kuanza Line — Compra. Vende. Confia.",
+  "scripts": {"start": "node server.js"},
+  "engines": {"node": ">=18"}
+}
