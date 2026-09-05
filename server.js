@@ -20,4 +20,4 @@ if(u.pathname==='/api/orders'&&req.method==='POST'){const t=(req.headers.authori
 if(u.pathname==='/api/orders'&&req.method==='GET'){const t=(req.headers.authorization||'').replace('Bearer ','');const s=db.sessions.find(x=>x.token===t);if(!s)return json(res,401,{error:'Inicia sessão para ver pedidos.'});return json(res,200,db.orders.filter(x=>x.userId===s.userId))}
 const file=path.join(PUBLIC,u.pathname==='/'?'index.html':u.pathname);if(!file.startsWith(PUBLIC)||!fs.existsSync(file))return json(res,404,{error:'Not found'});const ext=path.extname(file),types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json'};res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream'});fs.createReadStream(file).pipe(res);
 }catch(e){console.error(e);json(res,500,{error:'Erro interno'})}});
-server.listen(3000,'127.0.0.1',()=>console.log('Kuanza Line API running at http://127.0.0.1:3000'));
+const PORT = Number(process.env.PORT || 3000);server.listen(PORT, '0.0.0.0', () => console.log(`Kuanza Line API running on port ${PORT}`));
