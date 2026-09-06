@@ -1,2 +1,1148 @@
-<!doctype html><html lang="pt"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#16A34A"><title>Kuanza Line V0.7</title><style>*{box-sizing:border-box}body{margin:0;background:#f5f7f5;font-family:Inter,system-ui,-apple-system,sans-serif;color:#111827}.app{max-width:520px;margin:auto;min-height:100vh;background:white;padding:18px 16px 40px}.brand{font-weight:900;font-size:21px}.brand span{color:#16A34A}.tag{color:#6b7280;font-size:12px;margin:3px 0 18px}.hero{background:#16A34A;color:white;border-radius:20px;padding:20px;margin-bottom:14px}.hero h1{margin:0 0 7px;font-size:25px}.card{border:1px solid #e5e7eb;border-radius:16px;padding:15px;margin:10px 0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.product{border:1px solid #e5e7eb;border-radius:15px;overflow:hidden}.pic{height:130px;background:#f0f5f1;display:grid;place-items:center;font-size:52px}.p{padding:10px}.price{font-weight:900;color:#16A34A;margin-top:5px}.muted{color:#6b7280;font-size:12px}.form{display:grid;gap:9px}.form input,.form select{padding:12px;border:1px solid #ddd;border-radius:11px}.btn{background:#16A34A;color:white;border:0;border-radius:11px;padding:12px 15px;font-weight:800}.btn.alt{background:#111827}.tabs{display:flex;gap:8px;margin:14px 0;flex-wrap:wrap}.tabs button{border:1px solid #ddd;background:#fff;border-radius:10px;padding:9px}.hidden{display:none}.status{display:inline-block;background:#eaf7ef;color:#087a3c;padding:5px 8px;border-radius:99px;font-size:11px;font-weight:800}</style><div class="app"><div class="brand">KUANZA <span>LINE</span></div><div class="tag">Compra. Vende. Confia. · V0.7</div><div class="hero"><h1>Agora temos uma API real.</h1><div>Contas, produtos e pedidos passam a comunicar com um backend local.</div></div><div class="tabs"><button onclick="view('home')">Produtos</button><button onclick="view('auth')">Conta</button><button onclick="view('sell')">Vender</button><button onclick="view('orders')">Pedidos</button></div><section id="home"><h2>Produtos</h2><div id="products" class="grid"></div></section><section id="auth" class="hidden"><div class="card"><h2 id="authTitle">Criar conta</h2><form class="form" onsubmit="register(event)"><input id="name" placeholder="Nome" required><input id="email" type="email" placeholder="Email" required><input id="password" type="password" placeholder="Palavra-passe" required><select id="role"><option value="buyer">Quero comprar</option><option value="seller">Quero vender</option></select><button class="btn">Criar conta</button></form><p class="muted">Já tens conta? <button onclick="loginMode()">Entrar</button></p><div id="me"></div></div></section><section id="sell" class="hidden"><div class="card"><h2>Publicar produto</h2><form class="form" onsubmit="publish(event)"><input id="pn" placeholder="Nome do produto" required><input id="pp" type="number" placeholder="Preço em Kz" required><select id="pc"><option>Eletrónicos</option><option>Moda</option><option>Casa</option><option>Beleza</option><option>Automóveis</option></select><input id="pe" placeholder="Emoji, ex.: 📱"><button class="btn">Publicar</button></form></div></section><section id="orders" class="hidden"><div class="card"><h2>Pedidos</h2><div id="orderList">Inicia sessão para consultar pedidos.</div></div></section></div><script>
-let token=localStorage.klToken||'';const $=id=>document.getElementById(id);function view(x){['home','auth','sell','orders'].forEach(i=>$(i).classList.toggle('hidden',i!==x));if(x==='orders')loadOrders()}async function api(p,o={}){let h={'Content-Type':'application/json'};if(token)h.Authorization='Bearer '+token;let r=await fetch(p,{...o,headers:h});let d=await r.json();if(!r.ok)throw Error(d.error||'Erro');return d}async function load(){let ps=await api('/api/products');$('products').innerHTML=ps.map(p=>`<div class="product"><div class="pic">${p.emoji}</div><div class="p"><b>${p.name}</b><div class="price">${new Intl.NumberFormat('pt-PT').format(p.price)} Kz</div><div class="muted">${p.seller} ${p.verified?'✓':''}</div><button class="btn" style="margin-top:8px;width:100%" onclick="buy('${p.id}',${p.price})">Comprar</button></div></div>`).join('')}async function register(e){e.preventDefault();try{let d=await api('/api/register',{method:'POST',body:JSON.stringify({name:$('name').value,email:$('email').value,password:$('password').value,role:$('role').value})});token=d.token;localStorage.klToken=token;$('me').innerHTML='<p class="status">Conta criada e sessão iniciada ✓</p>';alert('Conta criada!')}catch(x){alert(x.message)}}function loginMode(){let e=new Event('submit');let f=$('auth').querySelector('form');f.onsubmit=async ev=>{ev.preventDefault();try{let d=await api('/api/login',{method:'POST',body:JSON.stringify({email:$('email').value,password:$('password').value})});token=d.token;localStorage.klToken=token;$('me').innerHTML='<p class="status">Sessão iniciada ✓</p>'}catch(x){alert(x.message)}};$('authTitle').textContent='Entrar';$('name').required=false;$('role').required=false;f.querySelector('button').textContent='Entrar'}async function publish(e){e.preventDefault();try{await api('/api/products',{method:'POST',body:JSON.stringify({name:$('pn').value,price:$('pp').value,cat:$('pc').value,emoji:$('pe').value||'📦'})});alert('Produto publicado!');e.target.reset();load();view('home')}catch(x){alert(x.message)}}async function buy(id,price){try{await api('/api/orders',{method:'POST',body:JSON.stringify({items:[{id,qty:1}],total:price})});alert('Pedido criado!')}catch(x){alert(x.message)}}async function loadOrders(){try{let os=await api('/api/orders');$('orderList').innerHTML=os.length?os.map(o=>`<div class="card"><b>#${o.id}</b><br><span class="status">${o.status}</span><div class="muted">Total: ${new Intl.NumberFormat('pt-PT').format(o.total)} Kz</div></div>`).join(''):'Nenhum pedido.'}catch(x){$('orderList').textContent=x.message}}load();</script></html>
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#16A34A">
+<title>Kuanza Line</title>
+<style>
+*{box-sizing:border-box}
+body{
+margin:0;
+background:#f5f7f5;
+font-family:Inter,system-ui,-apple-system,sans-serif;
+color:#111827
+}
+.app{
+max-width:520px;
+margin:auto;
+min-height:100vh;
+background:white;
+padding:18px 16px 40px
+}
+.brand{
+font-weight:900;
+font-size:21px
+}
+.brand span{
+color:#16A34A
+}
+.tag{
+color:#6b7280;
+font-size:12px;
+margin:3px 0 18px
+}
+.hero{
+background:#16A34A;
+color:white;
+border-radius:20px;
+padding:20px;
+margin-bottom:14px
+}
+.hero h1{
+margin:0 0 7px;
+font-size:25px
+}
+.card{
+border:1px solid #e5e7eb;
+border-radius:16px;
+padding:15px;
+margin:10px 0
+}
+.grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:10px
+}
+.product{
+border:1px solid #e5e7eb;
+border-radius:15px;
+overflow:hidden
+}
+.pic{
+height:130px;
+background:#f0f5f1;
+display:grid;
+place-items:center;
+font-size:52px
+}
+.p{
+padding:10px
+}
+.price{
+font-weight:900;
+color:#16A34A;
+margin-top:5px
+}
+.muted{
+color:#6b7280;
+font-size:12px
+}
+.form{
+display:grid;
+gap:9px
+}
+.form input,
+.form select{
+padding:12px;
+border:1px solid #ddd;
+border-radius:11px;
+font-size:15px
+}
+.btn{
+background:#16A34A;
+color:white;
+border:0;
+border-radius:11px;
+padding:12px 15px;
+font-weight:800;
+cursor:pointer
+}
+.btn.alt{
+background:#111827
+}
+.btn.danger{
+background:#dc2626
+}
+.tabs{
+display:flex;
+gap:8px;
+margin:14px 0;
+flex-wrap:wrap
+}
+.tabs button{
+border:1px solid #ddd;
+background:#fff;
+border-radius:10px;
+padding:9px 11px;
+font-weight:700
+}
+.hidden{
+display:none
+}
+.status{
+display:inline-block;
+background:#eaf7ef;
+color:#087a3c;
+padding:5px 8px;
+border-radius:99px;
+font-size:11px;
+font-weight:800
+}
+.score{
+font-size:42px;
+font-weight:900;
+color:#16A34A;
+margin:5px 0
+}
+.badge{
+display:inline-block;
+background:#eaf7ef;
+color:#087a3c;
+padding:5px 9px;
+border-radius:99px;
+font-size:11px;
+font-weight:800;
+margin-top:5px
+}
+.profile-row{
+padding:10px 0;
+border-bottom:1px solid #eee
+}
+.profile-row:last-child{
+border-bottom:0
+}
+.empty{
+text-align:center;
+padding:25px 10px;
+color:#6b7280
+}
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+<div class="brand">
+KUANZA <span>LINE</span>
+</div>
+
+<div class="tag">
+Compra. Vende. Confia.
+</div>
+
+<div class="hero">
+<h1>Compra. Vende. Confia.</h1>
+<div>
+O marketplace feito para aproximar compradores e vendedores em Angola.
+</div>
+</div>
+
+<div class="tabs">
+<button onclick="view('home')">Produtos</button>
+<button onclick="view('auth')">Conta</button>
+<button onclick="view('profile')">Perfil</button>
+<button onclick="view('sell')">Vender</button>
+<button onclick="view('orders')">Pedidos</button>
+</div>
+
+
+<!-- PRODUTOS -->
+
+<section id="home">
+
+<h2>Produtos</h2>
+
+<div id="products" class="grid">
+Carregando produtos...
+</div>
+
+</section>
+
+
+<!-- CONTA -->
+
+<section id="auth" class="hidden">
+
+<div class="card">
+
+<h2 id="authTitle">Criar conta</h2>
+
+<form id="authForm" class="form" onsubmit="submitAuth(event)">
+
+<input
+id="name"
+placeholder="Nome completo"
+required
+>
+
+<input
+id="email"
+type="email"
+placeholder="Email"
+required
+>
+
+<input
+id="password"
+type="password"
+placeholder="Palavra-passe"
+required
+>
+
+<select id="role">
+<option value="buyer">Quero comprar</option>
+<option value="seller">Quero vender</option>
+</select>
+
+<button
+id="authButton"
+class="btn"
+type="submit">
+Criar conta
+</button>
+
+</form>
+
+<p class="muted">
+<span id="authSwitchText">Já tens conta?</span>
+
+<button
+id="authSwitch"
+onclick="loginMode()">
+Entrar
+</button>
+</p>
+
+<div id="me"></div>
+
+</div>
+
+</section>
+
+
+<!-- PERFIL -->
+
+<section id="profile" class="hidden">
+
+<div class="card">
+
+<h2>Meu perfil</h2>
+
+<div id="profileContent">
+Carregando perfil...
+</div>
+
+</div>
+
+</section>
+
+
+<!-- VENDER -->
+
+<section id="sell" class="hidden">
+
+<div class="card">
+
+<h2>Publicar produto</h2>
+
+<p class="muted">
+Coloque o seu produto à venda no Kuanza Line.
+</p>
+
+<form class="form" onsubmit="publish(event)">
+
+<input
+id="pn"
+placeholder="Nome do produto"
+required
+>
+
+<input
+id="pp"
+type="number"
+placeholder="Preço em Kz"
+required
+>
+
+<select id="pc">
+<option>Eletrónicos</option>
+<option>Moda</option>
+<option>Casa</option>
+<option>Beleza</option>
+<option>Automóveis</option>
+<option>Telemóveis</option>
+<option>Outros</option>
+</select>
+
+<input
+id="pe"
+placeholder="Emoji, ex.: 📱"
+>
+
+<button class="btn">
+Publicar produto
+</button>
+
+</form>
+
+</div>
+
+</section>
+
+
+<!-- PEDIDOS -->
+
+<section id="orders" class="hidden">
+
+<div class="card">
+
+<h2>Meus pedidos</h2>
+
+<div id="orderList">
+Inicia sessão para consultar pedidos.
+</div>
+
+</div>
+
+</section>
+
+</div>
+
+
+<script>
+
+let token = localStorage.klToken || '';
+
+const $ = id => document.getElementById(id);
+
+
+/* NAVEGAÇÃO */
+
+function view(x){
+
+[
+'home',
+'auth',
+'profile',
+'sell',
+'orders'
+].forEach(i => {
+
+$(i).classList.toggle(
+'hidden',
+i !== x
+);
+
+});
+
+if(x === 'profile') loadProfile();
+
+if(x === 'orders') loadOrders();
+
+if(x === 'sell') checkSeller();
+
+}
+
+
+/* API */
+
+async function api(path, options = {}){
+
+let headers = {
+'Content-Type':'application/json'
+};
+
+if(token){
+
+headers.Authorization =
+'Bearer ' + token;
+
+}
+
+let response = await fetch(
+path,
+{
+...options,
+headers
+}
+);
+
+let data = await response.json();
+
+if(!response.ok){
+
+throw Error(
+data.error || 'Ocorreu um erro.'
+);
+
+}
+
+return data;
+
+}
+
+
+/* ESCAPAR TEXTO */
+
+function esc(value){
+
+return String(value ?? '')
+.replaceAll('&','&amp;')
+.replaceAll('<','&lt;')
+.replaceAll('>','&gt;')
+.replaceAll('"','&quot;')
+.replaceAll("'","&#039;");
+
+}
+
+
+/* PRODUTOS */
+
+async function load(){
+
+try{
+
+let products =
+await api('/api/products');
+
+if(!products.length){
+
+$('products').innerHTML =
+'<div class="empty">Nenhum produto publicado.</div>';
+
+return;
+
+}
+
+$('products').innerHTML =
+products.map(p => `
+
+<div class="product">
+
+<div class="pic">
+${esc(p.emoji || '📦')}
+</div>
+
+<div class="p">
+
+<b>
+${esc(p.name)}
+</b>
+
+<div class="price">
+
+${new Intl.NumberFormat('pt-PT')
+.format(p.price)} Kz
+
+</div>
+
+<div class="muted">
+
+${esc(p.seller)}
+
+${p.verified ? ' ✓' : ''}
+
+</div>
+
+<div class="muted">
+
+⭐ ${p.rating || 5}
+
+</div>
+
+<button
+class="btn"
+style="margin-top:8px;width:100%"
+onclick="buy('${p.id}',${p.price})">
+
+Comprar
+
+</button>
+
+</div>
+
+</div>
+
+`).join('');
+
+}catch(error){
+
+$('products').innerHTML =
+'<div class="empty">Não foi possível carregar os produtos.</div>';
+
+}
+
+}
+
+
+/* REGISTAR / LOGIN */
+
+async function submitAuth(e){
+
+e.preventDefault();
+
+try{
+
+let login =
+$('authTitle').textContent === 'Entrar';
+
+let data;
+
+if(login){
+
+data = await api(
+'/api/login',
+{
+method:'POST',
+body:JSON.stringify({
+email:$('email').value,
+password:$('password').value
+})
+}
+);
+
+}else{
+
+data = await api(
+'/api/register',
+{
+method:'POST',
+body:JSON.stringify({
+
+name:$('name').value,
+
+email:$('email').value,
+
+password:$('password').value,
+
+role:$('role').value
+
+})
+}
+);
+
+}
+
+token = data.token;
+
+localStorage.klToken = token;
+
+$('me').innerHTML =
+'<p class="status">Sessão iniciada ✓</p>';
+
+await loadProfile();
+
+view('profile');
+
+alert(
+login
+? 'Sessão iniciada com sucesso!'
+: 'Conta criada com sucesso!'
+);
+
+}catch(error){
+
+alert(error.message);
+
+}
+
+}
+
+
+/* MODO LOGIN */
+
+function loginMode(){
+
+$('authTitle').textContent =
+'Entrar';
+
+$('authButton').textContent =
+'Entrar';
+
+$('authSwitchText').textContent =
+'Ainda não tens conta?';
+
+$('authSwitch').textContent =
+'Criar conta';
+
+$('authSwitch').onclick =
+registerMode;
+
+$('name').required = false;
+
+$('role').required = false;
+
+$('name').classList.add('hidden');
+
+$('role').classList.add('hidden');
+
+}
+
+
+/* MODO REGISTO */
+
+function registerMode(){
+
+$('authTitle').textContent =
+'Criar conta';
+
+$('authButton').textContent =
+'Criar conta';
+
+$('authSwitchText').textContent =
+'Já tens conta?';
+
+$('authSwitch').textContent =
+'Entrar';
+
+$('authSwitch').onclick =
+loginMode;
+
+$('name').required = true;
+
+$('role').required = true;
+
+$('name').classList.remove('hidden');
+
+$('role').classList.remove('hidden');
+
+}
+
+
+/* PERFIL */
+
+async function loadProfile(){
+
+if(!token){
+
+$('profileContent').innerHTML = `
+
+<div class="empty">
+
+<h3>Não estás autenticado.</h3>
+
+<button
+class="btn"
+onclick="view('auth')">
+
+Entrar / Criar conta
+
+</button>
+
+</div>
+
+`;
+
+return;
+
+}
+
+try{
+
+let user =
+await api('/api/me');
+
+let roleText =
+user.role === 'seller'
+? 'Vendedor'
+: 'Comprador';
+
+$('profileContent').innerHTML = `
+
+<div class="profile-row">
+
+<div class="muted">
+Nome
+</div>
+
+<b>
+${esc(user.name)}
+</b>
+
+</div>
+
+<div class="profile-row">
+
+<div class="muted">
+Email
+</div>
+
+<b>
+${esc(user.email)}
+</b>
+
+</div>
+
+<div class="profile-row">
+
+<div class="muted">
+Tipo de conta
+</div>
+
+<b>
+${roleText}
+</b>
+
+</div>
+
+<div class="card">
+
+<div class="muted">
+Kuanza Score
+</div>
+
+<div class="score">
+${user.score || 100}
+</div>
+
+<div class="badge">
+Perfil confiável
+</div>
+
+<p class="muted">
+
+O Kuanza Score representa o nível de confiança
+da tua conta dentro do marketplace.
+
+</p>
+
+</div>
+
+<button
+class="btn danger"
+style="width:100%"
+onclick="logout()">
+
+Terminar sessão
+
+</button>
+
+`;
+
+}catch(error){
+
+token = '';
+
+localStorage.removeItem('klToken');
+
+$('profileContent').innerHTML = `
+
+<div class="empty">
+
+Sessão expirada.
+
+<br><br>
+
+<button
+class="btn"
+onclick="view('auth')">
+
+Entrar novamente
+
+</button>
+
+</div>
+
+`;
+
+}
+
+}
+
+
+/* LOGOUT */
+
+function logout(){
+
+token = '';
+
+localStorage.removeItem('klToken');
+
+$('profileContent').innerHTML =
+'<div class="empty">Sessão terminada.</div>';
+
+view('home');
+
+alert('Sessão terminada.');
+
+}
+
+
+/* VERIFICAR VENDEDOR */
+
+async function checkSeller(){
+
+if(!token){
+
+$('sell').innerHTML = `
+
+<div class="card">
+
+<h2>Publicar produto</h2>
+
+<div class="empty">
+
+Precisas de iniciar sessão
+para vender.
+
+<br><br>
+
+<button
+class="btn"
+onclick="view('auth')">
+
+Entrar / Criar conta
+
+</button>
+
+</div>
+
+</div>
+
+`;
+
+return;
+
+}
+
+try{
+
+let user =
+await api('/api/me');
+
+if(user.role !== 'seller'){
+
+$('sell').innerHTML = `
+
+<div class="card">
+
+<h2>Área de vendedor</h2>
+
+<div class="empty">
+
+A tua conta está registada como
+<b>Comprador</b>.
+
+<br><br>
+
+Para vender, será necessário criar
+uma conta de vendedor.
+
+</div>
+
+</div>
+
+`;
+
+}
+
+}catch(error){
+
+view('auth');
+
+}
+
+}
+
+
+/* PUBLICAR PRODUTO */
+
+async function publish(e){
+
+e.preventDefault();
+
+if(!token){
+
+alert(
+'Inicia sessão para publicar produtos.'
+);
+
+view('auth');
+
+return;
+
+}
+
+try{
+
+let user =
+await api('/api/me');
+
+if(user.role !== 'seller'){
+
+alert(
+'Apenas contas de vendedor podem publicar produtos.'
+);
+
+return;
+
+}
+
+await api(
+'/api/products',
+{
+method:'POST',
+body:JSON.stringify({
+
+name:$('pn').value,
+
+price:$('pp').value,
+
+cat:$('pc').value,
+
+emoji:$('pe').value || '📦'
+
+})
+}
+);
+
+alert(
+'Produto publicado com sucesso!'
+);
+
+e.target.reset();
+
+await load();
+
+view('home');
+
+}catch(error){
+
+alert(error.message);
+
+}
+
+}
+
+
+/* COMPRAR */
+
+async function buy(id,price){
+
+if(!token){
+
+alert(
+'Inicia sessão para comprar.'
+);
+
+view('auth');
+
+return;
+
+}
+
+try{
+
+await api(
+'/api/orders',
+{
+method:'POST',
+body:JSON.stringify({
+
+items:[
+{
+id:id,
+qty:1
+}
+],
+
+total:price
+
+})
+}
+);
+
+alert(
+'Pedido criado com sucesso!'
+);
+
+view('orders');
+
+}catch(error){
+
+alert(error.message);
+
+}
+
+}
+
+
+/* PEDIDOS */
+
+async function loadOrders(){
+
+if(!token){
+
+$('orderList').innerHTML = `
+
+<div class="empty">
+
+Inicia sessão para consultar
+os teus pedidos.
+
+<br><br>
+
+<button
+class="btn"
+onclick="view('auth')">
+
+Entrar
+
+</button>
+
+</div>
+
+`;
+
+return;
+
+}
+
+try{
+
+let orders =
+await api('/api/orders');
+
+if(!orders.length){
+
+$('orderList').innerHTML = `
+
+<div class="empty">
+
+Ainda não tens pedidos.
+
+</div>
+
+`;
+
+return;
+
+}
+
+$('orderList').innerHTML =
+orders.map(o => `
+
+<div class="card">
+
+<b>
+#${esc(o.id)}
+</b>
+
+<br>
+
+<span class="status">
+${esc(o.status)}
+</span>
+
+<div class="muted" style="margin-top:7px">
+
+Total:
+${new Intl.NumberFormat('pt-PT')
+.format(o.total)} Kz
+
+</div>
+
+<div class="muted">
+
+${new Date(o.createdAt)
+.toLocaleString('pt-PT')}
+
+</div>
+
+</div>
+
+`).join('');
+
+}catch(error){
+
+$('orderList').innerHTML =
+'<div class="empty">'+
+esc(error.message)+
+'</div>';
+
+}
+
+}
+
+
+/* RECUPERAR SESSÃO */
+
+async function refreshUser(){
+
+if(!token){
+
+return;
+
+}
+
+try{
+
+await api('/api/me');
+
+}catch(error){
+
+token = '';
+
+localStorage.removeItem('klToken');
+
+}
+
+}
+
+
+/* INICIAR */
+
+(async function(){
+
+await refreshUser();
+
+await load();
+
+})();
+
+</script>
+
+</body>
+</html>
