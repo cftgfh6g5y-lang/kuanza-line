@@ -1,18 +1,34 @@
 <!doctype html>
 <html lang="pt">
 <head>
+
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#16A34A">
+
+<meta
+name="viewport"
+content="width=device-width,initial-scale=1"
+>
+
+<meta
+name="theme-color"
+content="#16A34A"
+>
+
 <title>Kuanza Line</title>
+
 <style>
-*{box-sizing:border-box}
+
+*{
+box-sizing:border-box
+}
+
 body{
 margin:0;
 background:#f5f7f5;
 font-family:Inter,system-ui,-apple-system,sans-serif;
 color:#111827
 }
+
 .app{
 max-width:520px;
 margin:auto;
@@ -20,18 +36,22 @@ min-height:100vh;
 background:white;
 padding:18px 16px 40px
 }
+
 .brand{
 font-weight:900;
 font-size:21px
 }
+
 .brand span{
 color:#16A34A
 }
+
 .tag{
 color:#6b7280;
 font-size:12px;
 margin:3px 0 18px
 }
+
 .hero{
 background:#16A34A;
 color:white;
@@ -39,26 +59,31 @@ border-radius:20px;
 padding:20px;
 margin-bottom:14px
 }
+
 .hero h1{
 margin:0 0 7px;
 font-size:25px
 }
+
 .card{
 border:1px solid #e5e7eb;
 border-radius:16px;
 padding:15px;
 margin:10px 0
 }
+
 .grid{
 display:grid;
 grid-template-columns:1fr 1fr;
 gap:10px
 }
+
 .product{
 border:1px solid #e5e7eb;
 border-radius:15px;
 overflow:hidden
 }
+
 .pic{
 height:130px;
 background:#f0f5f1;
@@ -66,22 +91,27 @@ display:grid;
 place-items:center;
 font-size:52px
 }
+
 .p{
 padding:10px
 }
+
 .price{
 font-weight:900;
 color:#16A34A;
 margin-top:5px
 }
+
 .muted{
 color:#6b7280;
 font-size:12px
 }
+
 .form{
 display:grid;
 gap:9px
 }
+
 .form input,
 .form select{
 padding:12px;
@@ -89,6 +119,7 @@ border:1px solid #ddd;
 border-radius:11px;
 font-size:15px
 }
+
 .btn{
 background:#16A34A;
 color:white;
@@ -98,18 +129,27 @@ padding:12px 15px;
 font-weight:800;
 cursor:pointer
 }
+
 .btn.alt{
 background:#111827
 }
+
 .btn.danger{
 background:#dc2626
 }
+
+.btn.light{
+background:#f3f4f6;
+color:#111827
+}
+
 .tabs{
 display:flex;
 gap:8px;
 margin:14px 0;
 flex-wrap:wrap
 }
+
 .tabs button{
 border:1px solid #ddd;
 background:#fff;
@@ -117,9 +157,11 @@ border-radius:10px;
 padding:9px 11px;
 font-weight:700
 }
+
 .hidden{
 display:none
 }
+
 .status{
 display:inline-block;
 background:#eaf7ef;
@@ -129,12 +171,14 @@ border-radius:99px;
 font-size:11px;
 font-weight:800
 }
+
 .score{
 font-size:42px;
 font-weight:900;
 color:#16A34A;
 margin:5px 0
 }
+
 .badge{
 display:inline-block;
 background:#eaf7ef;
@@ -145,19 +189,36 @@ font-size:11px;
 font-weight:800;
 margin-top:5px
 }
+
 .profile-row{
 padding:10px 0;
 border-bottom:1px solid #eee
 }
+
 .profile-row:last-child{
 border-bottom:0
 }
+
 .empty{
 text-align:center;
 padding:25px 10px;
 color:#6b7280
 }
+
+.switch-box{
+background:#f5f7f5;
+border-radius:14px;
+padding:14px;
+margin-top:15px
+}
+
+.role-title{
+font-size:18px;
+font-weight:900
+}
+
 </style>
+
 </head>
 
 <body>
@@ -173,18 +234,40 @@ Compra. Vende. Confia.
 </div>
 
 <div class="hero">
-<h1>Compra. Vende. Confia.</h1>
+
+<h1>
+Compra. Vende. Confia.
+</h1>
+
 <div>
 O marketplace feito para aproximar compradores e vendedores em Angola.
 </div>
+
 </div>
 
+
 <div class="tabs">
-<button onclick="view('home')">Produtos</button>
-<button onclick="view('auth')">Conta</button>
-<button onclick="view('profile')">Perfil</button>
-<button onclick="view('sell')">Vender</button>
-<button onclick="view('orders')">Pedidos</button>
+
+<button onclick="view('home')">
+Produtos
+</button>
+
+<button onclick="view('auth')">
+Conta
+</button>
+
+<button onclick="view('profile')">
+Perfil
+</button>
+
+<button onclick="view('sell')">
+Vender
+</button>
+
+<button onclick="view('orders')">
+Pedidos
+</button>
+
 </div>
 
 
@@ -192,9 +275,14 @@ O marketplace feito para aproximar compradores e vendedores em Angola.
 
 <section id="home">
 
-<h2>Produtos</h2>
+<h2>
+Produtos
+</h2>
 
-<div id="products" class="grid">
+<div
+id="products"
+class="grid"
+>
 Carregando produtos...
 </div>
 
@@ -203,13 +291,22 @@ Carregando produtos...
 
 <!-- CONTA -->
 
-<section id="auth" class="hidden">
+<section
+id="auth"
+class="hidden"
+>
 
 <div class="card">
 
-<h2 id="authTitle">Criar conta</h2>
+<h2 id="authTitle">
+Criar conta
+</h2>
 
-<form id="authForm" class="form" onsubmit="submitAuth(event)">
+<form
+id="authForm"
+class="form"
+onsubmit="submitAuth(event)"
+>
 
 <input
 id="name"
@@ -232,27 +329,40 @@ required
 >
 
 <select id="role">
-<option value="buyer">Quero comprar</option>
-<option value="seller">Quero vender</option>
+
+<option value="buyer">
+Quero comprar
+</option>
+
+<option value="seller">
+Quero vender
+</option>
+
 </select>
 
 <button
 id="authButton"
 class="btn"
-type="submit">
+type="submit"
+>
 Criar conta
 </button>
 
 </form>
 
 <p class="muted">
-<span id="authSwitchText">Já tens conta?</span>
+
+<span id="authSwitchText">
+Já tens conta?
+</span>
 
 <button
 id="authSwitch"
-onclick="loginMode()">
+onclick="loginMode()"
+>
 Entrar
 </button>
+
 </p>
 
 <div id="me"></div>
@@ -264,11 +374,16 @@ Entrar
 
 <!-- PERFIL -->
 
-<section id="profile" class="hidden">
+<section
+id="profile"
+class="hidden"
+>
 
 <div class="card">
 
-<h2>Meu perfil</h2>
+<h2>
+Meu perfil
+</h2>
 
 <div id="profileContent">
 Carregando perfil...
@@ -281,17 +396,25 @@ Carregando perfil...
 
 <!-- VENDER -->
 
-<section id="sell" class="hidden">
+<section
+id="sell"
+class="hidden"
+>
 
 <div class="card">
 
-<h2>Publicar produto</h2>
+<h2>
+Publicar produto
+</h2>
 
 <p class="muted">
 Coloque o seu produto à venda no Kuanza Line.
 </p>
 
-<form class="form" onsubmit="publish(event)">
+<form
+class="form"
+onsubmit="publish(event)"
+>
 
 <input
 id="pn"
@@ -307,13 +430,35 @@ required
 >
 
 <select id="pc">
-<option>Eletrónicos</option>
-<option>Moda</option>
-<option>Casa</option>
-<option>Beleza</option>
-<option>Automóveis</option>
-<option>Telemóveis</option>
-<option>Outros</option>
+
+<option>
+Eletrónicos
+</option>
+
+<option>
+Moda
+</option>
+
+<option>
+Casa
+</option>
+
+<option>
+Beleza
+</option>
+
+<option>
+Automóveis
+</option>
+
+<option>
+Telemóveis
+</option>
+
+<option>
+Outros
+</option>
+
 </select>
 
 <input
@@ -334,11 +479,16 @@ Publicar produto
 
 <!-- PEDIDOS -->
 
-<section id="orders" class="hidden">
+<section
+id="orders"
+class="hidden"
+>
 
 <div class="card">
 
-<h2>Meus pedidos</h2>
+<h2>
+Meus pedidos
+</h2>
 
 <div id="orderList">
 Inicia sessão para consultar pedidos.
@@ -353,9 +503,11 @@ Inicia sessão para consultar pedidos.
 
 <script>
 
-let token = localStorage.klToken || '';
+let token =
+localStorage.klToken || '';
 
-const $ = id => document.getElementById(id);
+const $ =
+id => document.getElementById(id);
 
 
 /* NAVEGAÇÃO */
@@ -377,18 +529,24 @@ i !== x
 
 });
 
-if(x === 'profile') loadProfile();
+if(x === 'profile')
+loadProfile();
 
-if(x === 'orders') loadOrders();
+if(x === 'orders')
+loadOrders();
 
-if(x === 'sell') checkSeller();
+if(x === 'sell')
+checkSeller();
 
 }
 
 
 /* API */
 
-async function api(path, options = {}){
+async function api(
+path,
+options = {}
+){
 
 let headers = {
 'Content-Type':'application/json'
@@ -401,7 +559,8 @@ headers.Authorization =
 
 }
 
-let response = await fetch(
+let response =
+await fetch(
 path,
 {
 ...options,
@@ -409,7 +568,8 @@ headers
 }
 );
 
-let data = await response.json();
+let data =
+await response.json();
 
 if(!response.ok){
 
@@ -424,7 +584,7 @@ return data;
 }
 
 
-/* ESCAPAR TEXTO */
+/* SEGURANÇA DE TEXTO */
 
 function esc(value){
 
@@ -487,15 +647,14 @@ ${p.verified ? ' ✓' : ''}
 </div>
 
 <div class="muted">
-
 ⭐ ${p.rating || 5}
-
 </div>
 
 <button
 class="btn"
 style="margin-top:8px;width:100%"
-onclick="buy('${p.id}',${p.price})">
+onclick="buy('${p.id}',${p.price})"
+>
 
 Comprar
 
@@ -517,7 +676,7 @@ $('products').innerHTML =
 }
 
 
-/* REGISTAR / LOGIN */
+/* AUTENTICAÇÃO */
 
 async function submitAuth(e){
 
@@ -532,20 +691,25 @@ let data;
 
 if(login){
 
-data = await api(
+data =
+await api(
 '/api/login',
 {
 method:'POST',
 body:JSON.stringify({
+
 email:$('email').value,
+
 password:$('password').value
+
 })
 }
 );
 
 }else{
 
-data = await api(
+data =
+await api(
 '/api/register',
 {
 method:'POST',
@@ -565,9 +729,11 @@ role:$('role').value
 
 }
 
-token = data.token;
+token =
+data.token;
 
-localStorage.klToken = token;
+localStorage.klToken =
+token;
 
 $('me').innerHTML =
 '<p class="status">Sessão iniciada ✓</p>';
@@ -591,7 +757,7 @@ alert(error.message);
 }
 
 
-/* MODO LOGIN */
+/* LOGIN */
 
 function loginMode(){
 
@@ -610,9 +776,11 @@ $('authSwitch').textContent =
 $('authSwitch').onclick =
 registerMode;
 
-$('name').required = false;
+$('name').required =
+false;
 
-$('role').required = false;
+$('role').required =
+false;
 
 $('name').classList.add('hidden');
 
@@ -621,7 +789,7 @@ $('role').classList.add('hidden');
 }
 
 
-/* MODO REGISTO */
+/* REGISTO */
 
 function registerMode(){
 
@@ -640,9 +808,11 @@ $('authSwitch').textContent =
 $('authSwitch').onclick =
 loginMode;
 
-$('name').required = true;
+$('name').required =
+true;
 
-$('role').required = true;
+$('role').required =
+true;
 
 $('name').classList.remove('hidden');
 
@@ -661,11 +831,14 @@ $('profileContent').innerHTML = `
 
 <div class="empty">
 
-<h3>Não estás autenticado.</h3>
+<h3>
+Não estás autenticado.
+</h3>
 
 <button
 class="btn"
-onclick="view('auth')">
+onclick="view('auth')"
+>
 
 Entrar / Criar conta
 
@@ -688,6 +861,16 @@ let roleText =
 user.role === 'seller'
 ? 'Vendedor'
 : 'Comprador';
+
+let switchText =
+user.role === 'seller'
+? 'Mudar para comprador'
+: 'Começar a vender';
+
+let switchRole =
+user.role === 'seller'
+? 'buyer'
+: 'seller';
 
 $('profileContent').innerHTML = `
 
@@ -721,11 +904,12 @@ ${esc(user.email)}
 Tipo de conta
 </div>
 
-<b>
+<div class="role-title">
 ${roleText}
-</b>
+</div>
 
 </div>
+
 
 <div class="card">
 
@@ -743,17 +927,48 @@ Perfil confiável
 
 <p class="muted">
 
-O Kuanza Score representa o nível de confiança
-da tua conta dentro do marketplace.
+O Kuanza Score representa o nível de confiança da tua conta dentro do marketplace.
 
 </p>
 
 </div>
 
+
+<div class="switch-box">
+
+<div class="muted">
+Queres fazer outra coisa?
+</div>
+
+<h3>
+${switchText}
+</h3>
+
+<p class="muted">
+
+Podes alternar entre comprador e vendedor
+sem criar uma nova conta.
+
+</p>
+
+<button
+class="btn"
+style="width:100%"
+onclick="changeRole('${switchRole}')"
+>
+
+🔄 ${switchText}
+
+</button>
+
+</div>
+
+
 <button
 class="btn danger"
-style="width:100%"
-onclick="logout()">
+style="width:100%;margin-top:12px"
+onclick="logout()"
+>
 
 Terminar sessão
 
@@ -777,7 +992,8 @@ Sessão expirada.
 
 <button
 class="btn"
-onclick="view('auth')">
+onclick="view('auth')"
+>
 
 Entrar novamente
 
@@ -792,25 +1008,75 @@ Entrar novamente
 }
 
 
+/* ALTERAR TIPO DE CONTA */
+
+async function changeRole(newRole){
+
+let text =
+newRole === 'seller'
+? 'vendedor'
+: 'comprador';
+
+let confirmChange =
+confirm(
+'Queres mudar a tua conta para ' +
+text +
+'?'
+);
+
+if(!confirmChange)
+return;
+
+try{
+
+let data =
+await api(
+'/api/me/role',
+{
+method:'PATCH',
+body:JSON.stringify({
+role:newRole
+})
+}
+);
+
+alert(
+'Conta alterada para ' +
+text +
+' com sucesso!'
+);
+
+await loadProfile();
+
+}catch(error){
+
+alert(error.message);
+
+}
+
+}
+
+
 /* LOGOUT */
 
 function logout(){
 
 token = '';
 
-localStorage.removeItem('klToken');
-
-$('profileContent').innerHTML =
-'<div class="empty">Sessão terminada.</div>';
+localStorage.removeItem(
+'klToken'
+);
 
 view('home');
 
-alert('Sessão terminada.');
+alert(
+'Sessão terminada.'
+);
 
 }
 
 
-/* VERIFICAR VENDEDOR */
+/* ÁREA DE VENDEDOR */
 
 async function checkSeller(){
 
@@ -820,18 +1086,20 @@ $('sell').innerHTML = `
 
 <div class="card">
 
-<h2>Publicar produto</h2>
+<h2>
+Área de vendedor
+</h2>
 
 <div class="empty">
 
-Precisas de iniciar sessão
-para vender.
+Precisas de iniciar sessão para vender.
 
 <br><br>
 
 <button
 class="btn"
-onclick="view('auth')">
+onclick="view('auth')"
+>
 
 Entrar / Criar conta
 
@@ -858,19 +1126,111 @@ $('sell').innerHTML = `
 
 <div class="card">
 
-<h2>Área de vendedor</h2>
+<h2>
+Área de vendedor
+</h2>
 
 <div class="empty">
 
-A tua conta está registada como
+A tua conta está como
 <b>Comprador</b>.
 
 <br><br>
 
-Para vender, será necessário criar
-uma conta de vendedor.
+Para vender, basta mudar
+o tipo de conta.
+
+<br><br>
+
+<button
+class="btn"
+onclick="changeRole('seller')"
+>
+
+🔄 Começar a vender
+
+</button>
 
 </div>
+
+</div>
+
+`;
+
+}else{
+
+$('sell').innerHTML = `
+
+<div class="card">
+
+<h2>
+Publicar produto
+</h2>
+
+<p class="muted">
+Estás no modo vendedor.
+</p>
+
+<form
+class="form"
+onsubmit="publish(event)"
+>
+
+<input
+id="pn"
+placeholder="Nome do produto"
+required
+>
+
+<input
+id="pp"
+type="number"
+placeholder="Preço em Kz"
+required
+>
+
+<select id="pc">
+
+<option>
+Eletrónicos
+</option>
+
+<option>
+Moda
+</option>
+
+<option>
+Casa
+</option>
+
+<option>
+Beleza
+</option>
+
+<option>
+Automóveis
+</option>
+
+<option>
+Telemóveis
+</option>
+
+<option>
+Outros
+</option>
+
+</select>
+
+<input
+id="pe"
+placeholder="Emoji, ex.: 📱"
+>
+
+<button class="btn">
+Publicar produto
+</button>
+
+</form>
 
 </div>
 
@@ -887,7 +1247,7 @@ view('auth');
 }
 
 
-/* PUBLICAR PRODUTO */
+/* PUBLICAR */
 
 async function publish(e){
 
@@ -906,19 +1266,6 @@ return;
 }
 
 try{
-
-let user =
-await api('/api/me');
-
-if(user.role !== 'seller'){
-
-alert(
-'Apenas contas de vendedor podem publicar produtos.'
-);
-
-return;
-
-}
 
 await api(
 '/api/products',
@@ -1019,14 +1366,14 @@ $('orderList').innerHTML = `
 
 <div class="empty">
 
-Inicia sessão para consultar
-os teus pedidos.
+Inicia sessão para consultar os teus pedidos.
 
 <br><br>
 
 <button
 class="btn"
-onclick="view('auth')">
+onclick="view('auth')"
+>
 
 Entrar
 
@@ -1076,7 +1423,10 @@ orders.map(o => `
 ${esc(o.status)}
 </span>
 
-<div class="muted" style="margin-top:7px">
+<div
+class="muted"
+style="margin-top:7px"
+>
 
 Total:
 ${new Intl.NumberFormat('pt-PT')
@@ -1098,8 +1448,8 @@ ${new Date(o.createdAt)
 }catch(error){
 
 $('orderList').innerHTML =
-'<div class="empty">'+
-esc(error.message)+
+'<div class="empty">' +
+esc(error.message) +
 '</div>';
 
 }
@@ -1111,11 +1461,8 @@ esc(error.message)+
 
 async function refreshUser(){
 
-if(!token){
-
+if(!token)
 return;
-
-}
 
 try{
 
@@ -1125,7 +1472,9 @@ await api('/api/me');
 
 token = '';
 
-localStorage.removeItem('klToken');
+localStorage.removeItem(
+'klToken'
+);
 
 }
 
