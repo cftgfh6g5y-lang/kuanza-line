@@ -4,15 +4,11 @@
 
 <meta charset="utf-8">
 
-<meta
-name="viewport"
-content="width=device-width,initial-scale=1"
->
+<meta name="viewport"
+content="width=device-width,initial-scale=1">
 
-<meta
-name="theme-color"
-content="#16A34A"
->
+<meta name="theme-color"
+content="#16A34A">
 
 <title>Kuanza Line</title>
 
@@ -34,7 +30,7 @@ max-width:520px;
 margin:auto;
 min-height:100vh;
 background:white;
-padding:18px 16px 40px
+padding:18px 16px 80px
 }
 
 .brand{
@@ -81,7 +77,8 @@ gap:10px
 .product{
 border:1px solid #e5e7eb;
 border-radius:15px;
-overflow:hidden
+overflow:hidden;
+background:white
 }
 
 .pic{
@@ -134,18 +131,18 @@ cursor:pointer
 background:#111827
 }
 
-.btn.danger{
-background:#dc2626
-}
-
 .btn.light{
 background:#f3f4f6;
 color:#111827
 }
 
+.btn.danger{
+background:#dc2626
+}
+
 .tabs{
 display:flex;
-gap:8px;
+gap:7px;
 margin:14px 0;
 flex-wrap:wrap
 }
@@ -154,7 +151,7 @@ flex-wrap:wrap
 border:1px solid #ddd;
 background:#fff;
 border-radius:10px;
-padding:9px 11px;
+padding:9px 10px;
 font-weight:700
 }
 
@@ -186,17 +183,12 @@ color:#087a3c;
 padding:5px 9px;
 border-radius:99px;
 font-size:11px;
-font-weight:800;
-margin-top:5px
+font-weight:800
 }
 
 .profile-row{
 padding:10px 0;
 border-bottom:1px solid #eee
-}
-
-.profile-row:last-child{
-border-bottom:0
 }
 
 .empty{
@@ -205,16 +197,73 @@ padding:25px 10px;
 color:#6b7280
 }
 
-.switch-box{
-background:#f5f7f5;
-border-radius:14px;
-padding:14px;
-margin-top:15px
+.search{
+display:flex;
+gap:7px;
+margin-bottom:10px
 }
 
-.role-title{
-font-size:18px;
-font-weight:900
+.search input{
+flex:1;
+padding:12px;
+border:1px solid #ddd;
+border-radius:11px;
+font-size:15px
+}
+
+.categories{
+display:flex;
+gap:7px;
+overflow:auto;
+padding-bottom:5px;
+margin-bottom:10px
+}
+
+.categories button{
+white-space:nowrap;
+border:1px solid #ddd;
+background:white;
+border-radius:20px;
+padding:8px 12px
+}
+
+.section-title{
+display:flex;
+justify-content:space-between;
+align-items:center
+}
+
+.fav{
+background:white;
+border:0;
+font-size:22px;
+cursor:pointer
+}
+
+.cart-count{
+background:#16A34A;
+color:white;
+border-radius:99px;
+padding:2px 7px;
+font-size:11px
+}
+
+.store-head{
+text-align:center;
+padding:10px
+}
+
+.store-logo{
+font-size:55px
+}
+
+.order-status{
+display:inline-block;
+padding:6px 9px;
+border-radius:99px;
+font-size:11px;
+font-weight:800;
+background:#eef2ff
 }
 
 </style>
@@ -249,41 +298,160 @@ O marketplace feito para aproximar compradores e vendedores em Angola.
 <div class="tabs">
 
 <button onclick="view('home')">
-Produtos
+🏠 Produtos
+</button>
+
+<button onclick="view('favorites')">
+❤️ Favoritos
+</button>
+
+<button onclick="view('cart')">
+🛒 Carrinho
+<span id="cartCount" class="cart-count">0</span>
 </button>
 
 <button onclick="view('auth')">
-Conta
+👤 Conta
 </button>
 
 <button onclick="view('profile')">
-Perfil
+⭐ Perfil
 </button>
 
 <button onclick="view('sell')">
-Vender
+🏪 Vender
 </button>
 
 <button onclick="view('orders')">
-Pedidos
+📦 Pedidos
 </button>
 
 </div>
 
 
-<!-- PRODUTOS -->
+<!-- HOME -->
 
 <section id="home">
+
+<div class="section-title">
 
 <h2>
 Produtos
 </h2>
 
+<select
+id="sort"
+onchange="loadProducts()"
+>
+
+<option value="">
+Mais recentes
+</option>
+
+<option value="low">
+Menor preço
+</option>
+
+<option value="high">
+Maior preço
+</option>
+
+</select>
+
+</div>
+
+
+<div class="search">
+
+<input
+id="search"
+placeholder="🔎 Procurar produtos..."
+oninput="searchDelay()"
+>
+
+</div>
+
+
+<div
+id="categories"
+class="categories"
+>
+
+<button onclick="setCategory('Todas')">
+Todas
+</button>
+
+<button onclick="setCategory('Eletrónicos')">
+Eletrónicos
+</button>
+
+<button onclick="setCategory('Moda')">
+Moda
+</button>
+
+<button onclick="setCategory('Casa')">
+Casa
+</button>
+
+<button onclick="setCategory('Beleza')">
+Beleza
+</button>
+
+<button onclick="setCategory('Automóveis')">
+Automóveis
+</button>
+
+<button onclick="setCategory('Telemóveis')">
+Telemóveis
+</button>
+
+</div>
+
+
 <div
 id="products"
 class="grid"
 >
-Carregando produtos...
+Carregando...
+</div>
+
+</section>
+
+
+<!-- FAVORITOS -->
+
+<section
+id="favorites"
+class="hidden"
+>
+
+<h2>
+❤️ Meus favoritos
+</h2>
+
+<div
+id="favoriteList"
+class="grid"
+>
+Carregando...
+</div>
+
+</section>
+
+
+<!-- CARRINHO -->
+
+<section
+id="cart"
+class="hidden"
+>
+
+<h2>
+🛒 Meu carrinho
+</h2>
+
+<div id="cartList">
+Carregando...
 </div>
 
 </section>
@@ -303,7 +471,6 @@ Criar conta
 </h2>
 
 <form
-id="authForm"
 class="form"
 onsubmit="submitAuth(event)"
 >
@@ -343,7 +510,6 @@ Quero vender
 <button
 id="authButton"
 class="btn"
-type="submit"
 >
 Criar conta
 </button>
@@ -382,13 +548,27 @@ class="hidden"
 <div class="card">
 
 <h2>
-Meu perfil
+⭐ Meu perfil
 </h2>
 
 <div id="profileContent">
-Carregando perfil...
+Carregando...
 </div>
 
+</div>
+
+</section>
+
+
+<!-- LOJA -->
+
+<section
+id="store"
+class="hidden"
+>
+
+<div id="storeContent">
+Carregando loja...
 </div>
 
 </section>
@@ -401,15 +581,13 @@ id="sell"
 class="hidden"
 >
 
+<div id="sellerArea">
+
 <div class="card">
 
 <h2>
-Publicar produto
+🏪 Publicar produto
 </h2>
-
-<p class="muted">
-Coloque o seu produto à venda no Kuanza Line.
-</p>
 
 <form
 class="form"
@@ -431,33 +609,13 @@ required
 
 <select id="pc">
 
-<option>
-Eletrónicos
-</option>
-
-<option>
-Moda
-</option>
-
-<option>
-Casa
-</option>
-
-<option>
-Beleza
-</option>
-
-<option>
-Automóveis
-</option>
-
-<option>
-Telemóveis
-</option>
-
-<option>
-Outros
-</option>
+<option>Eletrónicos</option>
+<option>Moda</option>
+<option>Casa</option>
+<option>Beleza</option>
+<option>Automóveis</option>
+<option>Telemóveis</option>
+<option>Outros</option>
 
 </select>
 
@@ -474,6 +632,8 @@ Publicar produto
 
 </div>
 
+</div>
+
 </section>
 
 
@@ -487,11 +647,11 @@ class="hidden"
 <div class="card">
 
 <h2>
-Meus pedidos
+📦 Meus pedidos
 </h2>
 
 <div id="orderList">
-Inicia sessão para consultar pedidos.
+Carregando...
 </div>
 
 </div>
@@ -506,60 +666,32 @@ Inicia sessão para consultar pedidos.
 let token =
 localStorage.klToken || '';
 
+let currentCategory =
+'Todas';
+
+let favoriteIds = [];
+
 const $ =
 id => document.getElementById(id);
-
-
-/* NAVEGAÇÃO */
-
-function view(x){
-
-[
-'home',
-'auth',
-'profile',
-'sell',
-'orders'
-].forEach(i => {
-
-$(i).classList.toggle(
-'hidden',
-i !== x
-);
-
-});
-
-if(x === 'profile')
-loadProfile();
-
-if(x === 'orders')
-loadOrders();
-
-if(x === 'sell')
-checkSeller();
-
-}
 
 
 /* API */
 
 async function api(
 path,
-options = {}
+options={}
 ){
 
-let headers = {
+let headers={
 'Content-Type':'application/json'
 };
 
 if(token){
-
-headers.Authorization =
-'Bearer ' + token;
-
+headers.Authorization=
+'Bearer '+token;
 }
 
-let response =
+const response=
 await fetch(
 path,
 {
@@ -568,27 +700,67 @@ headers
 }
 );
 
-let data =
+const data=
 await response.json();
 
 if(!response.ok){
-
 throw Error(
-data.error || 'Ocorreu um erro.'
+data.error||'Ocorreu um erro.'
 );
-
 }
 
 return data;
+}
+
+
+/* NAVEGAÇÃO */
+
+function view(x){
+
+[
+'home',
+'favorites',
+'cart',
+'auth',
+'profile',
+'store',
+'sell',
+'orders'
+].forEach(i=>{
+
+$(i).classList.toggle(
+'hidden',
+i!==x
+);
+
+});
+
+if(x==='home')
+loadProducts();
+
+if(x==='favorites')
+loadFavorites();
+
+if(x==='cart')
+loadCart();
+
+if(x==='profile')
+loadProfile();
+
+if(x==='sell')
+checkSeller();
+
+if(x==='orders')
+loadOrders();
 
 }
 
 
-/* SEGURANÇA DE TEXTO */
+/* TEXTO SEGURO */
 
 function esc(value){
 
-return String(value ?? '')
+return String(value??'')
 .replaceAll('&','&amp;')
 .replaceAll('<','&lt;')
 .replaceAll('>','&gt;')
@@ -598,38 +770,111 @@ return String(value ?? '')
 }
 
 
-/* PRODUTOS */
+/* CATEGORIA */
 
-async function load(){
+function setCategory(cat){
 
-try{
+currentCategory=cat;
 
-let products =
-await api('/api/products');
-
-if(!products.length){
-
-$('products').innerHTML =
-'<div class="empty">Nenhum produto publicado.</div>';
-
-return;
+loadProducts();
 
 }
 
-$('products').innerHTML =
-products.map(p => `
+
+/* PESQUISA */
+
+let searchTimer;
+
+function searchDelay(){
+
+clearTimeout(searchTimer);
+
+searchTimer=
+setTimeout(
+loadProducts,
+300
+);
+
+}
+
+
+/* PRODUTOS */
+
+async function loadProducts(){
+
+try{
+
+const search=
+$('search')?.value||'';
+
+const sort=
+$('sort')?.value||'';
+
+const params=
+new URLSearchParams();
+
+if(search)
+params.set('search',search);
+
+if(currentCategory!=='Todas')
+params.set('cat',currentCategory);
+
+if(sort)
+params.set('sort',sort);
+
+const products=
+await api(
+'/api/products?'+params.toString()
+);
+
+$('products').innerHTML=
+products.length
+?
+products.map(productCard).join('')
+:
+'<div class="empty">Nenhum produto encontrado.</div>';
+
+}catch(error){
+
+$('products').innerHTML=
+'<div class="empty">Erro ao carregar produtos.</div>';
+
+}
+
+}
+
+
+/* CARD */
+
+function productCard(p){
+
+const liked=
+favoriteIds.includes(p.id);
+
+return `
 
 <div class="product">
 
 <div class="pic">
-${esc(p.emoji || '📦')}
+${esc(p.emoji||'📦')}
 </div>
 
 <div class="p">
 
+<div style="display:flex;justify-content:space-between">
+
 <b>
 ${esc(p.name)}
 </b>
+
+<button
+class="fav"
+onclick="toggleFavorite('${p.id}')"
+>
+${liked?'❤️':'♡'}
+</button>
+
+</div>
 
 <div class="price">
 
@@ -638,45 +883,519 @@ ${new Intl.NumberFormat('pt-PT')
 
 </div>
 
-<div class="muted">
+<div
+class="muted"
+style="margin-top:5px"
+>
 
 ${esc(p.seller)}
-
-${p.verified ? ' ✓' : ''}
+${p.verified?' ✓':''}
 
 </div>
 
 <div class="muted">
-⭐ ${p.rating || 5}
+⭐ ${p.rating||5}
 </div>
 
 <button
 class="btn"
 style="margin-top:8px;width:100%"
-onclick="buy('${p.id}',${p.price})"
+onclick="addToCart('${p.id}')"
 >
+🛒 Adicionar
+</button>
 
-Comprar
-
+<button
+class="btn light"
+style="margin-top:6px;width:100%"
+onclick="openStore('${p.sellerId||''}')"
+>
+🏪 Ver loja
 </button>
 
 </div>
 
 </div>
 
-`).join('');
+`;
+
+}
+
+
+/* FAVORITO */
+
+async function toggleFavorite(id){
+
+if(!token){
+
+alert(
+'Inicia sessão para guardar favoritos.'
+);
+
+view('auth');
+
+return;
+
+}
+
+try{
+
+if(favoriteIds.includes(id)){
+
+await api(
+'/api/favorites',
+{
+method:'DELETE',
+body:JSON.stringify({
+productId:id
+})
+}
+);
+
+favoriteIds=
+favoriteIds.filter(
+x=>x!==id
+);
+
+}else{
+
+await api(
+'/api/favorites',
+{
+method:'POST',
+body:JSON.stringify({
+productId:id
+})
+}
+);
+
+favoriteIds.push(id);
+
+}
+
+loadProducts();
 
 }catch(error){
 
-$('products').innerHTML =
-'<div class="empty">Não foi possível carregar os produtos.</div>';
+alert(error.message);
 
 }
 
 }
 
 
-/* AUTENTICAÇÃO */
+/* CARREGAR FAVORITOS */
+
+async function loadFavoriteIds(){
+
+if(!token){
+
+favoriteIds=[];
+
+return;
+
+}
+
+try{
+
+favoriteIds=
+await api('/api/favorites');
+
+}catch(error){
+
+favoriteIds=[];
+
+}
+
+}
+
+
+/* LISTA FAVORITOS */
+
+async function loadFavorites(){
+
+if(!token){
+
+$('favoriteList').innerHTML=`
+
+<div class="empty">
+
+Inicia sessão para ver os teus favoritos.
+
+<br><br>
+
+<button
+class="btn"
+onclick="view('auth')"
+>
+Entrar
+</button>
+
+</div>
+
+`;
+
+return;
+
+}
+
+await loadFavoriteIds();
+
+const products=
+await api('/api/products');
+
+const favs=
+products.filter(
+p=>favoriteIds.includes(p.id)
+);
+
+$('favoriteList').innerHTML=
+favs.length
+?
+favs.map(productCard).join('')
+:
+'<div class="empty">Ainda não tens favoritos.</div>';
+
+}
+
+
+/* CARRINHO */
+
+async function addToCart(id){
+
+if(!token){
+
+alert(
+'Inicia sessão para adicionar produtos ao carrinho.'
+);
+
+view('auth');
+
+return;
+
+}
+
+try{
+
+await api(
+'/api/cart',
+{
+method:'POST',
+body:JSON.stringify({
+productId:id,
+qty:1
+})
+}
+);
+
+await updateCartCount();
+
+alert(
+'Produto adicionado ao carrinho!'
+);
+
+}catch(error){
+
+alert(error.message);
+
+}
+
+}
+
+
+/* CONTADOR CARRINHO */
+
+async function updateCartCount(){
+
+if(!token){
+
+$('cartCount').textContent='0';
+
+return;
+
+}
+
+try{
+
+const cart=
+await api('/api/cart');
+
+const total=
+cart.items.reduce(
+(sum,item)=>sum+Number(item.qty||0),
+0
+);
+
+$('cartCount').textContent=
+total;
+
+}catch(error){
+
+$('cartCount').textContent='0';
+
+}
+
+}
+
+
+/* MOSTRAR CARRINHO */
+
+async function loadCart(){
+
+if(!token){
+
+$('cartList').innerHTML=`
+
+<div class="empty">
+
+Inicia sessão para usar o carrinho.
+
+<br><br>
+
+<button
+class="btn"
+onclick="view('auth')"
+>
+Entrar
+</button>
+
+</div>
+
+`;
+
+return;
+
+}
+
+try{
+
+const cart=
+await api('/api/cart');
+
+const products=
+await api('/api/products');
+
+let total=0;
+
+const items=
+cart.items.map(item=>{
+
+const p=
+products.find(
+x=>x.id===item.productId
+);
+
+if(!p)return '';
+
+const subtotal=
+p.price*item.qty;
+
+total+=subtotal;
+
+return `
+
+<div class="card">
+
+<div style="display:flex;justify-content:space-between">
+
+<div>
+
+<b>
+${esc(p.name)}
+</b>
+
+<div class="muted">
+Quantidade: ${item.qty}
+</div>
+
+</div>
+
+<b>
+${new Intl.NumberFormat('pt-PT')
+.format(subtotal)} Kz
+</b>
+
+</div>
+
+<button
+class="btn danger"
+style="margin-top:8px"
+onclick="removeCart('${p.id}')"
+>
+Remover
+</button>
+
+</div>
+
+`;
+
+}).join('');
+
+if(!items){
+
+$('cartList').innerHTML=
+'<div class="empty">Carrinho vazio.</div>';
+
+return;
+
+}
+
+$('cartList').innerHTML=`
+
+${items}
+
+<div class="card">
+
+<h3>
+Total
+</h3>
+
+<div class="score"
+style="font-size:28px"
+>
+${new Intl.NumberFormat('pt-PT')
+.format(total)} Kz
+</div>
+
+<button
+class="btn"
+style="width:100%"
+onclick="checkoutCart()"
+>
+Finalizar pedido
+</button>
+
+</div>
+
+`;
+
+}catch(error){
+
+$('cartList').innerHTML=
+'<div class="empty">'+
+esc(error.message)+
+'</div>';
+
+}
+
+}
+
+
+/* REMOVER CARRINHO */
+
+async function removeCart(id){
+
+try{
+
+await api(
+'/api/cart',
+{
+method:'DELETE',
+body:JSON.stringify({
+productId:id
+})
+}
+);
+
+await updateCartCount();
+
+loadCart();
+
+}catch(error){
+
+alert(error.message);
+
+}
+
+}
+
+
+/* FINALIZAR */
+
+async function checkoutCart(){
+
+try{
+
+const cart=
+await api('/api/cart');
+
+const products=
+await api('/api/products');
+
+let total=0;
+
+const items=
+cart.items.map(item=>{
+
+const p=
+products.find(
+x=>x.id===item.productId
+);
+
+if(!p)return null;
+
+total+=p.price*item.qty;
+
+return {
+id:p.id,
+name:p.name,
+qty:item.qty,
+price:p.price
+};
+
+}).filter(Boolean);
+
+if(!items.length){
+
+alert('O carrinho está vazio.');
+
+return;
+
+}
+
+await api(
+'/api/orders',
+{
+method:'POST',
+body:JSON.stringify({
+items,
+total
+})
+}
+);
+
+for(const item of items){
+
+await api(
+'/api/cart',
+{
+method:'DELETE',
+body:JSON.stringify({
+productId:item.id
+})
+}
+);
+
+}
+
+await updateCartCount();
+
+alert(
+'Pedido criado com sucesso!'
+);
+
+view('orders');
+
+}catch(error){
+
+alert(error.message);
+
+}
+
+}
+
+
+/* CONTA */
 
 async function submitAuth(e){
 
@@ -684,14 +1403,14 @@ e.preventDefault();
 
 try{
 
-let login =
-$('authTitle').textContent === 'Entrar';
+const login=
+$('authTitle').textContent==='Entrar';
 
 let data;
 
 if(login){
 
-data =
+data=
 await api(
 '/api/login',
 {
@@ -708,7 +1427,7 @@ password:$('password').value
 
 }else{
 
-data =
+data=
 await api(
 '/api/register',
 {
@@ -729,24 +1448,24 @@ role:$('role').value
 
 }
 
-token =
-data.token;
+token=data.token;
 
-localStorage.klToken =
+localStorage.klToken=
 token;
 
-$('me').innerHTML =
-'<p class="status">Sessão iniciada ✓</p>';
+await loadFavoriteIds();
 
-await loadProfile();
-
-view('profile');
+await updateCartCount();
 
 alert(
 login
-? 'Sessão iniciada com sucesso!'
-: 'Conta criada com sucesso!'
+?
+'Sessão iniciada!'
+:
+'Conta criada!'
 );
+
+view('profile');
 
 }catch(error){
 
@@ -761,26 +1480,22 @@ alert(error.message);
 
 function loginMode(){
 
-$('authTitle').textContent =
-'Entrar';
+$('authTitle').textContent='Entrar';
 
-$('authButton').textContent =
-'Entrar';
+$('authButton').textContent='Entrar';
 
-$('authSwitchText').textContent =
+$('authSwitchText').textContent=
 'Ainda não tens conta?';
 
-$('authSwitch').textContent =
+$('authSwitch').textContent=
 'Criar conta';
 
-$('authSwitch').onclick =
+$('authSwitch').onclick=
 registerMode;
 
-$('name').required =
-false;
+$('name').required=false;
 
-$('role').required =
-false;
+$('role').required=false;
 
 $('name').classList.add('hidden');
 
@@ -793,26 +1508,24 @@ $('role').classList.add('hidden');
 
 function registerMode(){
 
-$('authTitle').textContent =
+$('authTitle').textContent=
 'Criar conta';
 
-$('authButton').textContent =
+$('authButton').textContent=
 'Criar conta';
 
-$('authSwitchText').textContent =
+$('authSwitchText').textContent=
 'Já tens conta?';
 
-$('authSwitch').textContent =
+$('authSwitch').textContent=
 'Entrar';
 
-$('authSwitch').onclick =
+$('authSwitch').onclick=
 loginMode;
 
-$('name').required =
-true;
+$('name').required=true;
 
-$('role').required =
-true;
+$('role').required=true;
 
 $('name').classList.remove('hidden');
 
@@ -827,21 +1540,19 @@ async function loadProfile(){
 
 if(!token){
 
-$('profileContent').innerHTML = `
+$('profileContent').innerHTML=`
 
 <div class="empty">
 
-<h3>
 Não estás autenticado.
-</h3>
+
+<br><br>
 
 <button
 class="btn"
 onclick="view('auth')"
 >
-
-Entrar / Criar conta
-
+Entrar
 </button>
 
 </div>
@@ -854,25 +1565,31 @@ return;
 
 try{
 
-let user =
+const user=
 await api('/api/me');
 
-let roleText =
-user.role === 'seller'
-? 'Vendedor'
-: 'Comprador';
+const role=
+user.role==='seller'
+?
+'Vendedor'
+:
+'Comprador';
 
-let switchText =
-user.role === 'seller'
-? 'Mudar para comprador'
-: 'Começar a vender';
+const switchRole=
+user.role==='seller'
+?
+'buyer'
+:
+'seller';
 
-let switchRole =
-user.role === 'seller'
-? 'buyer'
-: 'seller';
+const switchText=
+user.role==='seller'
+?
+'🔄 Mudar para comprador'
+:
+'🔄 Começar a vender';
 
-$('profileContent').innerHTML = `
+$('profileContent').innerHTML=`
 
 <div class="profile-row">
 
@@ -904,12 +1621,11 @@ ${esc(user.email)}
 Tipo de conta
 </div>
 
-<div class="role-title">
-${roleText}
-</div>
+<b>
+${role}
+</b>
 
 </div>
-
 
 <div class="card">
 
@@ -918,135 +1634,97 @@ Kuanza Score
 </div>
 
 <div class="score">
-${user.score || 100}
+${user.score||100}/100
 </div>
 
 <div class="badge">
-Perfil confiável
+🟢 Perfil confiável
 </div>
 
 <p class="muted">
-
-O Kuanza Score representa o nível de confiança da tua conta dentro do marketplace.
-
+Pontuação baseada no comportamento da conta.
 </p>
 
 </div>
-
-
-<div class="switch-box">
-
-<div class="muted">
-Queres fazer outra coisa?
-</div>
-
-<h3>
-${switchText}
-</h3>
-
-<p class="muted">
-
-Podes alternar entre comprador e vendedor
-sem criar uma nova conta.
-
-</p>
 
 <button
 class="btn"
 style="width:100%"
 onclick="changeRole('${switchRole}')"
 >
-
-🔄 ${switchText}
-
+${switchText}
 </button>
 
-</div>
-
+${user.role==='seller'
+?
+`
+<button
+class="btn light"
+style="width:100%;margin-top:8px"
+onclick="openStore('${user.id}')"
+>
+🏪 Ver minha loja
+</button>
+`
+:''
+}
 
 <button
 class="btn danger"
-style="width:100%;margin-top:12px"
+style="width:100%;margin-top:8px"
 onclick="logout()"
 >
-
 Terminar sessão
-
 </button>
 
 `;
 
 }catch(error){
 
-token = '';
+token='';
 
 localStorage.removeItem('klToken');
 
-$('profileContent').innerHTML = `
-
-<div class="empty">
-
-Sessão expirada.
-
-<br><br>
-
-<button
-class="btn"
-onclick="view('auth')"
->
-
-Entrar novamente
-
-</button>
-
-</div>
-
-`;
+view('auth');
 
 }
 
 }
 
 
-/* ALTERAR TIPO DE CONTA */
+/* ALTERAR CONTA */
 
-async function changeRole(newRole){
+async function changeRole(role){
 
-let text =
-newRole === 'seller'
-? 'vendedor'
-: 'comprador';
+const text=
+role==='seller'
+?
+'vendedor'
+:
+'comprador';
 
-let confirmChange =
-confirm(
-'Queres mudar a tua conta para ' +
-text +
-'?'
-);
-
-if(!confirmChange)
+if(!confirm(
+'Queres mudar para '+text+'?'
+))
 return;
 
 try{
 
-let data =
 await api(
 '/api/me/role',
 {
 method:'PATCH',
 body:JSON.stringify({
-role:newRole
+role
 })
 }
 );
 
 alert(
-'Conta alterada para ' +
-text +
-' com sucesso!'
+'Conta alterada para '+text+'!'
 );
 
-await loadProfile();
+loadProfile();
 
 }catch(error){
 
@@ -1061,11 +1739,15 @@ alert(error.message);
 
 function logout(){
 
-token = '';
+token='';
 
 localStorage.removeItem(
 'klToken'
 );
+
+favoriteIds=[];
+
+updateCartCount();
 
 view('home');
 
@@ -1076,19 +1758,15 @@ alert(
 }
 
 
-/* ÁREA DE VENDEDOR */
+/* VENDEDOR */
 
 async function checkSeller(){
 
 if(!token){
 
-$('sell').innerHTML = `
+$('sellerArea').innerHTML=`
 
 <div class="card">
-
-<h2>
-Área de vendedor
-</h2>
 
 <div class="empty">
 
@@ -1100,9 +1778,7 @@ Precisas de iniciar sessão para vender.
 class="btn"
 onclick="view('auth')"
 >
-
-Entrar / Criar conta
-
+Entrar
 </button>
 
 </div>
@@ -1117,38 +1793,30 @@ return;
 
 try{
 
-let user =
+const user=
 await api('/api/me');
 
-if(user.role !== 'seller'){
+if(user.role!=='seller'){
 
-$('sell').innerHTML = `
+$('sellerArea').innerHTML=`
 
 <div class="card">
 
-<h2>
-Área de vendedor
-</h2>
-
 <div class="empty">
 
-A tua conta está como
-<b>Comprador</b>.
+<h3>
+Queres vender no Kuanza Line?
+</h3>
 
-<br><br>
-
-Para vender, basta mudar
-o tipo de conta.
-
-<br><br>
+<p>
+A tua conta está como comprador.
+</p>
 
 <button
 class="btn"
 onclick="changeRole('seller')"
 >
-
 🔄 Começar a vender
-
 </button>
 
 </div>
@@ -1157,19 +1825,17 @@ onclick="changeRole('seller')"
 
 `;
 
-}else{
+return;
 
-$('sell').innerHTML = `
+}
+
+$('sellerArea').innerHTML=`
 
 <div class="card">
 
 <h2>
-Publicar produto
+🏪 Publicar produto
 </h2>
-
-<p class="muted">
-Estás no modo vendedor.
-</p>
 
 <form
 class="form"
@@ -1191,33 +1857,13 @@ required
 
 <select id="pc">
 
-<option>
-Eletrónicos
-</option>
-
-<option>
-Moda
-</option>
-
-<option>
-Casa
-</option>
-
-<option>
-Beleza
-</option>
-
-<option>
-Automóveis
-</option>
-
-<option>
-Telemóveis
-</option>
-
-<option>
-Outros
-</option>
+<option>Eletrónicos</option>
+<option>Moda</option>
+<option>Casa</option>
+<option>Beleza</option>
+<option>Automóveis</option>
+<option>Telemóveis</option>
+<option>Outros</option>
 
 </select>
 
@@ -1236,8 +1882,6 @@ Publicar produto
 
 `;
 
-}
-
 }catch(error){
 
 view('auth');
@@ -1253,18 +1897,6 @@ async function publish(e){
 
 e.preventDefault();
 
-if(!token){
-
-alert(
-'Inicia sessão para publicar produtos.'
-);
-
-view('auth');
-
-return;
-
-}
-
 try{
 
 await api(
@@ -1279,19 +1911,19 @@ price:$('pp').value,
 
 cat:$('pc').value,
 
-emoji:$('pe').value || '📦'
+emoji:$('pe').value||'📦'
 
 })
 }
 );
 
 alert(
-'Produto publicado com sucesso!'
+'Produto publicado!'
 );
 
 e.target.reset();
 
-await load();
+await loadProducts();
 
 view('home');
 
@@ -1304,17 +1936,15 @@ alert(error.message);
 }
 
 
-/* COMPRAR */
+/* LOJA */
 
-async function buy(id,price){
+async function openStore(ownerId){
 
-if(!token){
+if(!ownerId){
 
 alert(
-'Inicia sessão para comprar.'
+'Esta loja ainda não possui um perfil público.'
 );
-
-view('auth');
 
 return;
 
@@ -1322,30 +1952,69 @@ return;
 
 try{
 
+const data=
 await api(
-'/api/orders',
-{
-method:'POST',
-body:JSON.stringify({
-
-items:[
-{
-id:id,
-qty:1
-}
-],
-
-total:price
-
-})
-}
+'/api/store?ownerId='+
+encodeURIComponent(ownerId)
 );
 
-alert(
-'Pedido criado com sucesso!'
-);
+const s=data.store;
+const seller=data.seller;
 
-view('orders');
+$('storeContent').innerHTML=`
+
+<div class="card">
+
+<div class="store-head">
+
+<div class="store-logo">
+${esc(s.logo||'🏪')}
+</div>
+
+<h2>
+${esc(s.name)}
+</h2>
+
+<p class="muted">
+${esc(s.description)}
+</p>
+
+<div>
+⭐ ${seller.rating||5}
+</div>
+
+<div class="score"
+style="font-size:30px"
+>
+${seller.score||100}/100
+</div>
+
+<div class="badge">
+🟢 Kuanza Score
+</div>
+
+</div>
+
+</div>
+
+<h2>
+Produtos da loja
+</h2>
+
+<div class="grid">
+
+${data.products.length
+?
+data.products.map(productCard).join('')
+:
+'<div class="empty">Esta loja ainda não publicou produtos.</div>'
+}
+
+</div>
+
+`;
+
+view('store');
 
 }catch(error){
 
@@ -1362,11 +2031,11 @@ async function loadOrders(){
 
 if(!token){
 
-$('orderList').innerHTML = `
+$('orderList').innerHTML=`
 
 <div class="empty">
 
-Inicia sessão para consultar os teus pedidos.
+Inicia sessão para ver os pedidos.
 
 <br><br>
 
@@ -1374,9 +2043,7 @@ Inicia sessão para consultar os teus pedidos.
 class="btn"
 onclick="view('auth')"
 >
-
 Entrar
-
 </button>
 
 </div>
@@ -1389,27 +2056,20 @@ return;
 
 try{
 
-let orders =
+const orders=
 await api('/api/orders');
 
 if(!orders.length){
 
-$('orderList').innerHTML = `
-
-<div class="empty">
-
-Ainda não tens pedidos.
-
-</div>
-
-`;
+$('orderList').innerHTML=
+'<div class="empty">Ainda não tens pedidos.</div>';
 
 return;
 
 }
 
-$('orderList').innerHTML =
-orders.map(o => `
+$('orderList').innerHTML=
+orders.map(o=>`
 
 <div class="card">
 
@@ -1417,15 +2077,14 @@ orders.map(o => `
 #${esc(o.id)}
 </b>
 
-<br>
+<br><br>
 
-<span class="status">
+<span class="order-status">
 ${esc(o.status)}
 </span>
 
-<div
-class="muted"
-style="margin-top:7px"
+<div class="muted"
+style="margin-top:8px"
 >
 
 Total:
@@ -1447,34 +2106,10 @@ ${new Date(o.createdAt)
 
 }catch(error){
 
-$('orderList').innerHTML =
-'<div class="empty">' +
-esc(error.message) +
+$('orderList').innerHTML=
+'<div class="empty">'+
+esc(error.message)+
 '</div>';
-
-}
-
-}
-
-
-/* RECUPERAR SESSÃO */
-
-async function refreshUser(){
-
-if(!token)
-return;
-
-try{
-
-await api('/api/me');
-
-}catch(error){
-
-token = '';
-
-localStorage.removeItem(
-'klToken'
-);
 
 }
 
@@ -1485,9 +2120,29 @@ localStorage.removeItem(
 
 (async function(){
 
-await refreshUser();
+if(token){
 
-await load();
+try{
+
+await api('/api/me');
+
+}catch(error){
+
+token='';
+
+localStorage.removeItem(
+'klToken'
+);
+
+}
+
+}
+
+await loadFavoriteIds();
+
+await updateCartCount();
+
+await loadProducts();
 
 })();
 
