@@ -3,21 +3,447 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const url = require('node:url');
-const ROOT = __dirname, PUBLIC = ROOT, DB = path.join(ROOT,'data','db.json');
-fs.mkdirSync(path.dirname(DB), { recursive: true });if(!fs.existsSync(DB)) fs.writeFileSync(DB, JSON.stringify({users:[],products:[{id:'p1',name:'iPhone 13 128GB',price:450000,cat:'Eletrónicos',emoji:'📱',seller:'Beni Store',verified:true,rating:4.9},{id:'p2',name:'Smart TV 43"',price:320000,cat:'Eletrónicos',emoji:'📺',seller:'Casa Digital',verified:true,rating:4.8},{id:'p3',name:'Conjunto Streetwear',price:45000,cat:'Moda',emoji:'👕',seller:'Style AO',verified:true,rating:4.7}],orders:[],sessions:[]},null,2));
-function read(){return JSON.parse(fs.readFileSync(DB,'utf8'))} function write(d){fs.writeFileSync(DB,JSON.stringify(d,null,2))}
-function json(res,code,data){res.writeHead(code,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'});res.end(JSON.stringify(data))}
-function body(req){return new Promise((resolve,reject)=>{let s='';req.on('data',c=>s+=c);req.on('end',()=>{try{resolve(s?JSON.parse(s):{})}catch(e){reject(e)}})})}
-function token(){return crypto.randomBytes(24).toString('hex')}
-const server=http.createServer(async(req,res)=>{const u=url.parse(req.url,true); if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type,Authorization'});return res.end()}
-try{let db=read(); if(u.pathname==='/api/health')return json(res,200,{ok:true,service:'Kuanza Line API'});
-if(u.pathname==='/api/products'&&req.method==='GET')return json(res,200,db.products);
-if(u.pathname==='/api/register'&&req.method==='POST'){const b=await body(req);if(!b.name||!b.email||!b.password)return json(res,400,{error:'Preenche nome, email e palavra-passe.'});if(db.users.some(x=>x.email.toLowerCase()===b.email.toLowerCase()))return json(res,409,{error:'Este email já está registado.'});const user={id:crypto.randomUUID(),name:b.name,email:b.email.toLowerCase(),passwordHash:crypto.createHash('sha256').update(b.password).digest('hex'),role:b.role==='seller'?'seller':'buyer',score:100};db.users.push(user);const t=token();db.sessions.push({token:t,userId:user.id});write(db);return json(res,201,{token:t,user:{id:user.id,name:user.name,email:user.email,role:user.role,score:user.score}})}
-if(u.pathname==='/api/login'&&req.method==='POST'){const b=await body(req);const h=crypto.createHash('sha256').update(b.password||'').digest('hex');const user=db.users.find(x=>x.email===String(b.email||'').toLowerCase()&&x.passwordHash===h);if(!user)return json(res,401,{error:'Email ou palavra-passe incorretos.'});const t=token();db.sessions.push({token:t,userId:user.id});write(db);return json(res,200,{token:t,user:{id:user.id,name:user.name,email:user.email,role:user.role,score:user.score}})}
-if(u.pathname==='/api/me'&&req.method==='GET'){const t=(req.headers.authorization||'').replace('Bearer ','');const s=db.sessions.find(x=>x.token===t);if(!s)return json(res,401,{error:'Não autenticado.'});const user=db.users.find(x=>x.id===s.userId);return json(res,200,{id:user.id,name:user.name,email:user.email,role:user.role,score:user.score})}
-if(u.pathname==='/api/products'&&req.method==='POST'){const t=(req.headers.authorization||'').replace('Bearer ','');const s=db.sessions.find(x=>x.token===t);if(!s)return json(res,401,{error:'Inicia sessão para publicar.'});const b=await body(req),user=db.users.find(x=>x.id===s.userId);const p={id:crypto.randomUUID(),name:b.name,price:Number(b.price),cat:b.cat||'Outros',emoji:b.emoji||'📦',seller:user.name,verified:false,rating:5};db.products.unshift(p);write(db);return json(res,201,p)}
-if(u.pathname==='/api/orders'&&req.method==='POST'){const t=(req.headers.authorization||'').replace('Bearer ','');const s=db.sessions.find(x=>x.token===t);if(!s)return json(res,401,{error:'Inicia sessão para comprar.'});const b=await body(req);const order={id:'KL-'+Date.now().toString().slice(-7),userId:s.userId,items:b.items||[],total:Number(b.total||0),status:'Pagamento pendente',createdAt:new Date().toISOString()};db.orders.unshift(order);write(db);return json(res,201,order)}
-if(u.pathname==='/api/orders'&&req.method==='GET'){const t=(req.headers.authorization||'').replace('Bearer ','');const s=db.sessions.find(x=>x.token===t);if(!s)return json(res,401,{error:'Inicia sessão para ver pedidos.'});return json(res,200,db.orders.filter(x=>x.userId===s.userId))}
-const file=path.join(PUBLIC,u.pathname==='/'?'index.html':u.pathname);if(!file.startsWith(PUBLIC)||!fs.existsSync(file))return json(res,404,{error:'Not found'});const ext=path.extname(file),types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json'};res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream'});fs.createReadStream(file).pipe(res);
-}catch(e){console.error(e);json(res,500,{error:'Erro interno'})}});
-const PORT = Number(process.env.PORT || 3000);server.listen(PORT, '0.0.0.0', () => console.log(`Kuanza Line API running on port ${PORT}`));
+
+const ROOT = __dirname;
+const PUBLIC = ROOT;
+const DB = path.join(ROOT, 'data', 'db.json');
+
+fs.mkdirSync(path.dirname(DB), { recursive: true });
+
+if (!fs.existsSync(DB)) {
+  fs.writeFileSync(
+    DB,
+    JSON.stringify({
+      users: [],
+      products: [
+        {
+          id: 'p1',
+          name: 'iPhone 13 128GB',
+          price: 450000,
+          cat: 'Eletrónicos',
+          emoji: '📱',
+          seller: 'Beni Store',
+          verified: true,
+          rating: 4.9
+        },
+        {
+          id: 'p2',
+          name: 'Smart TV 43"',
+          price: 320000,
+          cat: 'Eletrónicos',
+          emoji: '📺',
+          seller: 'Casa Digital',
+          verified: true,
+          rating: 4.8
+        },
+        {
+          id: 'p3',
+          name: 'Conjunto Streetwear',
+          price: 45000,
+          cat: 'Moda',
+          emoji: '👕',
+          seller: 'Style AO',
+          verified: true,
+          rating: 4.7
+        }
+      ],
+      orders: [],
+      sessions: []
+    }, null, 2)
+  );
+}
+
+function read() {
+  return JSON.parse(fs.readFileSync(DB, 'utf8'));
+}
+
+function write(data) {
+  fs.writeFileSync(DB, JSON.stringify(data, null, 2));
+}
+
+function json(res, code, data) {
+  res.writeHead(code, {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization'
+  });
+
+  res.end(JSON.stringify(data));
+}
+
+function body(req) {
+  return new Promise((resolve, reject) => {
+    let s = '';
+
+    req.on('data', c => s += c);
+
+    req.on('end', () => {
+      try {
+        resolve(s ? JSON.parse(s) : {});
+      } catch (e) {
+        reject(e);
+      }
+    });
+  });
+}
+
+function token() {
+  return crypto.randomBytes(24).toString('hex');
+}
+
+function getUser(req, db) {
+  const t = (req.headers.authorization || '').replace('Bearer ', '');
+
+  if (!t) return null;
+
+  const session = db.sessions.find(x => x.token === t);
+
+  if (!session) return null;
+
+  return db.users.find(x => x.id === session.userId) || null;
+}
+
+const server = http.createServer(async (req, res) => {
+
+  const u = url.parse(req.url, true);
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Content-Type,Authorization'
+    });
+
+    return res.end();
+  }
+
+  try {
+
+    let db = read();
+
+    if (u.pathname === '/api/health') {
+      return json(res, 200, {
+        ok: true,
+        service: 'Kuanza Line API'
+      });
+    }
+
+    /* PRODUTOS */
+
+    if (u.pathname === '/api/products' && req.method === 'GET') {
+      return json(res, 200, db.products);
+    }
+
+    /* REGISTO */
+
+    if (u.pathname === '/api/register' && req.method === 'POST') {
+
+      const b = await body(req);
+
+      if (!b.name || !b.email || !b.password) {
+        return json(res, 400, {
+          error: 'Preenche nome, email e palavra-passe.'
+        });
+      }
+
+      if (
+        db.users.some(
+          x => x.email.toLowerCase() === b.email.toLowerCase()
+        )
+      ) {
+        return json(res, 409, {
+          error: 'Este email já está registado.'
+        });
+      }
+
+      const user = {
+        id: crypto.randomUUID(),
+        name: b.name,
+        email: b.email.toLowerCase(),
+        passwordHash: crypto
+          .createHash('sha256')
+          .update(b.password)
+          .digest('hex'),
+        role: b.role === 'seller' ? 'seller' : 'buyer',
+        score: 100
+      };
+
+      db.users.push(user);
+
+      const t = token();
+
+      db.sessions.push({
+        token: t,
+        userId: user.id
+      });
+
+      write(db);
+
+      return json(res, 201, {
+        token: t,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          score: user.score
+        }
+      });
+    }
+
+    /* LOGIN */
+
+    if (u.pathname === '/api/login' && req.method === 'POST') {
+
+      const b = await body(req);
+
+      const h = crypto
+        .createHash('sha256')
+        .update(b.password || '')
+        .digest('hex');
+
+      const user = db.users.find(
+        x =>
+          x.email === String(b.email || '').toLowerCase() &&
+          x.passwordHash === h
+      );
+
+      if (!user) {
+        return json(res, 401, {
+          error: 'Email ou palavra-passe incorretos.'
+        });
+      }
+
+      const t = token();
+
+      db.sessions.push({
+        token: t,
+        userId: user.id
+      });
+
+      write(db);
+
+      return json(res, 200, {
+        token: t,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          score: user.score
+        }
+      });
+    }
+
+    /* PERFIL */
+
+    if (u.pathname === '/api/me' && req.method === 'GET') {
+
+      const user = getUser(req, db);
+
+      if (!user) {
+        return json(res, 401, {
+          error: 'Não autenticado.'
+        });
+      }
+
+      return json(res, 200, {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        score: user.score
+      });
+    }
+
+    /* ALTERAR COMPRADOR / VENDEDOR */
+
+    if (
+      u.pathname === '/api/me/role' &&
+      req.method === 'PATCH'
+    ) {
+
+      const user = getUser(req, db);
+
+      if (!user) {
+        return json(res, 401, {
+          error: 'Não autenticado.'
+        });
+      }
+
+      const b = await body(req);
+
+      if (b.role !== 'buyer' && b.role !== 'seller') {
+        return json(res, 400, {
+          error: 'Tipo de conta inválido.'
+        });
+      }
+
+      user.role = b.role;
+
+      write(db);
+
+      return json(res, 200, {
+        message: 'Tipo de conta alterado com sucesso.',
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          score: user.score
+        }
+      });
+    }
+
+    /* PUBLICAR PRODUTO */
+
+    if (
+      u.pathname === '/api/products' &&
+      req.method === 'POST'
+    ) {
+
+      const user = getUser(req, db);
+
+      if (!user) {
+        return json(res, 401, {
+          error: 'Inicia sessão para publicar.'
+        });
+      }
+
+      if (user.role !== 'seller') {
+        return json(res, 403, {
+          error: 'Muda a tua conta para vendedor para publicar produtos.'
+        });
+      }
+
+      const b = await body(req);
+
+      const p = {
+        id: crypto.randomUUID(),
+        name: b.name,
+        price: Number(b.price),
+        cat: b.cat || 'Outros',
+        emoji: b.emoji || '📦',
+        seller: user.name,
+        sellerId: user.id,
+        verified: false,
+        rating: 5
+      };
+
+      db.products.unshift(p);
+
+      write(db);
+
+      return json(res, 201, p);
+    }
+
+    /* CRIAR PEDIDO */
+
+    if (
+      u.pathname === '/api/orders' &&
+      req.method === 'POST'
+    ) {
+
+      const user = getUser(req, db);
+
+      if (!user) {
+        return json(res, 401, {
+          error: 'Inicia sessão para comprar.'
+        });
+      }
+
+      const b = await body(req);
+
+      const order = {
+        id: 'KL-' + Date.now().toString().slice(-7),
+        userId: user.id,
+        items: b.items || [],
+        total: Number(b.total || 0),
+        status: 'Pagamento pendente',
+        createdAt: new Date().toISOString()
+      };
+
+      db.orders.unshift(order);
+
+      write(db);
+
+      return json(res, 201, order);
+    }
+
+    /* PEDIDOS */
+
+    if (
+      u.pathname === '/api/orders' &&
+      req.method === 'GET'
+    ) {
+
+      const user = getUser(req, db);
+
+      if (!user) {
+        return json(res, 401, {
+          error: 'Inicia sessão para ver pedidos.'
+        });
+      }
+
+      return json(
+        res,
+        200,
+        db.orders.filter(x => x.userId === user.id)
+      );
+    }
+
+    /* ARQUIVOS */
+
+    const file = path.join(
+      PUBLIC,
+      u.pathname === '/' ? 'index.html' : u.pathname
+    );
+
+    if (
+      !file.startsWith(PUBLIC) ||
+      !fs.existsSync(file)
+    ) {
+      return json(res, 404, {
+        error: 'Not found'
+      });
+    }
+
+    const ext = path.extname(file);
+
+    const types = {
+      '.html': 'text/html; charset=utf-8',
+      '.js': 'text/javascript; charset=utf-8',
+      '.css': 'text/css; charset=utf-8',
+      '.json': 'application/json'
+    };
+
+    res.writeHead(200, {
+      'Content-Type':
+        types[ext] || 'application/octet-stream'
+    });
+
+    fs.createReadStream(file).pipe(res);
+
+  } catch (e) {
+
+    console.error(e);
+
+    json(res, 500, {
+      error: 'Erro interno'
+    });
+
+  }
+
+});
+
+const PORT = Number(
+  process.env.PORT || 3000
+);
+
+server.listen(
+  PORT,
+  '0.0.0.0',
+  () =>
+    console.log(
+      `Kuanza Line API running on port ${PORT}`
+    )
+);
