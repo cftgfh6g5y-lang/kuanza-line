@@ -12,43 +12,43 @@ fs.mkdirSync(path.dirname(DB), { recursive: true });
 
 const demoProducts = [
   {
-    id:'p1',
-    name:'iPhone 13 128GB',
-    price:450000,
-    cat:'Eletrónicos',
-    emoji:'📱',
-    seller:'Beni Store',
-    sellerId:'demo1',
-    verified:true,
-    rating:4.9,
-    description:'iPhone 13 128GB em excelente estado.',
-    photos:[]
+    id: 'p1',
+    name: 'iPhone 13 128GB',
+    price: 450000,
+    cat: 'Eletrónicos',
+    emoji: '📱',
+    seller: 'Beni Store',
+    sellerId: 'demo1',
+    verified: true,
+    rating: 4.9,
+    description: 'iPhone 13 128GB em excelente estado.',
+    photos: []
   },
   {
-    id:'p2',
-    name:'Smart TV 43"',
-    price:320000,
-    cat:'Eletrónicos',
-    emoji:'📺',
-    seller:'Casa Digital',
-    sellerId:'demo2',
-    verified:true,
-    rating:4.8,
-    description:'Smart TV 43 polegadas, imagem nítida e excelente para entretenimento.',
-    photos:[]
+    id: 'p2',
+    name: 'Smart TV 43"',
+    price: 320000,
+    cat: 'Eletrónicos',
+    emoji: '📺',
+    seller: 'Casa Digital',
+    sellerId: 'demo2',
+    verified: true,
+    rating: 4.8,
+    description: 'Smart TV 43 polegadas, imagem nítida e excelente para entretenimento.',
+    photos: []
   },
   {
-    id:'p3',
-    name:'Conjunto Streetwear',
-    price:45000,
-    cat:'Moda',
-    emoji:'👕',
-    seller:'Style AO',
-    sellerId:'demo3',
-    verified:true,
-    rating:4.7,
-    description:'Conjunto streetwear moderno.',
-    photos:[]
+    id: 'p3',
+    name: 'Conjunto Streetwear',
+    price: 45000,
+    cat: 'Moda',
+    emoji: '👕',
+    seller: 'Style AO',
+    sellerId: 'demo3',
+    verified: true,
+    rating: 4.7,
+    description: 'Conjunto streetwear moderno.',
+    photos: []
   }
 ];
 
@@ -56,29 +56,30 @@ if (!fs.existsSync(DB)) {
   fs.writeFileSync(
     DB,
     JSON.stringify({
-      users:[],
-      stores:[],
-      products:demoProducts,
-      orders:[],
-      sessions:[],
-      favorites:[],
-      carts:[],
-      conversations:[],
-      messages:[]
+      users: [],
+      stores: [],
+      products: demoProducts,
+      orders: [],
+      sessions: [],
+      favorites: [],
+      carts: [],
+      conversations: [],
+      messages: [],
+      reviews: []
     }, null, 2)
   );
 }
 
-function read(){
-  return JSON.parse(fs.readFileSync(DB,'utf8'));
+function read() {
+  return JSON.parse(fs.readFileSync(DB, 'utf8'));
 }
 
-function write(d){
-  fs.writeFileSync(DB,JSON.stringify(d,null,2));
+function write(data) {
+  fs.writeFileSync(DB, JSON.stringify(data, null, 2));
 }
 
-function ensureDB(db){
-  for(const k of [
+function ensureDB(db) {
+  const collections = [
     'users',
     'stores',
     'products',
@@ -87,1146 +88,1187 @@ function ensureDB(db){
     'favorites',
     'carts',
     'conversations',
-    'messages'
-  ]){
-    if(!Array.isArray(db[k])) db[k]=[];
+    'messages',
+    'reviews'
+  ];
+
+  for (const key of collections) {
+    if (!Array.isArray(db[key])) {
+      db[key] = [];
+    }
   }
 
-  for(const p of db.products){
-    if(!Array.isArray(p.photos)) p.photos=[];
-    if(!p.description){
-      p.description='Produto disponível na Kuanza Line.';
+  for (const product of db.products) {
+    if (!Array.isArray(product.photos)) {
+      product.photos = [];
+    }
+
+    if (!product.description) {
+      product.description = 'Produto disponível na Kuanza Line.';
+    }
+  }
+
+  for (const user of db.users) {
+    if (!Array.isArray(user.receivedReviews)) {
+      user.receivedReviews = [];
+    }
+
+    if (!Array.isArray(user.completedOrders)) {
+      user.completedOrders = [];
+    }
+
+    if (!Array.isArray(user.cancelledOrders)) {
+      user.cancelledOrders = [];
+    }
+
+    if (!Array.isArray(user.complaints)) {
+      user.complaints = [];
+    }
+
+    if (typeof user.responseTime !== 'number') {
+      user.responseTime = 24;
+    }
+
+    if (typeof user.score !== 'number') {
+      user.score = calculateScore(user);
     }
   }
 
   return db;
 }
 
-function json(res,code,data){
-  res.writeHead(code,{
-    'Content-Type':'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin':'*',
-    'Access-Control-Allow-Headers':'Content-Type,Authorization',
-    'Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS'
+/* =========================
+   KUANZA SCORE
+========================= */
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function calculateScore(user) {
+  if (!user) return 0;
+
+  let score = 50;
+
+  const completed = Array.isArray(user.completedOrders)
+    ? user.completedOrders.length
+    : 0;
+
+  const cancelled = Array.isArray(user.cancelledOrders)
+    ? user.cancelledOrders.length
+    : 0;
+
+  const complaints = Array.isArray(user.complaints)
+    ? user.complaints.length
+    : 0;
+
+  const reviews = Array.isArray(user.receivedReviews)
+    ? user.receivedReviews
+    : [];
+
+  /* Vendas/compras concluídas */
+  score += Math.min(completed * 3, 25);
+
+  /* Avaliações */
+  if (reviews.length > 0) {
+    const average =
+      reviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) /
+      reviews.length;
+
+    score += Math.round((average / 5) * 20);
+  }
+
+  /* Penalizações */
+  score -= Math.min(cancelled * 4, 15);
+  score -= Math.min(complaints * 8, 20);
+
+  /* Tempo de resposta */
+  const responseTime = Number(user.responseTime || 24);
+
+  if (responseTime <= 1) {
+    score += 5;
+  } else if (responseTime <= 6) {
+    score += 3;
+  } else if (responseTime <= 24) {
+    score += 1;
+  } else {
+    score -= 3;
+  }
+
+  if (user.verified) {
+    score += 5;
+  }
+
+  return clamp(Math.round(score), 0, 100);
+}
+
+function scoreLabel(score) {
+  if (score >= 90) {
+    return {
+      label: 'Excelente',
+      text: 'Perfil altamente confiável',
+      level: 'excellent'
+    };
+  }
+
+  if (score >= 75) {
+    return {
+      label: 'Bom',
+      text: 'Perfil confiável',
+      level: 'good'
+    };
+  }
+
+  if (score >= 50) {
+    return {
+      label: 'Regular',
+      text: 'Tenha atenção nas negociações',
+      level: 'regular'
+    };
+  }
+
+  if (score >= 25) {
+    return {
+      label: 'Baixo',
+      text: 'Perfil requer atenção',
+      level: 'low'
+    };
+  }
+
+  return {
+    label: 'Crítico',
+    text: 'Perfil com alto risco',
+    level: 'critical'
+  };
+}
+
+/* =========================
+   HELPERS
+========================= */
+
+function json(res, code, data) {
+  res.writeHead(code, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS'
   });
 
   res.end(JSON.stringify(data));
 }
 
-function body(req,max=10*1024*1024){
-  return new Promise((resolve,reject)=>{
-    let s='';
-    let size=0;
+function body(req, max = 10 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    let size = 0;
 
-    req.on('data',c=>{
-      size+=c.length;
+    req.on('data', chunk => {
+      size += chunk.length;
 
-      if(size>max){
+      if (size > max) {
         reject(new Error('Dados demasiado grandes.'));
         req.destroy();
         return;
       }
 
-      s+=c;
+      data += chunk;
     });
 
-    req.on('end',()=>{
-      try{
-        resolve(s?JSON.parse(s):{});
-      }catch(e){
+    req.on('end', () => {
+      try {
+        resolve(data ? JSON.parse(data) : {});
+      } catch {
         reject(new Error('JSON inválido.'));
       }
     });
 
-    req.on('error',reject);
+    req.on('error', reject);
   });
 }
 
-function token(){
+function token() {
   return crypto.randomBytes(24).toString('hex');
 }
 
-function auth(db,req){
-  const t=(req.headers.authorization||'')
-    .replace('Bearer ','')
-    .trim();
+function auth(db, req) {
+  const authorization =
+    (req.headers.authorization || '')
+      .replace('Bearer ', '')
+      .trim();
 
-  const s=db.sessions.find(x=>x.token===t);
+  if (!authorization) return null;
 
-  if(!s) return null;
+  const session = db.sessions.find(
+    s => s.token === authorization
+  );
 
-  return db.users.find(x=>x.id===s.userId)||null;
+  if (!session) return null;
+
+  return db.users.find(
+    u => u.id === session.userId
+  ) || null;
 }
 
-function publicUser(u){
-  return u
-    ? {
-        id:u.id,
-        name:u.name,
-        email:u.email,
-        role:u.role,
-        score:Number(u.score||100),
-        avatar:u.avatar||''
-      }
-    : null;
-}
+function publicUser(user) {
+  if (!user) return null;
 
-function getStore(db,ownerId){
-  return db.stores.find(x=>x.ownerId===ownerId)||null;
-}
-
-function publicProduct(db,p){
-
-  const seller=db.users.find(u=>u.id===p.sellerId);
-  const store=getStore(db,p.sellerId);
+  const score = calculateScore(user);
 
   return {
-    ...p,
-
-    seller:seller
-      ? seller.name
-      : (p.seller||'Vendedor'),
-
-    verified:seller
-      ? !!seller.verified
-      : !!p.verified,
-
-    rating:Number(p.rating||5),
-
-    score:seller
-      ? Number(seller.score||100)
-      : Number(p.score||100),
-
-    storeName:store?.name||p.seller||'Loja',
-
-    storeLogo:store?.logo||'',
-
-    photos:Array.isArray(p.photos)
-      ? p.photos
-      : []
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    score,
+    scoreInfo: scoreLabel(score),
+    avatar: user.avatar || '',
+    verified: !!user.verified,
+    completedOrders: user.completedOrders?.length || 0,
+    cancelledOrders: user.cancelledOrders?.length || 0,
+    complaints: user.complaints?.length || 0,
+    reviews: user.receivedReviews?.length || 0
   };
 }
 
-function validPhotos(photos){
+function getStore(db, ownerId) {
+  return db.stores.find(
+    store => store.ownerId === ownerId
+  ) || null;
+}
 
+function publicProduct(db, product) {
+  const seller = db.users.find(
+    user => user.id === product.sellerId
+  );
+
+  const store = getStore(db, product.sellerId);
+
+  const score = seller
+    ? calculateScore(seller)
+    : Number(product.score || 100);
+
+  return {
+    ...product,
+    seller: seller
+      ? seller.name
+      : (product.seller || 'Vendedor'),
+
+    verified: seller
+      ? !!seller.verified
+      : !!product.verified,
+
+    rating: Number(product.rating || 5),
+
+    score,
+
+    scoreInfo: scoreLabel(score),
+
+    storeName:
+      store?.name ||
+      product.seller ||
+      'Loja',
+
+    storeLogo:
+      store?.logo || '',
+
+    photos:
+      Array.isArray(product.photos)
+        ? product.photos
+        : []
+  };
+}
+
+function validPhotos(photos) {
   return (
     Array.isArray(photos) &&
-    photos.length>=5 &&
-    photos.length<=10 &&
+    photos.length >= 5 &&
+    photos.length <= 10 &&
     photos.every(
-      x =>
-        typeof x==='string' &&
-        x.startsWith('data:image/')
+      photo =>
+        typeof photo === 'string' &&
+        photo.startsWith('data:image/')
     )
   );
 }
 
-function conversationKey(a,b){
-  return [a,b].sort().join(':');
+function conversationKey(a, b) {
+  return [a, b].sort().join(':');
 }
 
-const server=http.createServer(async(req,res)=>{
+/* =========================
+   SERVER
+========================= */
 
-  const u=url.parse(req.url,true);
+const server = http.createServer(async (req, res) => {
+  try {
+    if (req.method === 'OPTIONS') {
+      return json(res, 204, {});
+    }
 
-  if(req.method==='OPTIONS'){
-    res.writeHead(204,{
-      'Access-Control-Allow-Origin':'*',
-      'Access-Control-Allow-Headers':'Content-Type,Authorization',
-      'Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS'
-    });
+    const parsed = url.parse(req.url, true);
+    const pathname = parsed.pathname;
 
-    return res.end();
-  }
+    let db = ensureDB(read());
+    const user = auth(db, req);
 
-  try{
+    /* =========================
+       HEALTH
+    ========================= */
 
-    let db=ensureDB(read());
-
-    /*
-      HEALTH
-    */
-
-    if(u.pathname==='/api/health'){
-      return json(res,200,{
-        ok:true,
-        service:'Kuanza Line API',
-        version:'1.1'
+    if (pathname === '/api/health') {
+      return json(res, 200, {
+        ok: true,
+        app: 'Kuanza Line',
+        version: '1.2'
       });
     }
 
-    /*
-      PRODUTOS
-    */
+    /* =========================
+       REGISTER
+    ========================= */
 
-    if(
-      u.pathname==='/api/products' &&
-      req.method==='GET'
-    ){
+    if (
+      pathname === '/api/register' &&
+      req.method === 'POST'
+    ) {
+      const data = await body(req);
 
-      let list=db.products.map(
-        p=>publicProduct(db,p)
-      );
+      const name = String(data.name || '').trim();
+      const email = String(data.email || '')
+        .trim()
+        .toLowerCase();
 
-      const q=String(
-        u.query.search||''
-      ).toLowerCase();
+      const password = String(data.password || '');
 
-      const cat=String(
-        u.query.cat||'Todos'
-      );
-
-      const sort=String(
-        u.query.sort||''
-      );
-
-      if(q){
-
-        list=list.filter(p=>
-          (
-            p.name+
-            ' '+
-            p.seller+
-            ' '+
-            p.description
-          )
-          .toLowerCase()
-          .includes(q)
-        );
-
-      }
-
-      if(cat && cat!=='Todos'){
-        list=list.filter(
-          p=>p.cat===cat
-        );
-      }
-
-      if(sort==='low'){
-        list.sort(
-          (a,b)=>a.price-b.price
-        );
-      }
-
-      if(sort==='high'){
-        list.sort(
-          (a,b)=>b.price-a.price
-        );
-      }
-
-      return json(res,200,list);
-    }
-
-    const pm=u.pathname.match(
-      /^\/api\/products\/([^/]+)$/
-    );
-
-    if(
-      pm &&
-      req.method==='GET'
-    ){
-
-      const p=db.products.find(
-        x=>x.id===pm[1]
-      );
-
-      if(!p){
-        return json(res,404,{
-          error:'Produto não encontrado.'
+      if (!name || !email || password.length < 6) {
+        return json(res, 400, {
+          error: 'Preencha nome, email e uma senha com pelo menos 6 caracteres.'
         });
       }
 
-      return json(
-        res,
-        200,
-        publicProduct(db,p)
-      );
-    }
-
-    /*
-      REGISTRO
-    */
-
-    if(
-      u.pathname==='/api/register' &&
-      req.method==='POST'
-    ){
-
-      const b=await body(req);
-
-      if(
-        !b.name ||
-        !b.email ||
-        !b.password
-      ){
-        return json(res,400,{
-          error:
-          'Preenche nome, email e palavra-passe.'
-        });
-      }
-
-      if(
+      if (
         db.users.some(
-          x=>
-            x.email.toLowerCase()===
-            String(b.email).toLowerCase()
+          u => u.email.toLowerCase() === email
         )
-      ){
-        return json(res,409,{
-          error:
-          'Este email já está registado.'
+      ) {
+        return json(res, 409, {
+          error: 'Este email já está registado.'
         });
       }
 
-      const user={
-        id:crypto.randomUUID(),
-        name:String(b.name).trim(),
-        email:String(b.email).toLowerCase().trim(),
+      const newUser = {
+        id: crypto.randomUUID(),
+        name,
+        email,
+        password,
+        role: data.role === 'seller'
+          ? 'seller'
+          : 'buyer',
 
-        passwordHash:
-          crypto
-          .createHash('sha256')
-          .update(String(b.password))
-          .digest('hex'),
+        verified: false,
 
-        role:
-          b.role==='seller'
-            ? 'seller'
-            : 'buyer',
+        score: 50,
 
-        score:100,
-        verified:false,
-        createdAt:new Date().toISOString()
+        completedOrders: [],
+        cancelledOrders: [],
+        complaints: [],
+        receivedReviews: [],
+
+        responseTime: 24,
+
+        createdAt: new Date().toISOString()
       };
 
-      db.users.push(user);
+      db.users.push(newUser);
 
-      const t=token();
+      const sessionToken = token();
 
       db.sessions.push({
-        token:t,
-        userId:user.id
+        token: sessionToken,
+        userId: newUser.id
       });
 
       write(db);
 
-      return json(res,201,{
-        token:t,
-        user:publicUser(user)
+      return json(res, 201, {
+        token: sessionToken,
+        user: publicUser(newUser)
       });
     }
 
-    /*
-      LOGIN
-    */
+    /* =========================
+       LOGIN
+    ========================= */
 
-    if(
-      u.pathname==='/api/login' &&
-      req.method==='POST'
-    ){
+    if (
+      pathname === '/api/login' &&
+      req.method === 'POST'
+    ) {
+      const data = await body(req);
 
-      const b=await body(req);
+      const email = String(data.email || '')
+        .trim()
+        .toLowerCase();
 
-      const h=
-        crypto
-        .createHash('sha256')
-        .update(String(b.password||''))
-        .digest('hex');
+      const password = String(data.password || '');
 
-      const user=db.users.find(
-        x=>
-          x.email===
-          String(b.email||'').toLowerCase() &&
-          x.passwordHash===h
+      const found = db.users.find(
+        u =>
+          u.email.toLowerCase() === email &&
+          u.password === password
       );
 
-      if(!user){
-        return json(res,401,{
-          error:
-          'Email ou palavra-passe incorretos.'
+      if (!found) {
+        return json(res, 401, {
+          error: 'Email ou senha incorretos.'
         });
       }
 
-      const t=token();
+      found.score = calculateScore(found);
+
+      const sessionToken = token();
 
       db.sessions.push({
-        token:t,
-        userId:user.id
+        token: sessionToken,
+        userId: found.id
       });
 
       write(db);
 
-      return json(res,200,{
-        token:t,
-        user:publicUser(user)
+      return json(res, 200, {
+        token: sessionToken,
+        user: publicUser(found)
       });
     }
 
-    /*
-      ME
-    */
+    /* =========================
+       ME
+    ========================= */
 
-    if(
-      u.pathname==='/api/me' &&
-      req.method==='GET'
-    ){
+    if (
+      pathname === '/api/me' &&
+      req.method === 'GET'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Não autenticado.'
+        });
+      }
 
-      const user=auth(db,req);
+      user.score = calculateScore(user);
+      write(db);
 
-      if(!user){
-        return json(res,401,{
-          error:'Não autenticado.'
+      return json(res, 200, {
+        user: publicUser(user)
+      });
+    }
+
+    /* =========================
+       SCORE
+    ========================= */
+
+    if (
+      pathname === '/api/me/score' &&
+      req.method === 'GET'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Não autenticado.'
+        });
+      }
+
+      const score = calculateScore(user);
+      user.score = score;
+
+      write(db);
+
+      return json(res, 200, {
+        score,
+        ...scoreLabel(score),
+
+        factors: {
+          completedOrders:
+            user.completedOrders?.length || 0,
+
+          reviews:
+            user.receivedReviews?.length || 0,
+
+          cancellations:
+            user.cancelledOrders?.length || 0,
+
+          complaints:
+            user.complaints?.length || 0,
+
+          responseTime:
+            user.responseTime || 24,
+
+          verified:
+            !!user.verified
+        }
+      });
+    }
+
+    /* =========================
+       SWITCH ROLE
+    ========================= */
+
+    if (
+      pathname === '/api/me/role' &&
+      req.method === 'PATCH'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Não autenticado.'
+        });
+      }
+
+      const data = await body(req);
+
+      if (
+        data.role !== 'buyer' &&
+        data.role !== 'seller'
+      ) {
+        return json(res, 400, {
+          error: 'Tipo de conta inválido.'
+        });
+      }
+
+      user.role = data.role;
+
+      write(db);
+
+      return json(res, 200, {
+        user: publicUser(user)
+      });
+    }
+
+    /* =========================
+       PRODUCTS
+    ========================= */
+
+    if (
+      pathname === '/api/products' &&
+      req.method === 'GET'
+    ) {
+      const search =
+        String(parsed.query.search || '')
+          .toLowerCase();
+
+      const cat =
+        String(parsed.query.cat || '');
+
+      const sort =
+        String(parsed.query.sort || '');
+
+      let products = db.products.map(
+        p => publicProduct(db, p)
+      );
+
+      if (search) {
+        products = products.filter(
+          p =>
+            p.name.toLowerCase().includes(search) ||
+            p.description.toLowerCase().includes(search)
+        );
+      }
+
+      if (cat) {
+        products = products.filter(
+          p => p.cat === cat
+        );
+      }
+
+      if (sort === 'low') {
+        products.sort(
+          (a, b) => a.price - b.price
+        );
+      }
+
+      if (sort === 'high') {
+        products.sort(
+          (a, b) => b.price - a.price
+        );
+      }
+
+      return json(res, 200, products);
+    }
+
+    /* =========================
+       PRODUCT DETAILS
+    ========================= */
+
+    if (
+      pathname.startsWith('/api/products/') &&
+      req.method === 'GET'
+    ) {
+      const id = pathname.split('/')[3];
+
+      const product = db.products.find(
+        p => p.id === id
+      );
+
+      if (!product) {
+        return json(res, 404, {
+          error: 'Produto não encontrado.'
         });
       }
 
       return json(
         res,
         200,
-        publicUser(user)
+        publicProduct(db, product)
       );
     }
 
-    /*
-      TROCAR TIPO DE CONTA
-    */
+    /* =========================
+       CREATE PRODUCT
+    ========================= */
 
-    if(
-      u.pathname==='/api/me/role' &&
-      req.method==='PATCH'
-    ){
-
-      const user=auth(db,req);
-
-      if(!user){
-        return json(res,401,{
-          error:'Não autenticado.'
+    if (
+      pathname === '/api/products' &&
+      req.method === 'POST'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Faça login primeiro.'
         });
       }
 
-      const b=await body(req);
-
-      if(
-        !['buyer','seller']
-        .includes(b.role)
-      ){
-        return json(res,400,{
-          error:'Tipo de conta inválido.'
+      if (user.role !== 'seller') {
+        return json(res, 403, {
+          error: 'Mude para conta vendedor.'
         });
       }
 
-      user.role=b.role;
+      const data = await body(req);
 
-      write(db);
+      const name = String(data.name || '').trim();
+      const description =
+        String(data.description || '').trim();
 
-      return json(
-        res,
-        200,
-        publicUser(user)
-      );
-    }
+      const price = Number(data.price || 0);
+      const category =
+        String(data.cat || 'Outros').trim();
 
-    /*
-      LOJAS
-    */
+      const photos = data.photos;
 
-    if(
-      u.pathname==='/api/stores' &&
-      req.method==='GET'
-    ){
-
-      const ownerId=
-        String(u.query.ownerId||'');
-
-      const st=db.stores.find(
-        x=>x.ownerId===ownerId
-      );
-
-      if(!st){
-        return json(res,200,null);
-      }
-
-      const products=
-        db.products
-        .filter(
-          p=>p.sellerId===ownerId
-        )
-        .map(
-          p=>publicProduct(db,p)
-        );
-
-      const owner=
-        db.users.find(
-          x=>x.id===ownerId
-        );
-
-      return json(res,200,{
-        ...st,
-        owner:publicUser(owner),
-        products
-      });
-    }
-
-    if(
-      u.pathname==='/api/stores' &&
-      req.method==='PATCH'
-    ){
-
-      const user=auth(db,req);
-
-      if(!user){
-        return json(res,401,{
-          error:'Inicia sessão.'
+      if (!name) {
+        return json(res, 400, {
+          error: 'Informe o nome do produto.'
         });
       }
 
-      const b=await body(req);
-
-      let st=db.stores.find(
-        x=>x.ownerId===user.id
-      );
-
-      if(!st){
-
-        st={
-          id:crypto.randomUUID(),
-          ownerId:user.id,
-          name:user.name+' Store',
-          logo:'',
-          description:'',
-          rating:5
-        };
-
-        db.stores.push(st);
-      }
-
-      if(b.name!==undefined){
-        st.name=String(b.name).trim();
-      }
-
-      if(b.logo!==undefined){
-        st.logo=String(b.logo);
-      }
-
-      if(b.description!==undefined){
-        st.description=String(b.description);
-      }
-
-      write(db);
-
-      return json(res,200,st);
-    }
-
-    /*
-      PUBLICAR PRODUTO
-      MÍNIMO 5 FOTOS
-    */
-
-    if(
-      u.pathname==='/api/products' &&
-      req.method==='POST'
-    ){
-
-      const user=auth(db,req);
-
-      if(!user){
-        return json(res,401,{
-          error:
-          'Inicia sessão para publicar.'
+      if (
+        description.length < 15
+      ) {
+        return json(res, 400, {
+          error: 'A descrição deve ter pelo menos 15 caracteres.'
         });
       }
 
-      if(user.role!=='seller'){
-        return json(res,403,{
-          error:
-          'Muda a tua conta para Vendedor antes de publicar.'
+      if (!Number.isFinite(price) || price <= 0) {
+        return json(res, 400, {
+          error: 'Informe um preço válido.'
         });
       }
 
-      const b=await body(
-        req,
-        10*1024*1024
-      );
-
-      if(
-        !b.name ||
-        !Number(b.price) ||
-        !b.cat
-      ){
-        return json(res,400,{
-          error:
-          'Preenche nome, preço e categoria.'
+      if (!validPhotos(photos)) {
+        return json(res, 400, {
+          error: 'O produto precisa de pelo menos 5 fotos reais.'
         });
       }
 
-      if(!validPhotos(b.photos)){
-        return json(res,400,{
-          error:
-          'O produto precisa de pelo menos 5 fotos reais. Podes adicionar até 10.'
-        });
-      }
+      const product = {
+        id: crypto.randomUUID(),
+        name,
+        description,
+        price,
+        cat: category,
+        emoji: data.emoji || '🛍️',
 
-      if(
-        !b.description ||
-        String(b.description).trim().length<15
-      ){
-        return json(res,400,{
-          error:
-          'A descrição é obrigatória e deve ter pelo menos 15 caracteres.'
-        });
-      }
+        sellerId: user.id,
 
-      const p={
+        seller: user.name,
 
-        id:crypto.randomUUID(),
+        verified: !!user.verified,
 
-        name:
-          String(b.name).trim(),
+        rating: 5,
 
-        price:
-          Number(b.price),
+        score: calculateScore(user),
 
-        cat:
-          String(b.cat),
-
-        emoji:
-          b.emoji||'📦',
-
-        sellerId:
-          user.id,
-
-        seller:
-          user.name,
-
-        verified:
-          !!user.verified,
-
-        rating:
-          5,
-
-        score:
-          Number(user.score||100),
-
-        description:
-          String(b.description).trim(),
-
-        condition:
-          b.condition||'Usado',
-
-        location:
-          b.location||'',
-
-        photos:
-          b.photos.slice(0,10),
+        photos,
 
         createdAt:
           new Date().toISOString()
       };
 
-      db.products.unshift(p);
+      db.products.push(product);
 
       write(db);
 
-      return json(
-        res,
-        201,
-        publicProduct(db,p)
-      );
-    }
-
-    /*
-      FAVORITOS
-    */
-
-    const fav=u.pathname.match(
-      /^\/api\/favorites\/([^/]+)$/
-    );
-
-    if(
-      u.pathname==='/api/favorites' &&
-      req.method==='GET'
-    ){
-
-      const user=auth(db,req);
-
-      if(!user){
-        return json(res,401,{
-          error:'Inicia sessão.'
-        });
-      }
-
-      return json(
-        res,
-        200,
-
-        db.favorites
-        .filter(
-          x=>x.userId===user.id
-        )
-        .map(
-          x=>
-            db.products.find(
-              p=>p.id===x.productId
-            )
-        )
-        .filter(Boolean)
-        .map(
-          p=>publicProduct(db,p)
-        )
-      );
-    }
-
-    if(
-      fav &&
-      req.method==='POST'
-    ){
-
-      const user=auth(db,req);
-
-      if(!user){
-        return json(res,401,{
-          error:'Inicia sessão.'
-        });
-      }
-
-      if(
-        !db.products.some(
-          p=>p.id===fav[1]
-        )
-      ){
-        return json(res,404,{
-          error:'Produto não encontrado.'
-        });
-      }
-
-      if(
-        !db.favorites.some(
-          x=>
-            x.userId===user.id &&
-            x.productId===fav[1]
-        )
-      ){
-        db.favorites.push({
-          userId:user.id,
-          productId:fav[1]
-        });
-      }
-
-      write(db);
-
-      return json(res,201,{
-        ok:true
+      return json(res, 201, {
+        product: publicProduct(db, product)
       });
     }
 
-    if(
-      fav &&
-      req.method==='DELETE'
-    ){
+    /* =========================
+       STORES
+    ========================= */
 
-      const user=auth(db,req);
-
-      if(!user){
-        return json(res,401,{
-          error:'Inicia sessão.'
+    if (
+      pathname === '/api/store' &&
+      req.method === 'GET'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Não autenticado.'
         });
       }
 
-      db.favorites=
-        db.favorites.filter(
-          x=>
-            !(
-              x.userId===user.id &&
-              x.productId===fav[1]
-            )
-        );
+      const store =
+        getStore(db, user.id);
 
-      write(db);
-
-      return json(res,200,{
-        ok:true
+      return json(res, 200, {
+        store: store || null,
+        seller: publicUser(user)
       });
     }
 
-    /*
-      CARRINHO
-    */
-
-    const cartItem=u.pathname.match(
-      /^\/api\/cart\/([^/]+)$/
-    );
-
-    if(
-      u.pathname==='/api/cart' &&
-      req.method==='GET'
-    ){
-
-      const user=auth(db,req);
-
-      if(!user){
-        return json(res,401,{
-          error:'Inicia sessão.'
+    if (
+      pathname === '/api/store' &&
+      req.method === 'PATCH'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Não autenticado.'
         });
       }
 
-      const items=
-        db.carts
-        .filter(
-          x=>x.userId===user.id
-        )
-        .map(x=>{
-
-          const p=
-            db.products.find(
-              p=>p.id===x.productId
-            );
-
-          return p
-            ? {
-                ...x,
-                product:
-                  publicProduct(db,p)
-              }
-            : null;
-
-        })
-        .filter(Boolean);
-
-      return json(
-        res,
-        200,
-        items
-      );
-    }
-
-    if(
-      u.pathname==='/api/cart' &&
-      req.method==='POST'
-    ){
-
-      const user=auth(db,req);
-
-      if(!user){
-        return json(res,401,{
-          error:'Inicia sessão.'
-        });
-      }
-
-      const b=await body(req);
-
-      const p=
-        db.products.find(
-          x=>x.id===b.productId
-        );
-
-      if(!p){
-        return json(res,404,{
-          error:'Produto não encontrado.'
-        });
-      }
-
-      let x=
-        db.carts.find(
-          x=>
-            x.userId===user.id &&
-            x.productId===p.id
-        );
-
-      if(x){
-
-        x.qty=
-          Math.min(
-            99,
-            x.qty+
-            Math.max(
-              1,
-              Number(b.qty||1)
-            )
-          );
-
-      }else{
-
-        db.carts.push({
-          userId:user.id,
-          productId:p.id,
-          qty:Math.max(
-            1,
-            Number(b.qty||1)
-          )
-        });
-
-      }
-
-      write(db);
-
-      return json(res,201,{
-        ok:true
-      });
-    }
-
-    if(
-      cartItem &&
-      req.method==='DELETE'
-    ){
-
-      const user=auth(db,req);
-
-      if(!user){
-        return json(res,401,{
-          error:'Inicia sessão.'
-        });
-      }
-
-      db.carts=
-        db.carts.filter(
-          x=>
-            !(
-              x.userId===user.id &&
-              x.productId===cartItem[1]
-            )
-        );
-
-      write(db);
-
-      return json(res,200,{
-        ok:true
-      });
-    }
-
-    /*
-      PEDIDOS
-    */
-
-    if(
-      u.pathname==='/api/orders' &&
-      req.method==='POST'
-    ){
-
-      const user=auth(db,req);
-
-      if(!user){
-        return json(res,401,{
-          error:'Inicia sessão para comprar.'
-        });
-      }
-
-      const b=await body(req);
-
-      const order={
-        id:
-          'KL-'+
-          Date.now()
-          .toString()
-          .slice(-7),
-
-        userId:user.id,
-
-        items:
-          b.items||[],
-
-        total:
-          Number(b.total||0),
-
-        status:
-          'Pendente',
-
-        createdAt:
-          new Date().toISOString()
-      };
-
-      db.orders.unshift(order);
-
-      write(db);
-
-      return json(
-        res,
-        201,
-        order
-      );
-    }
-
-    if(
-      u.pathname==='/api/orders' &&
-      req.method==='GET'
-    ){
-
-      const user=auth(db,req);
-
-      if(!user){
-        return json(res,401,{
-          error:
-          'Inicia sessão para ver pedidos.'
-        });
-      }
-
-      return json(
-        res,
-        200,
-        db.orders.filter(
-          x=>x.userId===user.id
-        )
-      );
-    }
-
-    /*
-      CHAT
-    */
-
-    if(
-      u.pathname==='/api/conversations' &&
-      req.method==='GET'
-    ){
-
-      const user=auth(db,req);
-
-      if(!user){
-        return json(res,401,{
-          error:'Inicia sessão.'
-        });
-      }
-
-      const list=
-        db.conversations
-        .filter(
-          c=>c.participants.includes(user.id)
-        )
-        .map(c=>{
-
-          const otherId=
-            c.participants.find(
-              id=>id!==user.id
-            );
-
-          const other=
-            db.users.find(
-              x=>x.id===otherId
-            );
-
-          const last=
-            db.messages
-            .filter(
-              m=>m.conversationId===c.id
-            )
-            .sort(
-              (a,b)=>
-                new Date(b.createdAt)-
-                new Date(a.createdAt)
-            )[0];
-
-          const product=
-            c.productId
-              ? db.products.find(
-                  p=>p.id===c.productId
-                )
-              : null;
-
-          return {
-            ...c,
-            other:
-              publicUser(other),
-            lastMessage:
-              last||null,
-            product:
-              product
-                ? publicProduct(db,product)
-                : null
-          };
-
-        })
-        .sort(
-          (a,b)=>
-            new Date(
-              b.lastMessage?.createdAt||
-              b.createdAt
-            )-
-            new Date(
-              a.lastMessage?.createdAt||
-              a.createdAt
-            )
-        );
-
-      return json(
-        res,
-        200,
-        list
-      );
-    }
-
-    /*
-      CRIAR CONVERSA
-    */
-
-    if(
-      u.pathname==='/api/conversations' &&
-      req.method==='POST'
-    ){
-
-      const user=auth(db,req);
-
-      if(!user){
-        return json(res,401,{
-          error:'Inicia sessão.'
-        });
-      }
-
-      const b=await body(req);
-
-      const sellerId=
-        String(b.sellerId||'');
-
-      if(
-        !sellerId ||
-        sellerId===user.id
-      ){
-        return json(res,400,{
-          error:'Vendedor inválido.'
-        });
-      }
-
-      const seller=
-        db.users.find(
-          x=>x.id===sellerId
-        );
-
-      if(!seller){
-        return json(res,404,{
-          error:'Vendedor não encontrado.'
-        });
-      }
-
-      const key=
-        conversationKey(
-          user.id,
-          sellerId
-        );
-
-      let c=
-        db.conversations.find(
-          x=>
-            x.key===key &&
-            String(x.productId||'')===
-            String(b.productId||'')
-        );
-
-      if(!c){
-
-        c={
-          id:crypto.randomUUID(),
-
-          key,
-
-          participants:[
-            user.id,
-            sellerId
-          ],
-
-          productId:
-            b.productId||null,
-
+      const data = await body(req);
+
+      let store =
+        getStore(db, user.id);
+
+      if (!store) {
+        store = {
+          id: crypto.randomUUID(),
+          ownerId: user.id,
+          name: '',
+          logo: '',
+          description: '',
           createdAt:
             new Date().toISOString()
         };
 
-        db.conversations.push(c);
+        db.stores.push(store);
+      }
+
+      if (data.name !== undefined) {
+        store.name =
+          String(data.name).trim();
+      }
+
+      if (data.logo !== undefined) {
+        store.logo =
+          String(data.logo);
+      }
+
+      if (data.description !== undefined) {
+        store.description =
+          String(data.description).trim();
+      }
+
+      write(db);
+
+      return json(res, 200, {
+        store
+      });
+    }
+
+    /* =========================
+       FAVORITES
+    ========================= */
+
+    if (
+      pathname === '/api/favorites' &&
+      req.method === 'GET'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Não autenticado.'
+        });
+      }
+
+      const ids = db.favorites
+        .filter(f => f.userId === user.id)
+        .map(f => f.productId);
+
+      return json(res, 200, {
+        productIds: ids
+      });
+    }
+
+    if (
+      pathname === '/api/favorites' &&
+      req.method === 'POST'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Não autenticado.'
+        });
+      }
+
+      const data = await body(req);
+
+      const productId =
+        String(data.productId || '');
+
+      const existing =
+        db.favorites.find(
+          f =>
+            f.userId === user.id &&
+            f.productId === productId
+        );
+
+      if (existing) {
+        db.favorites =
+          db.favorites.filter(
+            f => f !== existing
+          );
+
+        write(db);
+
+        return json(res, 200, {
+          favorite: false
+        });
+      }
+
+      db.favorites.push({
+        id: crypto.randomUUID(),
+        userId: user.id,
+        productId
+      });
+
+      write(db);
+
+      return json(res, 200, {
+        favorite: true
+      });
+    }
+
+    /* =========================
+       CART
+    ========================= */
+
+    if (
+      pathname === '/api/cart' &&
+      req.method === 'GET'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Não autenticado.'
+        });
+      }
+
+      const cart =
+        db.carts.find(
+          c => c.userId === user.id
+        );
+
+      return json(res, 200, {
+        items: cart?.items || []
+      });
+    }
+
+    if (
+      pathname === '/api/cart' &&
+      req.method === 'POST'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Não autenticado.'
+        });
+      }
+
+      const data = await body(req);
+
+      const productId =
+        String(data.productId || '');
+
+      const quantity =
+        Math.max(1, Number(data.quantity || 1));
+
+      let cart =
+        db.carts.find(
+          c => c.userId === user.id
+        );
+
+      if (!cart) {
+        cart = {
+          id: crypto.randomUUID(),
+          userId: user.id,
+          items: []
+        };
+
+        db.carts.push(cart);
+      }
+
+      const existing =
+        cart.items.find(
+          i => i.productId === productId
+        );
+
+      if (existing) {
+        existing.quantity += quantity;
+      } else {
+        cart.items.push({
+          productId,
+          quantity
+        });
+      }
+
+      write(db);
+
+      return json(res, 200, {
+        items: cart.items
+      });
+    }
+
+    /* =========================
+       ORDERS
+    ========================= */
+
+    if (
+      pathname === '/api/orders' &&
+      req.method === 'GET'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Não autenticado.'
+        });
+      }
+
+      const orders =
+        db.orders.filter(
+          o => o.buyerId === user.id
+        );
+
+      return json(res, 200, orders);
+    }
+
+    if (
+      pathname === '/api/orders' &&
+      req.method === 'POST'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Faça login primeiro.'
+        });
+      }
+
+      const data = await body(req);
+
+      const items =
+        Array.isArray(data.items)
+          ? data.items
+          : [];
+
+      if (!items.length) {
+        return json(res, 400, {
+          error: 'Carrinho vazio.'
+        });
+      }
+
+      const order = {
+        id: crypto.randomUUID(),
+        buyerId: user.id,
+        items,
+        status: 'Pendente',
+        createdAt:
+          new Date().toISOString()
+      };
+
+      db.orders.push(order);
+
+      write(db);
+
+      return json(res, 201, order);
+    }
+
+    /* =========================
+       REVIEWS
+    ========================= */
+
+    if (
+      pathname === '/api/reviews' &&
+      req.method === 'POST'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Faça login primeiro.'
+        });
+      }
+
+      const data = await body(req);
+
+      const sellerId =
+        String(data.sellerId || '');
+
+      const rating =
+        Number(data.rating || 0);
+
+      const comment =
+        String(data.comment || '').trim();
+
+      if (
+        rating < 1 ||
+        rating > 5
+      ) {
+        return json(res, 400, {
+          error: 'Avaliação inválida.'
+        });
+      }
+
+      const seller =
+        db.users.find(
+          u => u.id === sellerId
+        );
+
+      if (!seller) {
+        return json(res, 404, {
+          error: 'Vendedor não encontrado.'
+        });
+      }
+
+      const review = {
+        id: crypto.randomUUID(),
+        reviewerId: user.id,
+        sellerId,
+        rating,
+        comment,
+        createdAt:
+          new Date().toISOString()
+      };
+
+      db.reviews.push(review);
+
+      if (!Array.isArray(seller.receivedReviews)) {
+        seller.receivedReviews = [];
+      }
+
+      seller.receivedReviews.push({
+        rating,
+        comment,
+        reviewerId: user.id
+      });
+
+      seller.score =
+        calculateScore(seller);
+
+      write(db);
+
+      return json(res, 201, {
+        review,
+        sellerScore: seller.score
+      });
+    }
+
+    /* =========================
+       CHAT
+    ========================= */
+
+    if (
+      pathname === '/api/conversations' &&
+      req.method === 'GET'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Faça login primeiro.'
+        });
+      }
+
+      const conversations =
+        db.conversations
+          .filter(
+            c =>
+              c.userA === user.id ||
+              c.userB === user.id
+          )
+          .map(c => ({
+            ...c,
+            messages: db.messages
+              .filter(
+                m =>
+                  m.conversationId === c.id
+              )
+              .slice(-1)
+          }));
+
+      return json(
+        res,
+        200,
+        conversations
+      );
+    }
+
+    if (
+      pathname === '/api/conversations' &&
+      req.method === 'POST'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Faça login primeiro.'
+        });
+      }
+
+      const data = await body(req);
+
+      const otherUserId =
+        String(data.userId || '');
+
+      if (!otherUserId) {
+        return json(res, 400, {
+          error: 'Vendedor inválido.'
+        });
+      }
+
+      const other =
+        db.users.find(
+          u => u.id === otherUserId
+        );
+
+      if (!other) {
+        return json(res, 404, {
+          error: 'Utilizador não encontrado.'
+        });
+      }
+
+      const key =
+        conversationKey(
+          user.id,
+          otherUserId
+        );
+
+      let conversation =
+        db.conversations.find(
+          c => c.key === key
+        );
+
+      if (!conversation) {
+        conversation = {
+          id: crypto.randomUUID(),
+          key,
+          userA: user.id,
+          userB: otherUserId,
+          productId:
+            data.productId || null,
+          createdAt:
+            new Date().toISOString()
+        };
+
+        db.conversations.push(
+          conversation
+        );
 
         write(db);
       }
@@ -1234,260 +1276,226 @@ const server=http.createServer(async(req,res)=>{
       return json(
         res,
         201,
-        c
+        conversation
       );
     }
 
-    /*
-      ABRIR CONVERSA
-    */
-
-    const conv=u.pathname.match(
-      /^\/api\/conversations\/([^/]+)$/
-    );
-
-    if(
-      conv &&
-      req.method==='GET'
-    ){
-
-      const user=auth(db,req);
-
-      if(!user){
-        return json(res,401,{
-          error:'Inicia sessão.'
+    if (
+      pathname.startsWith('/api/conversations/') &&
+      req.method === 'GET'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Faça login primeiro.'
         });
       }
 
-      const c=
+      const id =
+        pathname.split('/')[3];
+
+      const conversation =
         db.conversations.find(
-          x=>
-            x.id===conv[1] &&
-            x.participants.includes(user.id)
+          c => c.id === id
         );
 
-      if(!c){
-        return json(res,404,{
-          error:'Conversa não encontrada.'
+      if (!conversation) {
+        return json(res, 404, {
+          error: 'Conversa não encontrada.'
         });
       }
 
-      const other=
-        db.users.find(
-          x=>
-            x.id===
-            c.participants.find(
-              id=>id!==user.id
-            )
+      if (
+        conversation.userA !== user.id &&
+        conversation.userB !== user.id
+      ) {
+        return json(res, 403, {
+          error: 'Sem permissão.'
+        });
+      }
+
+      const messages =
+        db.messages.filter(
+          m =>
+            m.conversationId === id
         );
 
-      const product=
-        c.productId
-          ? db.products.find(
-              p=>p.id===c.productId
-            )
-          : null;
-
-      const messages=
-        db.messages
-        .filter(
-          m=>m.conversationId===c.id
-        )
-        .sort(
-          (a,b)=>
-            new Date(a.createdAt)-
-            new Date(b.createdAt)
-        );
-
-      return json(res,200,{
-        conversation:{
-          ...c,
-          other:
-            publicUser(other),
-          product:
-            product
-              ? publicProduct(db,product)
-              : null
-        },
+      return json(res, 200, {
+        conversation,
         messages
       });
     }
 
-    /*
-      ENVIAR MENSAGEM / OFERTA
-    */
-
-    if(
-      conv &&
-      req.method==='POST'
-    ){
-
-      const user=auth(db,req);
-
-      if(!user){
-        return json(res,401,{
-          error:'Inicia sessão.'
+    if (
+      pathname.startsWith('/api/conversations/') &&
+      req.method === 'POST'
+    ) {
+      if (!user) {
+        return json(res, 401, {
+          error: 'Faça login primeiro.'
         });
       }
 
-      const c=
+      const id =
+        pathname.split('/')[3];
+
+      const conversation =
         db.conversations.find(
-          x=>
-            x.id===conv[1] &&
-            x.participants.includes(user.id)
+          c => c.id === id
         );
 
-      if(!c){
-        return json(res,404,{
-          error:'Conversa não encontrada.'
+      if (!conversation) {
+        return json(res, 404, {
+          error: 'Conversa não encontrada.'
         });
       }
 
-      const b=await body(req);
+      if (
+        conversation.userA !== user.id &&
+        conversation.userB !== user.id
+      ) {
+        return json(res, 403, {
+          error: 'Sem permissão.'
+        });
+      }
 
-      const text=
-        String(b.text||'').trim();
+      const data = await body(req);
 
-      const type=
-        b.type==='offer'
+      const text =
+        String(data.text || '').trim();
+
+      if (!text) {
+        return json(res, 400, {
+          error: 'Mensagem vazia.'
+        });
+      }
+
+      const message = {
+        id: crypto.randomUUID(),
+        conversationId: id,
+        senderId: user.id,
+        type: data.type === 'offer'
           ? 'offer'
-          : 'text';
-
-      if(
-        !text &&
-        type==='text'
-      ){
-        return json(res,400,{
-          error:'Escreve uma mensagem.'
-        });
-      }
-
-      if(
-        type==='offer' &&
-        (
-          !Number(b.amount) ||
-          Number(b.amount)<=0
-        )
-      ){
-        return json(res,400,{
-          error:'Valor da oferta inválido.'
-        });
-      }
-
-      const m={
-        id:crypto.randomUUID(),
-
-        conversationId:c.id,
-
-        senderId:user.id,
-
-        type,
-
-        text:
-          text ||
-          (
-            'Oferta de '+
-            Number(b.amount)+
-            ' Kz'
-          ),
-
+          : 'text',
+        text,
         amount:
-          type==='offer'
-            ? Number(b.amount)
+          data.amount
+            ? Number(data.amount)
             : null,
-
         createdAt:
           new Date().toISOString()
       };
 
-      db.messages.push(m);
+      db.messages.push(message);
 
       write(db);
 
       return json(
         res,
         201,
-        m
+        message
       );
     }
 
-    /*
-      ARQUIVOS
-    */
+    /* =========================
+       LOGOUT
+    ========================= */
 
-    const file=
-      path.join(
-        PUBLIC,
-        u.pathname==='/'?
-          'index.html':
-          u.pathname.replace(/^\//,'')
-      );
+    if (
+      pathname === '/api/logout' &&
+      req.method === 'POST'
+    ) {
+      const authorization =
+        (req.headers.authorization || '')
+          .replace('Bearer ', '')
+          .trim();
 
-    if(
-      !file.startsWith(PUBLIC) ||
-      !fs.existsSync(file) ||
-      fs.statSync(file).isDirectory()
-    ){
-      return json(res,404,{
-        error:'Not found'
+      db.sessions =
+        db.sessions.filter(
+          s => s.token !== authorization
+        );
+
+      write(db);
+
+      return json(res, 200, {
+        ok: true
       });
     }
 
-    const ext=path.extname(file);
+    /* =========================
+       STATIC FILES
+    ========================= */
 
-    const types={
-      '.html':
-        'text/html; charset=utf-8',
+    let filePath =
+      pathname === '/'
+        ? path.join(PUBLIC, 'index.html')
+        : path.join(PUBLIC, pathname);
 
-      '.js':
-        'text/javascript; charset=utf-8',
+    filePath =
+      path.normalize(filePath);
 
-      '.css':
-        'text/css; charset=utf-8',
+    if (!filePath.startsWith(PUBLIC)) {
+      return json(res, 403, {
+        error: 'Forbidden'
+      });
+    }
 
-      '.json':
-        'application/json'
-    };
+    if (
+      fs.existsSync(filePath) &&
+      fs.statSync(filePath).isFile()
+    ) {
+      const ext =
+        path.extname(filePath);
 
-    res.writeHead(200,{
-      'Content-Type':
-        types[ext]||
-        'application/octet-stream',
+      const types = {
+        '.html': 'text/html; charset=utf-8',
+        '.css': 'text/css; charset=utf-8',
+        '.js': 'application/javascript; charset=utf-8',
+        '.json': 'application/json; charset=utf-8',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.svg': 'image/svg+xml'
+      };
 
-      'Cache-Control':
-        'no-cache'
+      res.writeHead(200, {
+        'Content-Type':
+          types[ext] ||
+          'application/octet-stream'
+      });
+
+      return res.end(
+        fs.readFileSync(filePath)
+      );
+    }
+
+    return json(res, 404, {
+      error: 'Not found'
     });
 
-    fs.createReadStream(file).pipe(res);
+  } catch (error) {
+    console.error(error);
 
-  }catch(e){
-
-    console.error(e);
-
-    if(!res.headersSent){
-
-      json(res,500,{
-        error:
-          e.message||
-          'Erro interno'
-      });
-
-    }
-
+    return json(res, 500, {
+      error:
+        error.message ||
+        'Erro interno do servidor.'
+    });
   }
-
 });
 
-const PORT=
-  Number(
-    process.env.PORT||3000
-  );
+/* =========================
+   START
+========================= */
+
+const PORT =
+  Number(process.env.PORT || 3000);
 
 server.listen(
   PORT,
   '0.0.0.0',
-  ()=>
+  () => {
     console.log(
       `Kuanza Line API running on port ${PORT}`
-    )
+    );
+  }
 );
