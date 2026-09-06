@@ -4,7 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const url = require('node:url');
 const ROOT = __dirname, PUBLIC = path.join(ROOT,'public'), DB = path.join(ROOT,'data','db.json');
-if(!fs.existsSync(DB)) fs.writeFileSync(DB, JSON.stringify({users:[],products:[{id:'p1',name:'iPhone 13 128GB',price:450000,cat:'Eletrónicos',emoji:'📱',seller:'Beni Store',verified:true,rating:4.9},{id:'p2',name:'Smart TV 43"',price:320000,cat:'Eletrónicos',emoji:'📺',seller:'Casa Digital',verified:true,rating:4.8},{id:'p3',name:'Conjunto Streetwear',price:45000,cat:'Moda',emoji:'👕',seller:'Style AO',verified:true,rating:4.7}],orders:[],sessions:[]},null,2));
+fs.mkdirSync(path.dirname(DB), { recursive: true });if(!fs.existsSync(DB)) fs.writeFileSync(DB, JSON.stringify({users:[],products:[{id:'p1',name:'iPhone 13 128GB',price:450000,cat:'Eletrónicos',emoji:'📱',seller:'Beni Store',verified:true,rating:4.9},{id:'p2',name:'Smart TV 43"',price:320000,cat:'Eletrónicos',emoji:'📺',seller:'Casa Digital',verified:true,rating:4.8},{id:'p3',name:'Conjunto Streetwear',price:45000,cat:'Moda',emoji:'👕',seller:'Style AO',verified:true,rating:4.7}],orders:[],sessions:[]},null,2));
 function read(){return JSON.parse(fs.readFileSync(DB,'utf8'))} function write(d){fs.writeFileSync(DB,JSON.stringify(d,null,2))}
 function json(res,code,data){res.writeHead(code,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'});res.end(JSON.stringify(data))}
 function body(req){return new Promise((resolve,reject)=>{let s='';req.on('data',c=>s+=c);req.on('end',()=>{try{resolve(s?JSON.parse(s):{})}catch(e){reject(e)}})})}
