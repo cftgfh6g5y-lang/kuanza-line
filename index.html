@@ -448,20 +448,454 @@ img{
   padding:18px;
   margin-top:15px;
 }
+  .score-label{
+  font-weight:700;
+}
 
-.score-row{
+.score-bar{
+  height:9px;
+  background:rgba(255,255,255,.18);
+  border-radius:999px;
+  overflow:hidden;
+  margin:12px 0;
+}
+
+.score-fill{
+  height:100%;
+  background:#f5c542;
+  border-radius:999px;
+}
+
+.stats{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:9px;
+  margin-top:13px;
+}
+
+.stat{
+  background:#f4f7f5;
+  border-radius:14px;
+  padding:12px 8px;
+  text-align:center;
+}
+
+.stat strong{
+  display:block;
+  font-family:Poppins,sans-serif;
+  font-size:18px;
+}
+
+.stat small{
+  color:#718078;
+  font-size:10px;
+}
+
+.seller-progress{
+  background:#f1f7f3;
+  border:1px solid #dcebe2;
+  border-radius:18px;
+  padding:15px;
+}
+
+.progress-line{
+  height:8px;
+  background:#dce7e0;
+  border-radius:999px;
+  overflow:hidden;
+  margin:9px 0;
+}
+
+.progress-fill{
+  height:100%;
+  background:#087443;
+}
+
+.photo-grid{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:6px;
+  margin-top:8px;
+}
+
+.photo-slot{
+  aspect-ratio:1;
+  border:1px dashed #b7c8be;
+  border-radius:10px;
+  background:#f4f7f5;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  color:#7a8981;
+  font-size:20px;
+}
+
+.photo-slot img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+
+.detail-image{
+  width:100%;
+  aspect-ratio:1/1;
+  object-fit:cover;
+  border-radius:20px;
+  background:#edf1ee;
+}
+
+.gallery{
+  display:flex;
+  gap:8px;
+  overflow-x:auto;
+  margin-top:9px;
+}
+
+.gallery img{
+  width:64px;
+  height:64px;
+  object-fit:cover;
+  border-radius:11px;
+  border:2px solid transparent;
+}
+
+.gallery img.active{
+  border-color:#087443;
+}
+
+.detail-title{
+  font-family:Poppins,sans-serif;
+  font-size:23px;
+  margin-top:15px;
+}
+
+.detail-price{
+  color:#087443;
+  font-family:Poppins,sans-serif;
+  font-size:24px;
+  font-weight:800;
+  margin-top:6px;
+}
+
+.detail-description{
+  color:#56635d;
+  font-size:14px;
+  line-height:1.6;
+  margin-top:12px;
+  white-space:pre-wrap;
+}
+
+.action-row{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:9px;
+  margin-top:14px;
+}
+
+.seller-box{
+  margin-top:16px;
+  background:#f4f8f5;
+  border-radius:18px;
+  padding:15px;
+}
+
+.seller-line{
   display:flex;
   align-items:center;
   justify-content:space-between;
+  gap:10px;
 }
 
-.score-number{
-  font-family:Poppins,sans-serif;
-  font-size:38px;
+.seller-name{
   font-weight:800;
 }
 
-.score-label{
+.order{
+  border:1px solid #e0e7e3;
+  border-radius:16px;
+  padding:13px;
+  margin-top:10px;
+}
+
+.order-head{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+}
+
+.status{
+  display:inline-flex;
+  padding:5px 8px;
+  border-radius:999px;
+  background:#edf4ef;
+  color:#087443;
+  font-size:10px;
+  font-weight:800;
+}
+
+.order-items{
+  color:#66736c;
+  font-size:12px;
+  margin-top:8px;
+  line-height:1.5;
+}
+
+.cart-item{
+  display:flex;
+  gap:11px;
+  padding:12px 0;
+  border-bottom:1px solid #e8edea;
+}
+
+.cart-item:last-child{
+  border-bottom:0;
+}
+
+.cart-item img{
+  width:72px;
+  height:72px;
+  object-fit:cover;
+  border-radius:12px;
+}
+
+.cart-info{
+  flex:1;
+}
+
+.cart-info strong{
+  font-size:14px;
+}
+
+.quantity{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:8px;
+}
+
+.quantity button{
+  width:28px;
+  height:28px;
+  border:0;
+  border-radius:8px;
+  background:#e9efeb;
+}
+
+.total-box{
+  background:#f1f6f3;
+  border-radius:16px;
+  padding:15px;
+  margin-top:14px;
+}
+
+.total-line{
+  display:flex;
+  justify-content:space-between;
+  margin:7px 0;
+}
+
+.total-line.final{
+  font-family:Poppins,sans-serif;
+  font-weight:800;
+  font-size:19px;
+  color:#087443;
+  padding-top:9px;
+  border-top:1px solid #d8e3dd;
+}
+
+.filters{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:9px;
+  margin-bottom:14px;
+}
+
+.conversation{
+  padding:14px;
+  background:white;
+  border:1px solid #e1e8e4;
+  border-radius:16px;
+  margin-bottom:9px;
+}
+
+.chat{
+  background:#edf3ef;
+  border-radius:18px;
+  padding:12px;
+  max-height:55vh;
+  overflow-y:auto;
+}
+
+.message{
+  max-width:82%;
+  padding:10px 12px;
+  border-radius:14px;
+  margin:6px 0;
+  font-size:13px;
+  line-height:1.4;
+}
+
+.message.mine{
+  margin-left:auto;
+  background:#087443;
+  color:white;
+  border-bottom-right-radius:4px;
+}
+
+.message.theirs{
+  background:white;
+  border-bottom-left-radius:4px;
+}
+
+.chat-input{
+  display:flex;
+  gap:7px;
+  margin-top:9px;
+}
+
+.chat-input input{
+  flex:1;
+  border:1px solid #dce4df;
+  border-radius:13px;
+  padding:12px;
+  min-width:0;
+}
+
+.chat-input button{
+  border:0;
+  border-radius:13px;
+  background:#087443;
+  color:white;
+  padding:0 15px;
+  font-weight:700;
+}
+
+.dashboard-grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:10px;
+}
+
+.metric{
+  background:white;
+  border:1px solid #e1e8e4;
+  border-radius:17px;
+  padding:14px;
+}
+
+.metric small{
+  color:#738078;
+  display:block;
+  font-size:11px;
+}
+
+.metric strong{
+  display:block;
+  font-family:Poppins,sans-serif;
+  font-size:20px;
+  margin-top:5px;
+}
+
+.metric.green strong{
+  color:#087443;
+}
+
+.dashboard-title{
+  font-family:Poppins,sans-serif;
+  font-size:21px;
+  margin-bottom:12px;
+}
+
+.top-product{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  padding:12px 0;
+  border-bottom:1px solid #e8edea;
+}
+
+.top-product:last-child{
+  border-bottom:0;
+}
+
+.top-product strong{
+  font-size:13px;
+}
+
+.top-product small{
+  display:block;
+  color:#738078;
+  margin-top:3px;
+}
+
+.bottom-nav{
+  position:fixed;
+  z-index:60;
+  left:50%;
+  bottom:0;
+  transform:translateX(-50%);
+  width:100%;
+  max-width:760px;
+  height:72px;
+  background:white;
+  border-top:1px solid #e2e8e4;
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  padding-bottom:env(safe-area-inset-bottom);
+}
+
+.nav-btn{
+  border:0;
+  background:white;
+  color:#718078;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:3px;
+  font-size:10px;
+}
+
+.nav-btn .nav-icon{
+  font-size:20px;
+}
+
+.nav-btn.active{
+  color:#087443;
+  font-weight:800;
+}
+
+.toast{
+  position:fixed;
+  left:50%;
+  bottom:88px;
+  transform:translate(-50%,12px);
+  z-index:1000;
+  background:#17221d;
+  color:white;
+  padding:12px 16px;
+  border-radius:13px;
+  font-size:13px;
+  opacity:0;
+  pointer-events:none;
+  transition:.2s;
+  max-width:90%;
+  text-align:center;
+}
+
+.toast.on{
+  opacity:1;
+  transform:translate(-50%,0);
+}
+
+.modal{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.52);
+  z-index:200;
+  display:flex;
+  .score-label{
   font-weight:700;
 }
 
@@ -1055,9 +1489,7 @@ img{
 </div>
 
 <script>
-const API = location.origin;
-
-let token = localStorage.getItem('kuanza_token') || '';
+  let token = localStorage.getItem('kuanza_token') || '';
 let me = null;
 let products = [];
 let cart = JSON.parse(localStorage.getItem('kuanza_cart') || '[]');
@@ -1358,6 +1790,1101 @@ function searchFromHome(){
     const input = document.getElementById('exploreSearch');
 
     if(input){
+      input.value = value;
+      applyExploreFilters();
+    }
+  });
+}
+
+async function loadExplore(){
+  const root = document.getElementById('appContent');
+
+  root.innerHTML = `
+    <div class="page">
+
+      <div class="section-title">
+        <h2>Explorar</h2>
+      </div>
+
+      <div class="search-box">
+        <input
+          id="exploreSearch"
+          placeholder="Pesquisar produtos..."
+          oninput="applyExploreFilters()"
+        >
+
+        <button onclick="applyExploreFilters()">
+          Pesquisar
+        </button>
+      </div>
+
+      <div class="categories">
+        ${categories.map((c,i)=>`
+          <button
+            class="category ${i===0?'active':''}"
+            data-category="${esc(c)}"
+            onclick="selectExploreCategory('${esc(c)}')"
+          >
+            ${esc(c)}
+          </button>
+        `).join('')}
+      </div>
+
+      <div class="sort-row">
+        <select id="exploreSort" onchange="applyExploreFilters()">
+          <option value="recent">Mais recentes</option>
+          <option value="price_asc">Menor preço</option>
+          <option value="price_desc">Maior preço</option>
+          <option value="name">Nome</option>
+        </select>
+      </div>
+
+      <div id="exploreProducts" class="products">
+        <div class="empty">A carregar produtos...</div>
+      </div>
+
+    </div>
+  `;
+
+  try{
+    const data = await api('/api/products');
+
+    products = Array.isArray(data)
+      ? data
+      : (data.products || []);
+
+    applyExploreFilters();
+
+  }catch(e){
+    document.getElementById('exploreProducts').innerHTML =
+      `<div class="empty">Não foi possível carregar os produtos.</div>`;
+  }
+}
+
+let exploreCategory = 'Todos';
+
+function selectExploreCategory(category){
+  exploreCategory = category;
+
+  document.querySelectorAll('[data-category]').forEach(btn=>{
+    btn.classList.toggle(
+      'active',
+      btn.dataset.category === category
+    );
+  });
+
+  applyExploreFilters();
+}
+
+function filterCategory(category){
+  exploreCategory = category;
+  go('explore');
+}
+
+function applyExploreFilters(){
+  const search =
+    (document.getElementById('exploreSearch')?.value || '')
+      .trim()
+      .toLowerCase();
+
+  const sort =
+    document.getElementById('exploreSort')?.value || 'recent';
+
+  let list = [...products];
+
+  if(search){
+    list = list.filter(p=>{
+      const text = [
+        p.name,
+        p.description,
+        p.category,
+        p.location
+      ].join(' ').toLowerCase();
+
+      return text.includes(search);
+    });
+  }
+
+  if(exploreCategory && exploreCategory !== 'Todos'){
+    list = list.filter(p =>
+      String(p.category || 'Outros') === exploreCategory
+    );
+  }
+
+  if(sort === 'price_asc'){
+    list.sort((a,b)=>Number(a.price||0)-Number(b.price||0));
+  }
+
+  if(sort === 'price_desc'){
+    list.sort((a,b)=>Number(b.price||0)-Number(a.price||0));
+  }
+
+  if(sort === 'name'){
+    list.sort((a,b)=>
+      String(a.name||'').localeCompare(
+        String(b.name||''),
+        'pt'
+      )
+    );
+  }
+
+  renderProducts(list,'exploreProducts');
+}
+
+async function openProduct(id){
+  const product =
+    products.find(p=>String(p.id) === String(id));
+
+  if(!product) return;
+
+  currentProduct = product;
+
+  const modal = document.getElementById('modal');
+
+  const images =
+    product.images?.length
+      ? product.images
+      : [product.image || 'https://placehold.co/600x600?text=Kuanza+Line'];
+
+  const seller =
+    product.seller || {};
+
+  modal.innerHTML = `
+    <div class="modal-card">
+
+      <button class="modal-close" onclick="closeModal()">×</button>
+
+      <div class="gallery">
+        <img
+          id="mainProductImage"
+          src="${images[0]}"
+          class="main-product-image"
+        >
+
+        <div class="thumbs">
+          ${images.map((img,i)=>`
+            <img
+              src="${img}"
+              onclick="document.getElementById('mainProductImage').src='${img}'"
+              class="${i===0?'selected':''}"
+            >
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="modal-content">
+
+        <div class="product-name big">
+          ${esc(product.name || 'Produto')}
+        </div>
+
+        <div class="price big">
+          ${money(product.price)}
+        </div>
+
+        <div class="product-meta">
+          ${esc(product.category || 'Outros')}
+        </div>
+
+        <div class="divider"></div>
+
+        <h3>Descrição</h3>
+
+        <p>
+          ${esc(product.description || 'Sem descrição.')}
+        </p>
+
+        <div class="seller-box">
+
+          <div>
+            <strong>${esc(seller.name || product.sellerName || 'Vendedor')}</strong>
+
+            ${
+              seller.verified || product.verified
+              ? `<span class="badge">✓ Verificado</span>`
+              : ''
+            }
+          </div>
+
+          <div class="small">
+            Kuanza Score:
+            <strong>${seller.score ?? product.sellerScore ?? '—'}</strong>
+          </div>
+
+        </div>
+
+        <div class="modal-actions">
+
+          <button class="btn secondary"
+            onclick="toggleFavorite('${esc(product.id)}')">
+            ❤️ Favoritar
+          </button>
+
+          <button class="btn secondary"
+            onclick="openChatWithSeller()">
+            💬 Falar com vendedor
+          </button>
+
+          <button class="btn primary"
+            onclick="addToCart('${esc(product.id)}')">
+            🛒 Adicionar ao carrinho
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+  `;
+
+  modal.classList.add('show');
+}
+
+function closeModal(){
+  document.getElementById('modal')?.classList.remove('show');
+}
+
+function toggleFavorite(id){
+  const index = favorites.indexOf(id);
+
+  if(index >= 0){
+    favorites.splice(index,1);
+    toast('Removido dos favoritos.');
+  }else{
+    favorites.push(id);
+    toast('Adicionado aos favoritos.');
+  }
+
+  saveFavorites();
+
+  if(currentProduct){
+    openProduct(currentProduct.id);
+  }
+}
+
+function addToCart(id){
+  const product =
+    products.find(p=>String(p.id) === String(id));
+
+  if(!product){
+    toast('Produto não encontrado.');
+    return;
+  }
+
+  const existing = cart.find(
+    item=>String(item.id) === String(id)
+  );
+
+  if(existing){
+    existing.quantity = Number(existing.quantity || 1) + 1;
+  }else{
+    cart.push({
+      id:product.id,
+      name:product.name,
+      price:Number(product.price || 0),
+      image:product.images?.[0] || product.image || '',
+      sellerId:product.sellerId || product.seller?.id || null,
+      quantity:1
+    });
+  }
+
+  saveCart();
+  toast('Produto adicionado ao carrinho.');
+}
+
+function removeFromCart(id){
+  cart = cart.filter(
+    item=>String(item.id) !== String(id)
+  );
+
+  saveCart();
+  loadCart();
+}
+
+function changeCartQty(id,delta){
+  const item = cart.find(
+    item=>String(item.id) === String(id)
+  );
+
+  if(!item) return;
+
+  item.quantity =
+    Math.max(1,Number(item.quantity || 1) + delta);
+
+  saveCart();
+  loadCart();
+}
+
+async function loadCart(){
+  const root = document.getElementById('appContent');
+
+  const total = cart.reduce(
+    (sum,item)=>
+      sum + Number(item.price||0) * Number(item.quantity||1),
+    0
+  );
+
+  root.innerHTML = `
+    <div class="page">
+
+      <div class="section-title">
+        <h2>Meu carrinho</h2>
+      </div>
+
+      ${
+        cart.length
+        ? `
+          <div class="cart-list">
+
+            ${cart.map(item=>`
+              <div class="cart-item">
+
+                <img
+                  src="${item.image || 'https://placehold.co/200x200?text=Produto'}"
+                  class="cart-image"
+                >
+
+                <div class="cart-info">
+
+                  <strong>${esc(item.name)}</strong>
+
+                  <div class="price">
+                    ${money(item.price)}
+                  </div>
+
+                  <div class="qty">
+
+                    <button onclick="changeCartQty('${esc(item.id)}',-1)">
+                      −
+                    </button>
+
+                    <span>${item.quantity}</span>
+
+                    <button onclick="changeCartQty('${esc(item.id)}',1)">
+                      +
+                    </button>
+
+                  </div>
+
+                  <button
+                    class="link danger"
+                    onclick="removeFromCart('${esc(item.id)}')"
+                  >
+                    Remover
+                  </button>
+
+                </div>
+
+              </div>
+            `).join('')}
+
+          </div>
+
+          <div class="checkout-box">
+
+            <div class="summary-line">
+              <span>Total</span>
+              <strong>${money(total)}</strong>
+            </div>
+
+            <button
+              class="btn primary full"
+              onclick="checkout()"
+            >
+              Finalizar compra
+            </button>
+
+          </div>
+        `
+        : `
+          <div class="empty">
+
+            <div class="emoji">🛒</div>
+
+            <strong>O teu carrinho está vazio.</strong>
+
+            <p class="small mt">
+              Adiciona produtos para começar.
+            </p>
+
+            <button
+              class="btn primary mt"
+              onclick="go('explore')"
+            >
+              Explorar produtos
+            </button>
+
+          </div>
+        `
+      }
+
+    </div>
+  `;
+}
+  async function checkout(){
+
+  if(!token){
+    toast('Inicia sessão para finalizar a compra.');
+    go('account');
+    return;
+  }
+
+  if(!cart.length){
+    toast('O carrinho está vazio.');
+    return;
+  }
+
+  const total = cart.reduce(
+    (sum,item)=>
+      sum + Number(item.price||0) * Number(item.quantity||1),
+    0
+  );
+
+  const confirmed = confirm(
+    'Confirmar compra de ' + money(total) + '?'
+  );
+
+  if(!confirmed) return;
+
+  try{
+
+    for(const item of cart){
+
+      await api('/api/orders',{
+        method:'POST',
+        body:JSON.stringify({
+          productId:item.id,
+          quantity:Number(item.quantity||1)
+        })
+      });
+
+    }
+
+    cart = [];
+    saveCart();
+
+    toast('Compra realizada com sucesso!');
+
+    await go('orders');
+
+  }catch(e){
+
+    toast(e.message || 'Não foi possível finalizar a compra.');
+
+  }
+}
+
+async function loadOrders(){
+
+  const root = document.getElementById('appContent');
+
+  if(!token){
+
+    root.innerHTML = `
+      <div class="page">
+
+        <div class="empty">
+
+          <div class="emoji">📦</div>
+
+          <strong>Entra na tua conta</strong>
+
+          <p class="small mt">
+            Inicia sessão para veres as tuas compras.
+          </p>
+
+          <button
+            class="btn primary mt"
+            onclick="go('account')"
+          >
+            Entrar
+          </button>
+
+        </div>
+
+      </div>
+    `;
+
+    return;
+  }
+
+  root.innerHTML = `
+    <div class="page">
+
+      <div class="section-title">
+        <h2>Minhas encomendas</h2>
+      </div>
+
+      <div id="ordersList">
+        <div class="empty">A carregar encomendas...</div>
+      </div>
+
+    </div>
+  `;
+
+  try{
+
+    const data = await api('/api/orders');
+
+    const orders =
+      Array.isArray(data)
+      ? data
+      : (data.orders || []);
+
+    const target =
+      document.getElementById('ordersList');
+
+    if(!orders.length){
+
+      target.innerHTML = `
+        <div class="empty">
+
+          <div class="emoji">📦</div>
+
+          <strong>Ainda não tens encomendas.</strong>
+
+          <p class="small mt">
+            Quando fizeres uma compra, ela aparecerá aqui.
+          </p>
+
+        </div>
+      `;
+
+      return;
+    }
+
+    target.innerHTML = orders.map(order=>`
+
+      <div class="order-card">
+
+        <div class="order-head">
+
+          <strong>
+            ${esc(
+              order.productName ||
+              order.product?.name ||
+              'Produto'
+            )}
+          </strong>
+
+          <span class="status">
+            ${esc(order.status || 'pending')}
+          </span>
+
+        </div>
+
+        <div class="order-body">
+
+          <div>
+            <span class="small">Quantidade</span>
+            <strong>${order.quantity || 1}</strong>
+          </div>
+
+          <div>
+            <span class="small">Total</span>
+            <strong>
+              ${money(
+                Number(order.total || order.price || 0)
+              )}
+            </strong>
+          </div>
+
+        </div>
+
+        <div class="small">
+          Pedido:
+          ${esc(order.id || '')}
+        </div>
+
+      </div>
+
+    `).join('');
+
+  }catch(e){
+
+    document.getElementById('ordersList').innerHTML =
+      `<div class="empty">
+        Não foi possível carregar as encomendas.
+      </div>`;
+
+  }
+}
+
+async function loadAccount(){
+
+  const root = document.getElementById('appContent');
+
+  if(!token){
+
+    root.innerHTML = `
+      <div class="page">
+
+        <div class="account-login">
+
+          <div class="logo-large">
+            K
+          </div>
+
+          <h2>Entra no Kuanza Line</h2>
+
+          <p class="small">
+            Compra e vende com mais confiança.
+          </p>
+
+          <div class="form">
+
+            <input
+              id="loginEmail"
+              type="email"
+              placeholder="Email"
+            >
+
+            <input
+              id="loginPassword"
+              type="password"
+              placeholder="Palavra-passe"
+            >
+
+            <button
+              class="btn primary full"
+              onclick="login()"
+            >
+              Entrar
+            </button>
+
+          </div>
+
+          <div class="divider"></div>
+
+          <h3>Criar conta</h3>
+
+          <div class="form">
+
+            <input
+              id="registerName"
+              placeholder="Nome"
+            >
+
+            <input
+              id="registerEmail"
+              type="email"
+              placeholder="Email"
+            >
+
+            <input
+              id="registerPassword"
+              type="password"
+              placeholder="Palavra-passe"
+            >
+
+            <select id="registerRole">
+
+              <option value="buyer">
+                Comprar
+              </option>
+
+              <option value="seller">
+                Vender
+              </option>
+
+            </select>
+
+            <button
+              class="btn secondary full"
+              onclick="register()"
+            >
+              Criar conta
+            </button>
+
+          </div>
+
+        </div>
+
+      </div>
+    `;
+
+    return;
+  }
+
+  try{
+
+    const data = await api('/api/me');
+
+    me = data.user || data;
+
+  }catch(e){
+
+    token = '';
+    localStorage.removeItem('kuanza_token');
+
+    toast('Sessão expirada.');
+
+    return loadAccount();
+  }
+
+  let scoreData = null;
+
+  try{
+
+    scoreData = await api('/api/me/score');
+
+  }catch(e){
+
+    scoreData = null;
+
+  }
+
+  const score =
+    scoreData?.score ??
+    me?.score ??
+    50;
+
+  const label =
+    scoreData?.label ??
+    me?.scoreLabel ??
+    'Regular';
+
+  const isSeller =
+    me?.role === 'seller';
+
+  root.innerHTML = `
+
+    <div class="page">
+
+      <div class="profile-card">
+
+        <div class="avatar">
+          ${esc(
+            (me.name || 'U')
+              .charAt(0)
+              .toUpperCase()
+          )}
+        </div>
+
+        <div class="profile-info">
+
+          <h2>
+            ${esc(me.name || 'Utilizador')}
+          </h2>
+
+          <p>
+            ${esc(me.email || '')}
+          </p>
+
+          <span class="badge">
+            ${isSeller ? 'Vendedor' : 'Comprador'}
+          </span>
+
+        </div>
+
+      </div>
+
+      <div class="score-box">
+
+        <div class="score-number">
+          ${score}
+        </div>
+
+        <div>
+
+          <strong>Kuanza Score</strong>
+
+          <div class="score-label">
+            ${esc(label)}
+          </div>
+
+          <p class="small">
+            O teu nível de confiança no marketplace.
+          </p>
+
+        </div>
+
+      </div>
+
+      <div class="account-grid">
+
+        <button
+          class="quick"
+          onclick="switchRole()"
+        >
+          <span class="emoji">🔄</span>
+
+          Mudar de conta
+
+          <small>
+            ${isSeller
+              ? 'Mudar para comprador'
+              : 'Mudar para vendedor'}
+          </small>
+
+        </button>
+
+        ${
+          isSeller
+          ? `
+            <button
+              class="quick"
+              onclick="go('store')"
+            >
+              <span class="emoji">🏪</span>
+              Minha loja
+              <small>Ver produtos</small>
+            </button>
+
+            <button
+              class="quick"
+              onclick="go('dashboard')"
+            >
+              <span class="emoji">📊</span>
+              Dashboard
+              <small>Ver vendas</small>
+            </button>
+          `
+          : ''
+        }
+
+        <button
+          class="quick"
+          onclick="go('orders')"
+        >
+          <span class="emoji">📦</span>
+          Encomendas
+          <small>Ver compras</small>
+        </button>
+
+        <button
+          class="quick"
+          onclick="go('favorites')"
+        >
+          <span class="emoji">❤️</span>
+          Favoritos
+          <small>Produtos guardados</small>
+        </button>
+
+        <button
+          class="quick"
+          onclick="go('conversations')"
+        >
+          <span class="emoji">💬</span>
+          Conversas
+          <small>Falar com vendedores</small>
+        </button>
+
+      </div>
+
+      <button
+        class="btn danger full mt"
+        onclick="logout()"
+      >
+        Terminar sessão
+      </button>
+
+    </div>
+
+  `;
+
+}
+
+async function login(){
+
+  const email =
+    document.getElementById('loginEmail')?.value.trim();
+
+  const password =
+    document.getElementById('loginPassword')?.value;
+
+  if(!email || !password){
+
+    toast('Preenche email e palavra-passe.');
+
+    return;
+  }
+
+  try{
+
+    const data = await api('/api/login',{
+      method:'POST',
+      body:JSON.stringify({
+        email,
+        password
+      })
+    });
+
+    token = data.token;
+
+    localStorage.setItem(
+      'kuanza_token',
+      token
+    );
+
+    me = data.user || null;
+
+    toast('Bem-vindo ao Kuanza Line!');
+
+    await go('home');
+
+  }catch(e){
+
+    toast(
+      e.message ||
+      'Não foi possível iniciar sessão.'
+    );
+
+  }
+}
+
+async function register(){
+
+  const name =
+    document.getElementById('registerName')?.value.trim();
+
+  const email =
+    document.getElementById('registerEmail')?.value.trim();
+
+  const password =
+    document.getElementById('registerPassword')?.value;
+
+  const role =
+    document.getElementById('registerRole')?.value ||
+    'buyer';
+
+  if(!name || !email || !password){
+
+    toast('Preenche todos os campos.');
+
+    return;
+  }
+
+  try{
+
+    const data = await api('/api/register',{
+      method:'POST',
+      body:JSON.stringify({
+        name,
+        email,
+        password,
+        role
+      })
+    });
+
+    token = data.token;
+
+    localStorage.setItem(
+      'kuanza_token',
+      token
+    );
+
+    me = data.user || null;
+
+    toast('Conta criada com sucesso!');
+
+    await go('home');
+
+  }catch(e){
+
+    toast(
+      e.message ||
+      'Não foi possível criar a conta.'
+    );
+
+  }
+}
+
+function logout(){
+
+  token = '';
+
+  me = null;
+
+  localStorage.removeItem(
+    'kuanza_token'
+  );
+
+  toast('Sessão terminada.');
+
+  go('home');
+
+}
+
+async function switchRole(){
+
+  if(!token){
+
+    toast('Inicia sessão primeiro.');
+
+    go('account');
+
+    return;
+  }
+
+  try{
+
+    const currentRole =
+      me && me.role === 'seller'
+      ? 'seller'
+      : 'buyer';
+
+    const newRole =
+      currentRole === 'seller'
+      ? 'buyer'
+      : 'seller';
+
+    await api('/api/me/role',{
+      method:'PATCH',
+      body:JSON.stringify({
+        role:newRole
+      })
+    });
+
+    const fresh =
+      await api('/api/me');
+
+    me =
+      fresh.user ||
+      fresh;
+
+    if(
+      !me ||
+      me.role !== newRole
+    ){
+
+      throw new Error(
+        'O servidor não confirmou a mudança de conta.'
+      );
+
+    }
+
+    toast(
+      newRole === 'seller'
+      ? 'Agora estás no modo vendedor.'
+      : 'Agora estás no modo comprador.'
+    );
+
+    await loadAccount();
+
+  }catch(e){
+
+    toast(
+      e.message ||
+      'Não foi possível mudar de conta.'
+    );
+
+  }
+
+}
+
+window.addEventListener(
+  'error',
+  function(event){
+
+    console.error(
+      'Kuanza Line error:',
+      event.error || event.message
+    );
+
+  }
+);
+      if(input){
       input.value = value;
       runExploreSearch();
     }
@@ -1660,6 +3187,14 @@ function addToCart(id){
   }
 
   saveCart();
+  updateCartCount();
+  toast('Produto adicionado ao carrinho 🛒');
+}
+        quantity:1
+    });
+  }
+
+  saveCart();
   toast('Produto adicionado ao carrinho 🛒');
 }
 
@@ -1891,7 +3426,6 @@ async function loadOrders(){
       <div class="order">
 
         <div class="order-head">
-
           <strong>
             Pedido #${esc(String(order.id).slice(-8))}
           </strong>
@@ -1899,7 +3433,6 @@ async function loadOrders(){
           <span class="status">
             ${esc(order.status || 'Pendente')}
           </span>
-
         </div>
 
         <div class="order-items">
@@ -1956,9 +3489,8 @@ async function loadAccount(){
 
             <div>
               <label>Senha</label>
-              <input id="loginPassword" type="password"
-                placeholder="••••••••">
-            </div>
+                            placeholder="••••••••">
+                                        </div>
 
             <button class="btn btn-primary"
               onclick="login()">
@@ -2019,7 +3551,6 @@ async function loadAccount(){
           </div>
 
           <div class="profile-info">
-
             <h2>${esc(me.name || 'Utilizador')}</h2>
 
             <p>${esc(me.email || '')}</p>
@@ -2223,7 +3754,6 @@ function scoreText(score){
 }
 
 async function switchRole(){
-
   if(!token){
     toast('Inicia sessão primeiro.');
     go('account');
@@ -2231,233 +3761,35 @@ async function switchRole(){
   }
 
   try{
-
-    const newRole =
-      me && me.role === 'seller'
-        ? 'buyer'
-        : 'seller';
+    const currentRole = me && me.role === 'seller' ? 'seller' : 'buyer';
+    const newRole = currentRole === 'seller' ? 'buyer' : 'seller';
 
     toast('A alterar tipo de conta...');
 
-    const response = await api('/api/me/role',{
+    await api('/api/me/role',{
       method:'PATCH',
-      body:JSON.stringify({
-        role:newRole
-      })
+      body:JSON.stringify({role:newRole})
     });
 
-    /*
-      O servidor pode devolver:
-      { user: {...} }
-      ou diretamente:
-      {...}
-    */
-    const returnedUser =
-      response.user ||
-      response;
-
-    me = returnedUser;
-
-    /*
-      Confirma diretamente no servidor.
-      Isto evita que a interface fique presa
-      no tipo de conta antigo.
-    */
     const fresh = await api('/api/me');
-
     me = fresh.user || fresh;
 
-    if(me.role !== newRole){
-      throw new Error(
-        'O servidor não confirmou a mudança de conta.'
-      );
+    if(!me || me.role !== newRole){
+      throw new Error('O servidor não confirmou a mudança de conta.');
     }
 
-    toast(
-      newRole === 'seller'
-        ? '🏪 Agora estás como vendedor ✓'
-        : '🛒 Agora estás como comprador ✓'
-    );
+    toast(newRole === 'seller'
+      ? '🏪 Agora estás como vendedor ✓'
+      : '🛒 Agora estás como comprador ✓');
 
     await loadAccount();
 
   }catch(e){
-
     console.error('Erro ao mudar conta:',e);
-
-    toast(
-      e.message ||
-      'Não foi possível mudar o tipo de conta.'
-    );
+    toast(e.message || 'Não foi possível mudar o tipo de conta.');
   }
 }
-
-async function login(){
-
-  const email =
-    document.getElementById('loginEmail')?.value.trim();
-
-  const password =
-    document.getElementById('loginPassword')?.value;
-
-  if(!email || !password){
-    toast('Preenche email e senha.');
-    return;
-  }
-
-  try{
-
-    const data = await api('/api/login',{
-      method:'POST',
-      body:JSON.stringify({
-        email,
-        password
-      })
-    });
-
-    token =
-      data.token ||
-      data.accessToken ||
-      '';
-
-    if(!token){
-      throw new Error('O servidor não devolveu o token.');
-    }
-
-    localStorage.setItem('kuanza_token',token);
-
-    me = data.user || null;
-
-    toast('Login efetuado ✓');
-
-    await loadAccount();
-
-  }catch(e){
-    toast(e.message);
-  }
-}
-
-function showRegister(){
-
-  openModal(`
-    <div class="modal-head">
-
-      <h3>Criar conta</h3>
-
-      <button class="close"
-        onclick="closeModal()">
-        ✕
-      </button>
-
-    </div>
-
-    <div class="form">
-
-      <div>
-        <label>Nome</label>
-        <input id="registerName"
-          placeholder="O teu nome">
-      </div>
-
-      <div>
-        <label>Email</label>
-        <input id="registerEmail"
-          type="email"
-          placeholder="teu@email.com">
-      </div>
-
-      <div>
-        <label>Senha</label>
-        <input id="registerPassword"
-          type="password"
-          placeholder="Mínimo recomendado: 6 caracteres">
-      </div>
-
-      <div>
-        <label>Tipo de conta</label>
-
-        <select id="registerRole">
-          <option value="buyer">🛒 Comprador</option>
-          <option value="seller">🏪 Vendedor</option>
-        </select>
-      </div>
-
-      <button class="btn btn-primary btn-full"
-        onclick="register()">
-        Criar conta
-      </button>
-
-    </div>
-  `);
-
-}
-
-async function register(){
-
-  const name =
-    document.getElementById('registerName')?.value.trim();
-
-  const email =
-    document.getElementById('registerEmail')?.value.trim();
-
-  const password =
-    document.getElementById('registerPassword')?.value;
-
-  const role =
-    document.getElementById('registerRole')?.value || 'buyer';
-
-  if(!name || !email || !password){
-    toast('Preenche todos os campos.');
-    return;
-  }
-
-  try{
-
-    const data = await api('/api/register',{
-      method:'POST',
-      body:JSON.stringify({
-        name,
-        email,
-        password,
-        role
-      })
-    });
-
-    token =
-      data.token ||
-      data.accessToken ||
-      '';
-
-    if(token){
-      localStorage.setItem('kuanza_token',token);
-    }
-
-    me = data.user || null;
-
-    closeModal();
-
-    toast('Conta criada com sucesso ✓');
-
-    await loadAccount();
-
-  }catch(e){
-    toast(e.message);
-  }
-}
-
-function logout(){
-
-  token = '';
-  me = null;
-
-  localStorage.removeItem('kuanza_token');
-
-  toast('Sessão terminada.');
-
-  go('account');
-}
-
-async function loadSell(){
+  async function loadSell(){
 
   const root = document.getElementById('appContent');
 
@@ -2535,10 +3867,12 @@ async function loadSell(){
         </p>
 
         <div class="progress-line">
+
           <div id="photoProgress"
             class="progress-fill"
             style="width:0%">
           </div>
+
         </div>
 
         <div class="small">
@@ -2552,6 +3886,7 @@ async function loadSell(){
         <div class="form">
 
           <div>
+
             <label>Fotos do produto — mínimo 5</label>
 
             <input
@@ -2565,18 +3900,22 @@ async function loadSell(){
             <div id="photoPreview"
               class="photo-grid">
             </div>
+
           </div>
 
           <div>
+
             <label>Nome do produto</label>
 
             <input
               id="productName"
               placeholder="Ex.: iPhone 13 128GB"
             >
+
           </div>
 
           <div>
+
             <label>Preço em Kz</label>
 
             <input
@@ -2585,12 +3924,96 @@ async function loadSell(){
               min="0"
               placeholder="Ex.: 450000"
             >
+
           </div>
 
           <div>
+
             <label>Categoria</label>
 
             <select id="productCategory">
+
+              <option value="Eletrónicos">
+                Eletrónicos
+              </option>
+
+              <option value="Moda">
+                Moda
+              </option>
+
+              <option value="Casa">
+                Casa
+              </option>
+
+              <option value="Beleza">
+                Beleza
+              </option>
+
+              <option value="Desporto">
+                Desporto
+              </option>
+
+              <option value="Automóveis">
+                Automóveis
+              </option>
+
+              <option value="Imóveis">
+                Imóveis
+              </option>
+
+              <option value="Serviços">
+                Serviços
+              </option>
+
+              <option value="Outros">
+                Outros
+              </option>
+
+            </select>
+
+          </div>
+
+          <div>
+
+            <label>Descrição</label>
+
+            <textarea
+              id="productDescription"
+              rows="5"
+              placeholder="Descreve o produto com detalhes..."
+            ></textarea>
+
+          </div>
+
+          <div>
+
+            <label>Quantidade disponível</label>
+
+            <input
+              id="productStock"
+              type="number"
+              min="1"
+              value="1"
+            >
+
+          </div>
+
+          <button
+            class="btn btn-primary btn-full"
+            onclick="publishProduct()">
+
+            Publicar produto
+
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+  `;
+}
+              <select id="productCategory">
               ${categories.filter(c=>c!=='Todos').map(c=>`
                 <option value="${esc(c)}">${esc(c)}</option>
               `).join('')}
@@ -2599,6 +4022,7 @@ async function loadSell(){
           </div>
 
           <div>
+
             <label>Descrição</label>
 
             <textarea
@@ -2652,7 +4076,9 @@ async function handlePhotos(event){
     renderPhotoPreview();
 
   }catch(e){
+
     toast('Não foi possível processar as fotos.');
+
   }
 }
 
@@ -2727,6 +4153,7 @@ function compressImage(file){
     reader.onerror = reject;
 
     reader.readAsDataURL(file);
+
   });
 }
 
@@ -2814,97 +4241,531 @@ async function publishProduct(){
     await loadHome();
 
   }catch(e){
+
     toast(e.message);
+
+  }
+}
+              <div class="card">
+                <h3>📈 Histórico de vendas</h3>
+
+                ${
+                  salesHistory.length
+                  ? salesHistory.map(item=>`
+                      <div class="top-product">
+
+                        <div>
+                          <strong>
+                            ${esc(item.date || item.label || '')}
+                          </strong>
+
+                          <small>
+                            ${item.orders || item.sales || 0} venda(s)
+                          </small>
+                        </div>
+
+                        <strong style="color:#087443">
+                          ${money(item.revenue || 0)}
+                        </strong>
+
+                      </div>
+                    `).join('')
+                  : `
+                    <div class="empty">
+                      Ainda não existem vendas neste período.
+                    </div>
+                  `
+                }
+
+              </div>
+
+              <div class="card">
+                <h3>🧾 Resumo financeiro</h3>
+
+                <div class="summary-list">
+
+                  <div class="summary-row">
+                    <span>Faturamento bruto</span>
+                    <strong>
+                      ${money(s.grossRevenue)}
+                    </strong>
+                  </div>
+
+                  <div class="summary-row">
+                    <span>Comissão Kuanza</span>
+                    <strong>
+                      ${money(s.commission)}
+                    </strong>
+                  </div>
+
+                  <div class="summary-row">
+                    <span>Receita líquida</span>
+                    <strong>
+                      ${money(s.netRevenue)}
+                    </strong>
+                  </div>
+
+                  <div class="summary-row">
+                    <span>Saldo disponível</span>
+                    <strong>
+                      ${money(s.availableBalance)}
+                    </strong>
+                  </div>
+
+                  <div class="summary-row">
+                    <span>Valores pendentes</span>
+                    <strong>
+                      ${money(s.pendingRevenue)}
+                    </strong>
+                  </div>
+
+                </div>
+
+              </div>
+    `;
+    
+  }catch(e){
+
+    target.innerHTML = `
+      <div class="empty">
+        ${esc(e.message)}
+      </div>
+    `;
+
   }
 }
 
-async function loadStore(){
 
-  const root = document.getElementById('appContent');
+async function loadSellerOrders(){
+
+  const root =
+    document.getElementById('appContent');
 
   if(!token){
+
     root.innerHTML = `
       <div class="page">
         <div class="empty">
-          Inicia sessão para ver a tua loja.
+          Inicia sessão para acessar os pedidos.
         </div>
       </div>
     `;
+
+    return;
+  }
+
+  root.innerHTML = `
+    <div class="page">
+
+      <div class="section-title">
+        <h2>📦 Pedidos recebidos</h2>
+      </div>
+
+      <div id="sellerOrdersList">
+        <div class="empty">
+          A carregar pedidos...
+        </div>
+      </div>
+
+    </div>
+  `;
+
+  const target =
+    document.getElementById('sellerOrdersList');
+
+  try{
+
+    const data =
+      await api('/api/seller/orders');
+
+    const orders =
+      data.orders || data || [];
+
+    if(!orders.length){
+
+      target.innerHTML = `
+        <div class="empty">
+          Ainda não tens pedidos.
+        </div>
+      `;
+
+      return;
+    }
+
+    target.innerHTML =
+      orders.map(order=>`
+
+        <div class="card">
+
+          <div class="row">
+
+            <div>
+              <strong>
+                Pedido #${esc(String(order.id || '').slice(-8))}
+              </strong>
+
+              <div class="small mt">
+                ${esc(order.productName || order.product?.name || 'Produto')}
+              </div>
+
+            </div>
+
+            <span class="badge">
+              ${esc(order.status || 'pending')}
+            </span>
+
+          </div>
+
+          <div class="summary-list mt">
+
+            <div class="summary-row">
+              <span>Quantidade</span>
+              <strong>
+                ${order.quantity || 1}
+              </strong>
+            </div>
+
+            <div class="summary-row">
+              <span>Valor</span>
+              <strong>
+                ${money(order.total || order.price || 0)}
+              </strong>
+            </div>
+
+          </div>
+
+          <div class="actions mt">
+
+            <button
+              class="btn btn-secondary"
+              onclick="updateSellerOrder('${order.id}','processing')">
+              Preparar
+            </button>
+
+            <button
+              class="btn btn-primary"
+              onclick="updateSellerOrder('${order.id}','shipped')">
+              Enviar
+            </button>
+
+            <button
+              class="btn btn-yellow"
+              onclick="updateSellerOrder('${order.id}','completed')">
+              Concluir
+            </button>
+
+          </div>
+
+        </div>
+
+      `).join('');
+
+  }catch(e){
+
+    target.innerHTML = `
+      <div class="empty">
+        ${esc(e.message)}
+      </div>
+    `;
+
+  }
+}
+        <div class="chat-input">
+
+        <input
+          id="chatText"
+          placeholder="Escreve uma mensagem..."
+          onkeydown="if(event.key==='Enter') sendMessage()">
+
+        <button
+          class="btn btn-primary"
+          onclick="sendMessage()">
+          Enviar
+        </button>
+
+      </div>
+
+      <div class="offer-box">
+
+        <input
+          id="offerAmount"
+          type="number"
+          placeholder="Valor da oferta em Kz">
+
+        <button
+          class="btn btn-yellow"
+          onclick="sendOffer()">
+          Fazer oferta
+        </button>
+
+      </div>
+
+    `);
+
+    const chat =
+      document.getElementById('chatMessages');
+
+    if(chat){
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+  }catch(e){
+
+    toast(e.message);
+
+  }
+}
+
+
+function renderMessage(message){
+
+  const mine =
+    String(message.senderId || '') === String(me?.id || '');
+
+  return `
+    <div class="message ${mine ? 'mine' : ''}">
+
+      <div class="message-bubble">
+
+        ${esc(message.text || '')}
+
+        ${
+          message.offerAmount
+          ? `
+            <div class="offer">
+              💰 Oferta:
+              <strong>
+                ${money(message.offerAmount)}
+              </strong>
+            </div>
+          `
+          : ''
+        }
+
+      </div>
+
+      <small>
+        ${
+          message.createdAt
+          ? new Date(message.createdAt)
+              .toLocaleString('pt-AO')
+          : ''
+        }
+      </small>
+
+    </div>
+  `;
+
+}
+
+
+async function sendMessage(){
+
+  if(!currentConversation){
+    toast('Conversa não encontrada.');
+    return;
+  }
+
+  const input =
+    document.getElementById('chatText');
+
+  const text =
+    input?.value.trim();
+
+  if(!text){
     return;
   }
 
   try{
 
+    await api(
+      '/api/conversations/' +
+      encodeURIComponent(currentConversation) +
+      '/messages',
+      {
+        method:'POST',
+        body:JSON.stringify({
+          text
+        })
+      }
+    );
+
+    input.value = '';
+
+    await openConversation(
+      currentConversation
+    );
+
+  }catch(e){
+
+    toast(e.message);
+
+  }
+}
+
+
+async function sendOffer(){
+
+  if(!currentConversation){
+    toast('Conversa não encontrada.');
+    return;
+  }
+
+  const input =
+    document.getElementById('offerAmount');
+
+  const amount =
+    Number(input?.value || 0);
+
+  if(!amount || amount <= 0){
+    toast('Indica um valor válido.');
+    return;
+  }
+
+  try{
+
+    await api(
+      '/api/conversations/' +
+      encodeURIComponent(currentConversation) +
+      '/messages',
+      {
+        method:'POST',
+        body:JSON.stringify({
+          text:'Fiz uma oferta pelo produto.',
+          offerAmount:amount
+        })
+      }
+    );
+
+    input.value = '';
+
+    toast('Oferta enviada ✓');
+
+    await openConversation(
+      currentConversation
+    );
+
+  }catch(e){
+
+    toast(e.message);
+
+  }
+
+}
+
+
+function goToChat(){
+
+  if(!token){
+    toast('Inicia sessão primeiro.');
+    go('account');
+    return;
+  }
+
+  go('conversations');
+
+}
+
+
+function openSellerProfile(sellerId){
+
+  if(!sellerId){
+    toast('Vendedor não encontrado.');
+    return;
+  }
+
+  go('seller-' + sellerId);
+
+}
+
+
+async function loadSellerProfile(sellerId){
+
+  const root =
+    document.getElementById('appContent');
+
+  root.innerHTML = `
+    <div class="page">
+      <div class="empty">
+        A carregar perfil do vendedor...
+      </div>
+    </div>
+  `;
+
+  try{
+
     const data =
-      await api('/api/stores?ownerId=' + encodeURIComponent(me?.id || ''));
+      await api(
+        '/api/users/' +
+        encodeURIComponent(sellerId)
+      );
 
-    const stores =
-      Array.isArray(data)
-        ? data
-        : (data.stores || []);
-
-    const store = stores[0];
+    const seller =
+      data.user || data;
 
     root.innerHTML = `
+
       <div class="page">
 
-        <div class="section-title">
-          <h2>🏪 Minha loja</h2>
+        <button
+          class="btn btn-secondary"
+          onclick="go('explore')">
+          ← Voltar
+        </button>
+
+        <div class="seller-profile card mt">
+
+          <div class="seller-avatar">
+            ${esc(
+              (seller.name || 'V')
+                .charAt(0)
+                .toUpperCase()
+            )}
+          </div>
+
+          <h2>
+            ${esc(seller.name || 'Vendedor')}
+          </h2>
+
+          <div class="small">
+            ${esc(seller.email || '')}
+          </div>
+
+          <div class="score-box mt">
+
+            <div class="score-number">
+              ${seller.score ?? 50}
+            </div>
+
+            <div>
+              <strong>
+                Kuanza Score
+              </strong>
+
+              <div class="small">
+                ${esc(
+                  seller.scoreLabel ||
+                  'Em avaliação'
+                )}
+              </div>
+            </div>
+
+          </div>
+
+          <div class="mt">
+
+            <span class="badge">
+              ${seller.verified
+                ? '✓ Verificado'
+                : 'Vendedor'}
+            </span>
+
+          </div>
+
         </div>
 
-        ${
-          store
-          ? `
-            <div class="card">
-
-              <h3>${esc(store.name || 'Minha loja')}</h3>
-
-              <p class="small">
-                ${esc(store.description || 'Sem descrição.')}
-              </p>
-
-              <div class="stats">
-
-                <div class="stat">
-                  <strong>${store.rating || 0}</strong>
-                  <small>Avaliação</small>
-                </div>
-
-                <div class="stat">
-                  <strong>${me?.score || 0}</strong>
-                  <small>Score</small>
-                </div>
-
-                <div class="stat">
-                  <strong>${products.filter(p=>String(p.sellerId)===String(me?.id)).length}</strong>
-                  <small>Produtos</small>
-                </div>
-
-              </div>
-
-            </div>
-          `
-          : `
-            <div class="empty">
-
-              <div class="emoji">🏪</div>
-
-              <strong>Ainda não tens uma loja.</strong>
-
-              <p class="small mt">
-                Cria a tua loja para começar a vender.
-              </p>
-
-              <button class="btn btn-primary mt"
-                onclick="createStore()">
-                Criar loja
-              </button>
-
-            </div>
-          `
-        }
-
       </div>
+
     `;
 
   }catch(e){
@@ -2916,636 +4777,10 @@ async function loadStore(){
         </div>
       </div>
     `;
+
   }
+
 }
-
-function createStore(){
-
-  openModal(`
-    <div class="modal-head">
-      <h3>Criar loja</h3>
-      <button class="close" onclick="closeModal()">✕</button>
-    </div>
-
-    <div class="form">
-
-      <div>
-        <label>Nome da loja</label>
-        <input id="storeName"
-          placeholder="Ex.: José Tech">
-      </div>
-
-      <div>
-        <label>Descrição</label>
-        <textarea id="storeDescription"
-          placeholder="Fala um pouco sobre a tua loja"></textarea>
-      </div>
-
-      <button class="btn btn-primary"
-        onclick="submitStore()">
-        Criar loja
-      </button>
-
-    </div>
-  `);
-}
-
-async function submitStore(){
-
-  const name =
-    document.getElementById('storeName')?.value.trim();
-
-  const description =
-    document.getElementById('storeDescription')?.value.trim();
-
-  if(!name){
-    toast('Indica o nome da loja.');
-    return;
-  }
-
-  try{
-
-    await api('/api/stores',{
-      method:'POST',
-      body:JSON.stringify({
-        name,
-        description
-      })
-    });
-
-    closeModal();
-
-    toast('Loja criada ✓');
-
-    loadStore();
-
-  }catch(e){
-    toast(e.message);
-  }
-}
-
-async function loadDashboard(){
-
-  const root =
-    document.getElementById('appContent');
-
-  if(!token){
-    root.innerHTML = `
-      <div class="page">
-        <div class="empty">
-          Inicia sessão para acessar o dashboard.
-        </div>
-      </div>
-    `;
-    return;
-  }
-
-  root.innerHTML = `
-    <div class="page">
-
-      <div class="section-title">
-        <h2>📊 Dashboard do vendedor</h2>
-      </div>
-
-      <div class="filters">
-
-        <select id="dashboardPeriod"
-          onchange="loadDashboardData()">
-
-          <option value="7">Últimos 7 dias</option>
-          <option value="30" selected>Últimos 30 dias</option>
-          <option value="90">Últimos 90 dias</option>
-          <option value="all">Todo o período</option>
-
-        </select>
-
-        <button class="btn btn-secondary"
-          onclick="loadDashboardData()">
-          Atualizar
-        </button>
-
-      </div>
-
-      <div id="dashboardData">
-        <div class="empty">A carregar...</div>
-      </div>
-
-    </div>
-  `;
-
-  await loadDashboardData();
-}
-
-async function loadDashboardData(){
-
-  const target =
-    document.getElementById('dashboardData');
-
-  if(!target) return;
-
-  const period =
-    document.getElementById('dashboardPeriod')?.value || '30';
-
-  try{
-
-    const data =
-      await api('/api/seller/dashboard?period=' + period);
-
-    const s =
-      data.summary || {};
-
-    const seller =
-      data.seller || {};
-
-    const topProducts =
-      data.topProducts || [];
-
-    const salesHistory =
-      data.salesHistory || [];
-
-    target.innerHTML = `
-
-      <div class="card">
-
-        <div class="row">
-
-          <div>
-            <div class="small">
-              Olá, ${esc(seller.name || me?.name || 'vendedor')}
-            </div>
-
-            <div class="dashboard-title mt">
-              Visão geral
-            </div>
-          </div>
-
-          <span class="badge">
-            Comissão ${data.commissionPercent ?? 10}%
-          </span>
-
-        </div>
-
-      </div>
-
-      <div class="dashboard-grid">
-
-        <div class="metric green">
-          <small>Faturamento bruto</small>
-          <strong>${money(s.grossRevenue)}</strong>
-        </div>
-
-        <div class="metric green">
-          <small>Ganhos líquidos</small>
-          <strong>${money(s.netRevenue)}</strong>
-        </div>
-
-        <div class="metric">
-          <small>Total de vendas</small>
-          <strong>${s.totalSales || 0}</strong>
-        </div>
-
-        <div class="metric">
-          <small>Produtos vendidos</small>
-          <strong>${s.totalProductsSold || 0}</strong>
-        </div>
-
-        <div class="metric">
-          <small>Valores pendentes</small>
-          <strong>${money(s.pendingRevenue)}</strong>
-        </div>
-
-        <div class="metric">
-          <small>Comissão Kuanza</small>
-          <strong>${money(s.commission)}</strong>
-        </div>
-
-        <div class="metric">
-          <small>Cancelamentos</small>
-          <strong>${s.cancelledSales || 0}</strong>
-        </div>
-
-        <div class="metric">
-          <small>Ticket médio</small>
-          <strong>${money(s.averageTicket)}</strong>
-        </div>
-
-      </div>
-
-      <div class="card mt">
-
-        <div class="row">
-
-          <div>
-            <h3>💰 Saldo disponível</h3>
-
-            <p class="small">
-              Valor líquido disponível segundo os pedidos registados.
-            </p>
-          </div>
-
-          <strong style="
-            font-family:Poppins;
-            font-size:22px;
-            color:#087443">
-            ${money(s.availableBalance)}
-          </strong>
-
-        </div>
-
-        <button class="btn btn-yellow btn-full mt"
-          onclick="toast('A função de levantamento será adicionada numa próxima versão.')">
-          💸 Levantar saldo
-        </button>
-
-      </div>
-
-      <div class="card">
-
-        <h3>🏆 Produtos mais vendidos</h3>
-
-        ${
-          topProducts.length
-          ? topProducts.map(item=>`
-              <div class="top-product">
-
-                <div>
-                  <strong>${esc(item.name || 'Produto')}</strong>
-
-                  <small>
-                    ${item.quantity || 0} unidade(s)
-                  </small>
-                </div>
-
-                <strong style="color:#087443">
-                  ${money(item.revenue || 0)}
-                </strong>
-
-              </div>
-            `).join('')
-          : `
-            <div class="empty">
-              Ainda não existem vendas registadas.
-            </div>
-          `
-        }
-
-      </div>
-
-      <div class="card">
-
-        <h3>📜 Histórico de vendas</h3>
-
-        ${
-          salesHistory.length
-          ? salesHistory.map(item=>`
-
-              <div class="top-product">
-
-                <div>
-                  <strong>
-                    Pedido #${esc(String(item.orderId || '').slice(-8))}
-                  </strong>
-
-                  <small>
-                    ${esc(item.status || '')}
-                  </small>
-                </div>
-
-                <strong>
-                  ${money(item.netRevenue || item.revenue || 0)}
-                </strong>
-
-              </div>
-
-            `).join('')
-          : `
-            <div class="empty">
-              Nenhuma venda neste período.
-            </div>
-          `
-        }
-
-      </div>
-
-    `;
-
-  }catch(e){
-
-    target.innerHTML = `
-      <div class="empty">
-        ${esc(e.message)}
-      </div>
-    `;
-  }
-}
-
-async function loadSellerOrders(){
-
-  if(!token){
-    toast('Inicia sessão primeiro.');
-    return;
-  }
-
-  try{
-
-    const data =
-      await api('/api/seller/orders');
-
-    const orders =
-      Array.isArray(data)
-        ? data
-        : (data.orders || []);
-
-    openModal(`
-      <div class="modal-head">
-
-        <h3>📦 Vendas recebidas</h3>
-
-        <button class="close"
-          onclick="closeModal()">
-          ✕
-        </button>
-
-      </div>
-
-      ${
-        orders.length
-        ? orders.map(order=>`
-
-            <div class="order">
-
-              <div class="order-head">
-
-                <strong>
-                  #${esc(String(order.id).slice(-8))}
-                </strong>
-
-                <span class="status">
-                  ${esc(order.status || 'Pendente')}
-                </span>
-
-              </div>
-
-              <div class="order-items">
-                ${
-                  (order.items || []).map(item=>`
-                    ${esc(item.productName || item.name || 'Produto')}
-                    × ${item.quantity || 1}
-                  `).join('<br>')
-                }
-              </div>
-
-              <div class="row mt">
-
-                <strong>
-                  ${money(order.total || 0)}
-                </strong>
-
-                <select
-                  onchange="updateSellerOrderStatus('${esc(order.id)}',this.value)">
-
-                  ${[
-                    'Pendente',
-                    'Confirmado',
-                    'Em preparação',
-                    'Enviado',
-                    'Entregue',
-                    'Cancelado'
-                  ].map(status=>`
-                    <option
-                      value="${esc(status)}"
-                      ${order.status===status?'selected':''}>
-                      ${esc(status)}
-                    </option>
-                  `).join('')}
-
-                </select>
-
-              </div>
-
-            </div>
-
-          `).join('')
-        : `
-          <div class="empty">
-            Nenhuma venda encontrada.
-          </div>
-        `
-      }
-
-    `;
-
-  }catch(e){
-    toast(e.message);
-  }
-}
-
-async function updateSellerOrderStatus(id,status){
-
-  try{
-
-    await api('/api/seller/orders/' + encodeURIComponent(id),{
-      method:'PATCH',
-      body:JSON.stringify({
-        status
-      })
-    });
-
-    toast('Estado do pedido atualizado ✓');
-
-  }catch(e){
-    toast(e.message);
-  }
-}
-
-async function loadConversations(){
-
-  const root =
-    document.getElementById('appContent');
-
-  if(!token){
-    root.innerHTML = `
-      <div class="page">
-        <div class="empty">
-          Inicia sessão para ver as conversas.
-        </div>
-      </div>
-    `;
-    return;
-  }
-
-  root.innerHTML = `
-    <div class="page">
-
-      <div class="section-title">
-        <h2>💬 Minhas conversas</h2>
-      </div>
-
-      <div id="conversationsList">
-        <div class="empty">A carregar...</div>
-      </div>
-
-    </div>
-  `;
-
-  try{
-
-    const data =
-      await api('/api/conversations');
-
-    const conversations =
-      Array.isArray(data)
-        ? data
-        : (data.conversations || []);
-
-    const target =
-      document.getElementById('conversationsList');
-
-    if(!conversations.length){
-      target.innerHTML = `
-        <div class="empty">
-
-          <div class="emoji">💬</div>
-
-          <strong>Nenhuma conversa ainda.</strong>
-
-          <p class="small mt">
-            Abre um produto e fala com o vendedor.
-          </p>
-
-        </div>
-      `;
-      return;
-    }
-
-    target.innerHTML =
-      conversations.map(c=>`
-
-        <div class="conversation"
-          onclick="openConversation('${esc(c.id)}')">
-
-          <div class="row">
-
-            <strong>
-              ${esc(c.productName || 'Conversa')}
-            </strong>
-
-            <span class="small">
-              ${c.updatedAt ? new Date(c.updatedAt).toLocaleDateString('pt-AO') : ''}
-            </span>
-
-          </div>
-
-          <div class="small mt">
-            ${esc(c.lastMessage || 'Abrir conversa')}
-          </div>
-
-        </div>
-
-      `).join('');
-
-  }catch(e){
-
-    document.getElementById('conversationsList').innerHTML =
-      `<div class="empty">${esc(e.message)}</div>`;
-  }
-}
-
-async function startChatWithSeller(sellerId){
-
-  if(!token){
-    toast('Inicia sessão para conversar.');
-    go('account');
-    return;
-  }
-
-  if(!currentProduct){
-    return;
-  }
-
-  if(!sellerId){
-    toast('Este vendedor não está disponível para chat.');
-    return;
-  }
-
-  if(String(sellerId) === String(me?.id)){
-    toast('Não podes iniciar uma conversa contigo mesmo.');
-    return;
-  }
-
-  try{
-
-    const data =
-      await api('/api/conversations',{
-        method:'POST',
-        body:JSON.stringify({
-          sellerId,
-          productId:currentProduct.id
-        })
-      });
-
-    const conversation =
-      data.conversation || data;
-
-    currentConversation =
-      conversation.id || conversation._id;
-
-    await openConversation(currentConversation);
-
-  }catch(e){
-    toast(e.message);
-  }
-}
-
-async function openConversation(id){
-
-  if(!token){
-    toast('Inicia sessão.');
-    return;
-  }
-
-  try{
-
-    const data =
-      await api('/api/conversations/' + encodeURIComponent(id));
-
-    const conversation =
-      data.conversation || data;
-
-    currentConversation =
-      conversation.id || id;
-
-    const messages =
-      conversation.messages || [];
-
-    openModal(`
-      <div class="modal-head">
-
-        <h3>
-          💬 ${esc(conversation.productName || 'Conversa')}
-        </h3>
-
-        <button class="close"
-          onclick="closeModal()">
-          ✕
-        </button>
-
-      </div>
-
-      <div class="chat" id="chatMessages">
-
-        ${
-          messages.length
-          ? messages.map(renderMessage).join('')
-          : `
-            <div class="center small">
-              Nenhuma mensagem ainda.
-            </div>
-          `
-        }
-
-      </div>
-
       <div class="chat-input">
 
         <input
@@ -3743,7 +4978,15 @@ function modalBackground(event){
   if(event.target.id === 'modal'){
     closeModal();
   }
+
 }
+
+window.addEventListener('error',function(e){
+  console.error(
+    'Kuanza Line JS:',
+    e.error || e.message
+  );
+});
 
 async function init(){
 
@@ -3767,10 +5010,13 @@ async function init(){
       localStorage.removeItem('kuanza_token');
 
       me = null;
+
     }
+
   }
 
   await loadHome();
+
 }
 
 init();
@@ -3778,3 +5024,4 @@ init();
 
 </body>
 </html>
+
