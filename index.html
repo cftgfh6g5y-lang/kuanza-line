@@ -2,1430 +2,960 @@
 <html lang="pt">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#087443">
-<meta name="description" content="Kuanza Line — Compra. Vende. Confia.">
-<title>Kuanza Line</title>
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#075B35">
+<title>Kuanza Line — Compra. Vende. Confia.</title>
 
 <style>
-*{
-  box-sizing:border-box;
-  margin:0;
-  padding:0;
+:root{
+--g:#12a34a;
+--gd:#075b35;
+--dark:#061a12;
+--ink:#102018;
+--muted:#718078;
+--line:#dfe9e3;
+--soft:#f1f7f3;
+--y:#f4c400;
+--red:#e94b35;
 }
+
+*{box-sizing:border-box}
 
 body{
-  font-family:Inter,Arial,sans-serif;
-  background:#f5f7f6;
-  color:#17221d;
-  padding-bottom:82px;
+margin:0;
+background:#03130c;
+color:var(--ink);
+font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif
 }
 
-button,input,textarea,select{
-  font:inherit;
-}
+button,input,textarea,select{font:inherit}
 
-button{
-  cursor:pointer;
-}
-
-img{
-  max-width:100%;
-}
-
-.hidden{
-  display:none!important;
-}
+button{cursor:pointer}
 
 .app{
-  max-width:760px;
-  margin:auto;
-  min-height:100vh;
-  background:#f5f7f6;
+max-width:560px;
+margin:auto;
+min-height:100vh;
+background:#fff;
+padding-bottom:82px
 }
 
-.topbar{
-  position:sticky;
-  top:0;
-  z-index:50;
-  background:#087443;
-  color:white;
-  padding:14px 16px;
-  box-shadow:0 3px 12px rgba(0,0,0,.12);
+.top{
+position:sticky;
+top:0;
+z-index:20;
+background:rgba(255,255,255,.96);
+backdrop-filter:blur(12px);
+padding:14px 16px 10px;
+border-bottom:1px solid var(--line)
 }
 
-.topbar-inner{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
+.brand{
+display:flex;
+align-items:center;
+gap:9px
 }
 
 .logo{
-  display:flex;
-  align-items:center;
-  gap:9px;
+width:40px;
+height:40px;
+border-radius:13px;
+background:linear-gradient(135deg,#f4d500,#10a34a 62%,#075b35);
+color:#fff;
+display:grid;
+place-items:center;
+font-weight:1000;
+font-size:27px;
+box-shadow:0 8px 20px #0a8a4530
 }
 
-.logo-mark{
-  width:38px;
-  height:38px;
-  border-radius:12px;
-  background:#fff;
-  color:#087443;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-family:Poppins,sans-serif;
-  font-weight:800;
-  font-size:22px;
+.brand b{
+font-size:20px;
+letter-spacing:-.5px
 }
 
-.logo-text{
-  font-family:Poppins,sans-serif;
-  font-size:18px;
-  font-weight:800;
-  line-height:1;
+.brand span{color:var(--g)}
+
+.tag{
+font-size:10px;
+color:var(--muted);
+font-weight:800
 }
 
-.logo-sub{
-  font-size:10px;
-  opacity:.82;
-  margin-top:3px;
-}
-
-.top-actions{
-  display:flex;
-  gap:7px;
-}
-
-.icon-btn{
-  width:38px;
-  height:38px;
-  border:0;
-  border-radius:12px;
-  background:rgba(255,255,255,.13);
-  color:white;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:18px;
-}
-
-.page{
-  padding:16px;
-}
-
-.hero{
-  background:linear-gradient(135deg,#087443,#0a8b50);
-  color:white;
-  border-radius:22px;
-  padding:22px;
-  margin-bottom:16px;
-  box-shadow:0 10px 30px rgba(8,116,67,.2);
-}
-
-.hero h1{
-  font-family:Poppins,sans-serif;
-  font-size:27px;
-  line-height:1.15;
-  margin-bottom:8px;
-}
-
-.hero p{
-  opacity:.9;
-  font-size:14px;
-  line-height:1.5;
-}
-
-.search-box{
-  background:white;
-  border:1px solid #e2e8e4;
-  border-radius:16px;
-  padding:5px;
-  display:flex;
-  gap:5px;
-  margin-bottom:18px;
-  box-shadow:0 4px 14px rgba(0,0,0,.05);
-}
-
-.search-box input{
-  flex:1;
-  border:0;
-  outline:0;
-  padding:12px;
-  background:transparent;
-  min-width:0;
-}
-
-.search-box button{
-  border:0;
-  background:#087443;
-  color:white;
-  border-radius:12px;
-  padding:0 15px;
-  font-weight:700;
-}
-
-.section-title{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  margin:20px 0 11px;
-}
-
-.section-title h2{
-  font-family:Poppins,sans-serif;
-  font-size:18px;
-}
-
-.section-title span{
-  color:#087443;
-  font-size:13px;
-  font-weight:700;
-}
-
-.categories{
-  display:flex;
-  gap:9px;
-  overflow-x:auto;
-  padding-bottom:4px;
-  scrollbar-width:none;
-}
-
-.categories::-webkit-scrollbar{
-  display:none;
-}
-
-.category{
-  flex:0 0 auto;
-  background:white;
-  border:1px solid #e1e8e4;
-  border-radius:14px;
-  padding:11px 13px;
-  font-size:13px;
-  font-weight:600;
-}
-
-.category.active{
-  background:#087443;
-  color:white;
-  border-color:#087443;
-}
-
-.quick-grid{
-  display:grid;
-  grid-template-columns:repeat(2,1fr);
-  gap:10px;
-  margin:14px 0;
-}
-
-.quick{
-  background:white;
-  border:1px solid #e2e8e4;
-  border-radius:17px;
-  padding:15px;
-  text-align:left;
-  font-weight:700;
-  color:#17221d;
-}
-
-.quick .emoji{
-  font-size:22px;
-  display:block;
-  margin-bottom:8px;
-}
-
-.quick small{
-  display:block;
-  margin-top:3px;
-  color:#718078;
-  font-weight:400;
-}
-
-.products{
-  display:grid;
-  grid-template-columns:repeat(2,1fr);
-  gap:12px;
-}
-
-.product-card{
-  background:white;
-  border-radius:18px;
-  overflow:hidden;
-  border:1px solid #e3e9e6;
-  box-shadow:0 4px 14px rgba(0,0,0,.045);
-  position:relative;
-}
-
-.product-image{
-  width:100%;
-  aspect-ratio:1/1;
-  object-fit:cover;
-  background:#edf1ee;
-}
-
-.product-body{
-  padding:11px;
-}
-
-.product-name{
-  font-weight:700;
-  font-size:14px;
-  line-height:1.35;
-  min-height:38px;
-}
-
-.price{
-  color:#087443;
-  font-family:Poppins,sans-serif;
-  font-weight:800;
-  margin-top:7px;
-  font-size:16px;
-}
-
-.product-meta{
-  margin-top:5px;
-  font-size:11px;
-  color:#78837e;
-}
-
-.card-heart{
-  position:absolute;
-  top:9px;
-  right:9px;
-  border:0;
-  background:white;
-  width:34px;
-  height:34px;
-  border-radius:50%;
-  box-shadow:0 3px 10px rgba(0,0,0,.13);
+.bell{
+margin-left:auto;
+width:40px;
+height:40px;
+border:1px solid var(--line);
+background:#fff;
+border-radius:13px;
+position:relative;
+font-size:19px
 }
 
 .badge{
-  display:inline-flex;
-  align-items:center;
-  gap:4px;
-  padding:5px 8px;
-  border-radius:999px;
-  background:#e8f7ef;
-  color:#087443;
-  font-size:10px;
-  font-weight:800;
+position:absolute;
+right:-2px;
+top:-3px;
+background:var(--red);
+color:#fff;
+border-radius:99px;
+font-size:9px;
+min-width:17px;
+height:17px;
+display:grid;
+place-items:center;
+font-weight:900
 }
+
+.page{
+display:none;
+padding:14px 15px
+}
+
+.page.on{display:block}
+
+.search{
+display:flex;
+gap:8px;
+margin:5px 0 13px
+}
+
+.search input{
+flex:1;
+padding:13px 15px;
+border:1px solid var(--line);
+border-radius:15px;
+outline:0;
+background:#f8fbf9
+}
+
+.iconbtn,.btn{
+border:0;
+border-radius:13px;
+padding:12px 14px;
+font-weight:900
+}
+
+.iconbtn{background:var(--soft)}
 
 .btn{
-  border:0;
-  border-radius:13px;
-  padding:12px 15px;
-  font-weight:700;
+background:var(--g);
+color:#fff
 }
 
-.btn-primary{
-  background:#087443;
-  color:white;
-}
-
-.btn-secondary{
-  background:#e9efeb;
-  color:#173c2a;
-}
-
-.btn-yellow{
-  background:#f5c542;
-  color:#1d1d1d;
-}
-
-.btn-danger{
-  background:#ffe6e6;
-  color:#b3261e;
-}
-
-.btn-full{
-  width:100%;
-}
-
-.form{
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-}
-
-.form label{
-  font-size:12px;
-  font-weight:700;
-  color:#52605a;
-}
-
-.form input,
-.form textarea,
-.form select{
-  width:100%;
-  border:1px solid #dce4df;
-  border-radius:13px;
-  background:white;
-  padding:13px;
-  outline:0;
-}
-
-.form textarea{
-  min-height:100px;
-  resize:vertical;
-}
-
-.form input:focus,
-.form textarea:focus,
-.form select:focus{
-  border-color:#087443;
-}
-
-.card{
-  background:white;
-  border:1px solid #e2e8e4;
-  border-radius:19px;
-  padding:16px;
-  margin-bottom:13px;
-}
-
-.card h3{
-  font-family:Poppins,sans-serif;
-  margin-bottom:8px;
-}
-
-.empty{
-  background:white;
-  border:1px dashed #ccd7d1;
-  border-radius:18px;
-  padding:30px 18px;
-  text-align:center;
-  color:#738078;
-}
-
-.empty .emoji{
-  font-size:34px;
-  margin-bottom:10px;
-}
-
-.profile-head{
-  display:flex;
-  align-items:center;
-  gap:14px;
-}
-
-.avatar{
-  width:64px;
-  height:64px;
-  border-radius:20px;
-  background:#087443;
-  color:white;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-family:Poppins,sans-serif;
-  font-weight:800;
-  font-size:25px;
-}
-
-.profile-info h2{
-  font-family:Poppins,sans-serif;
-  font-size:20px;
-}
-
-.profile-info p{
-  color:#718078;
-  font-size:13px;
-  margin-top:4px;
-}
-
-.score-box{
-  background:linear-gradient(135deg,#0a7b48,#064f2e);
-  color:white;
-  border-radius:20px;
-  padding:18px;
-  margin-top:15px;
-}
-  .score-label{
-  font-weight:700;
-}
-
-.score-bar{
-  height:9px;
-  background:rgba(255,255,255,.18);
-  border-radius:999px;
-  overflow:hidden;
-  margin:12px 0;
-}
-
-.score-fill{
-  height:100%;
-  background:#f5c542;
-  border-radius:999px;
-}
-
-.stats{
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:9px;
-  margin-top:13px;
-}
-
-.stat{
-  background:#f4f7f5;
-  border-radius:14px;
-  padding:12px 8px;
-  text-align:center;
-}
-
-.stat strong{
-  display:block;
-  font-family:Poppins,sans-serif;
-  font-size:18px;
-}
-
-.stat small{
-  color:#718078;
-  font-size:10px;
-}
-
-.seller-progress{
-  background:#f1f7f3;
-  border:1px solid #dcebe2;
-  border-radius:18px;
-  padding:15px;
-}
-
-.progress-line{
-  height:8px;
-  background:#dce7e0;
-  border-radius:999px;
-  overflow:hidden;
-  margin:9px 0;
-}
-
-.progress-fill{
-  height:100%;
-  background:#087443;
-}
-
-.photo-grid{
-  display:grid;
-  grid-template-columns:repeat(5,1fr);
-  gap:6px;
-  margin-top:8px;
-}
-
-.photo-slot{
-  aspect-ratio:1;
-  border:1px dashed #b7c8be;
-  border-radius:10px;
-  background:#f4f7f5;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  overflow:hidden;
-  color:#7a8981;
-  font-size:20px;
-}
-
-.photo-slot img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-}
-
-.detail-image{
-  width:100%;
-  aspect-ratio:1/1;
-  object-fit:cover;
-  border-radius:20px;
-  background:#edf1ee;
-}
-
-.gallery{
-  display:flex;
-  gap:8px;
-  overflow-x:auto;
-  margin-top:9px;
-}
-
-.gallery img{
-  width:64px;
-  height:64px;
-  object-fit:cover;
-  border-radius:11px;
-  border:2px solid transparent;
-}
-
-.gallery img.active{
-  border-color:#087443;
-}
-
-.detail-title{
-  font-family:Poppins,sans-serif;
-  font-size:23px;
-  margin-top:15px;
-}
-
-.detail-price{
-  color:#087443;
-  font-family:Poppins,sans-serif;
-  font-size:24px;
-  font-weight:800;
-  margin-top:6px;
-}
-
-.detail-description{
-  color:#56635d;
-  font-size:14px;
-  line-height:1.6;
-  margin-top:12px;
-  white-space:pre-wrap;
-}
-
-.action-row{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:9px;
-  margin-top:14px;
-}
-
-.seller-box{
-  margin-top:16px;
-  background:#f4f8f5;
-  border-radius:18px;
-  padding:15px;
-}
-
-.seller-line{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-}
-
-.seller-name{
-  font-weight:800;
-}
-
-.order{
-  border:1px solid #e0e7e3;
-  border-radius:16px;
-  padding:13px;
-  margin-top:10px;
-}
-
-.order-head{
-  display:flex;
-  justify-content:space-between;
-  gap:10px;
-}
-
-.status{
-  display:inline-flex;
-  padding:5px 8px;
-  border-radius:999px;
-  background:#edf4ef;
-  color:#087443;
-  font-size:10px;
-  font-weight:800;
-}
-
-.order-items{
-  color:#66736c;
-  font-size:12px;
-  margin-top:8px;
-  line-height:1.5;
-}
-
-.cart-item{
-  display:flex;
-  gap:11px;
-  padding:12px 0;
-  border-bottom:1px solid #e8edea;
-}
-
-.cart-item:last-child{
-  border-bottom:0;
-}
-
-.cart-item img{
-  width:72px;
-  height:72px;
-  object-fit:cover;
-  border-radius:12px;
-}
-
-.cart-info{
-  flex:1;
-}
-
-.cart-info strong{
-  font-size:14px;
-}
-
-.quantity{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  margin-top:8px;
-}
-
-.quantity button{
-  width:28px;
-  height:28px;
-  border:0;
-  border-radius:8px;
-  background:#e9efeb;
-}
-
-.total-box{
-  background:#f1f6f3;
-  border-radius:16px;
-  padding:15px;
-  margin-top:14px;
-}
-
-.total-line{
-  display:flex;
-  justify-content:space-between;
-  margin:7px 0;
-}
-
-.total-line.final{
-  font-family:Poppins,sans-serif;
-  font-weight:800;
-  font-size:19px;
-  color:#087443;
-  padding-top:9px;
-  border-top:1px solid #d8e3dd;
-}
-
-.filters{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:9px;
-  margin-bottom:14px;
-}
-
-.conversation{
-  padding:14px;
-  background:white;
-  border:1px solid #e1e8e4;
-  border-radius:16px;
-  margin-bottom:9px;
-}
-
-.chat{
-  background:#edf3ef;
-  border-radius:18px;
-  padding:12px;
-  max-height:55vh;
-  overflow-y:auto;
-}
-
-.message{
-  max-width:82%;
-  padding:10px 12px;
-  border-radius:14px;
-  margin:6px 0;
-  font-size:13px;
-  line-height:1.4;
-}
-
-.message.mine{
-  margin-left:auto;
-  background:#087443;
-  color:white;
-  border-bottom-right-radius:4px;
-}
-
-.message.theirs{
-  background:white;
-  border-bottom-left-radius:4px;
-}
-
-.chat-input{
-  display:flex;
-  gap:7px;
-  margin-top:9px;
-}
+.btn.dark{background:var(--dark)}
 
-.chat-input input{
-  flex:1;
-  border:1px solid #dce4df;
-  border-radius:13px;
-  padding:12px;
-  min-width:0;
+.btn.light{
+background:#fff;
+color:var(--gd);
+border:1px solid #b9d7c6
 }
 
-.chat-input button{
-  border:0;
-  border-radius:13px;
-  background:#087443;
-  color:white;
-  padding:0 15px;
-  font-weight:700;
+.btn.yellow{
+background:var(--y);
+color:#17201b
 }
 
-.dashboard-grid{
-  display:grid;
-  grid-template-columns:repeat(2,1fr);
-  gap:10px;
+.btn.danger{
+background:#ffe7e4;
+color:#b52c20
 }
 
-.metric{
-  background:white;
-  border:1px solid #e1e8e4;
-  border-radius:17px;
-  padding:14px;
+.btn:disabled{
+opacity:.5;
+cursor:not-allowed
 }
 
-.metric small{
-  color:#738078;
-  display:block;
-  font-size:11px;
+.hero{
+background:linear-gradient(135deg,var(--gd),#0a9b49);
+color:#fff;
+border-radius:23px;
+padding:20px;
+margin-bottom:15px;
+overflow:hidden
 }
 
-.metric strong{
-  display:block;
-  font-family:Poppins,sans-serif;
-  font-size:20px;
-  margin-top:5px;
+.hero h1{
+font-size:26px;
+margin:0 0 7px
 }
 
-.metric.green strong{
-  color:#087443;
+.hero p{
+margin:0 0 14px;
+color:#e3f6ea;
+font-size:13px
 }
 
-.dashboard-title{
-  font-family:Poppins,sans-serif;
-  font-size:21px;
-  margin-bottom:12px;
+.quick{
+display:grid;
+grid-template-columns:repeat(5,1fr);
+gap:8px;
+margin:8px 0 18px
 }
 
-.top-product{
-  display:flex;
-  justify-content:space-between;
-  gap:10px;
-  padding:12px 0;
-  border-bottom:1px solid #e8edea;
+.quick button{
+border:0;
+background:#fff;
+border-radius:15px;
+padding:10px 4px;
+font-size:10px;
+font-weight:900;
+color:#27352e;
+box-shadow:0 5px 18px #0a3b2510
 }
 
-.top-product:last-child{
-  border-bottom:0;
+.quick i{
+font-style:normal;
+display:block;
+font-size:21px;
+margin-bottom:4px
 }
 
-.top-product strong{
-  font-size:13px;
+.head{
+display:flex;
+justify-content:space-between;
+align-items:center;
+margin:14px 1px 10px
 }
 
-.top-product small{
-  display:block;
-  color:#738078;
-  margin-top:3px;
+.head h2,.head h3{
+margin:0
 }
 
-.bottom-nav{
-  position:fixed;
-  z-index:60;
-  left:50%;
-  bottom:0;
-  transform:translateX(-50%);
-  width:100%;
-  max-width:760px;
-  height:72px;
-  background:white;
-  border-top:1px solid #e2e8e4;
-  display:grid;
-  grid-template-columns:repeat(5,1fr);
-  padding-bottom:env(safe-area-inset-bottom);
+.link{
+border:0;
+background:transparent;
+color:var(--g);
+font-weight:900
 }
 
-.nav-btn{
-  border:0;
-  background:white;
-  color:#718078;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  gap:3px;
-  font-size:10px;
+.grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:10px
 }
 
-.nav-btn .nav-icon{
-  font-size:20px;
+.product{
+border:1px solid var(--line);
+border-radius:17px;
+overflow:hidden;
+background:#fff
 }
 
-.nav-btn.active{
-  color:#087443;
-  font-weight:800;
+.pimg{
+height:145px;
+background:linear-gradient(135deg,#edf6f0,#fff);
+position:relative;
+display:grid;
+place-items:center;
+overflow:hidden
 }
 
-.toast{
-  position:fixed;
-  left:50%;
-  bottom:88px;
-  transform:translate(-50%,12px);
-  z-index:1000;
-  background:#17221d;
-  color:white;
-  padding:12px 16px;
-  border-radius:13px;
-  font-size:13px;
-  opacity:0;
-  pointer-events:none;
-  transition:.2s;
-  max-width:90%;
-  text-align:center;
+.pimg img{
+width:100%;
+height:100%;
+object-fit:cover
 }
 
-.toast.on{
-  opacity:1;
-  transform:translate(-50%,0);
-}
-
-.modal{
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,.52);
-  z-index:200;
-  display:flex;
-  .score-label{
-  font-weight:700;
-}
-
-.score-bar{
-  height:9px;
-  background:rgba(255,255,255,.18);
-  border-radius:999px;
-  overflow:hidden;
-  margin:12px 0;
-}
-
-.score-fill{
-  height:100%;
-  background:#f5c542;
-  border-radius:999px;
-}
-
-.stats{
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:9px;
-  margin-top:13px;
-}
-
-.stat{
-  background:#f4f7f5;
-  border-radius:14px;
-  padding:12px 8px;
-  text-align:center;
-}
-
-.stat strong{
-  display:block;
-  font-family:Poppins,sans-serif;
-  font-size:18px;
-}
-
-.stat small{
-  color:#718078;
-  font-size:10px;
-}
-
-.seller-progress{
-  background:#f1f7f3;
-  border:1px solid #dcebe2;
-  border-radius:18px;
-  padding:15px;
-}
-
-.progress-line{
-  height:8px;
-  background:#dce7e0;
-  border-radius:999px;
-  overflow:hidden;
-  margin:9px 0;
-}
-
-.progress-fill{
-  height:100%;
-  background:#087443;
-}
-
-.photo-grid{
-  display:grid;
-  grid-template-columns:repeat(5,1fr);
-  gap:6px;
-  margin-top:8px;
-}
-
-.photo-slot{
-  aspect-ratio:1;
-  border:1px dashed #b7c8be;
-  border-radius:10px;
-  background:#f4f7f5;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  overflow:hidden;
-  color:#7a8981;
-  font-size:20px;
-}
-
-.photo-slot img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-}
-
-.detail-image{
-  width:100%;
-  aspect-ratio:1/1;
-  object-fit:cover;
-  border-radius:20px;
-  background:#edf1ee;
-}
-
-.gallery{
-  display:flex;
-  gap:8px;
-  overflow-x:auto;
-  margin-top:9px;
-}
-
-.gallery img{
-  width:64px;
-  height:64px;
-  object-fit:cover;
-  border-radius:11px;
-  border:2px solid transparent;
-}
-
-.gallery img.active{
-  border-color:#087443;
-}
-
-.detail-title{
-  font-family:Poppins,sans-serif;
-  font-size:23px;
-  margin-top:15px;
-}
-
-.detail-price{
-  color:#087443;
-  font-family:Poppins,sans-serif;
-  font-size:24px;
-  font-weight:800;
-  margin-top:6px;
-}
-
-.detail-description{
-  color:#56635d;
-  font-size:14px;
-  line-height:1.6;
-  margin-top:12px;
-  white-space:pre-wrap;
-}
-
-.action-row{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:9px;
-  margin-top:14px;
-}
-
-.seller-box{
-  margin-top:16px;
-  background:#f4f8f5;
-  border-radius:18px;
-  padding:15px;
-}
-
-.seller-line{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-}
-
-.seller-name{
-  font-weight:800;
-}
-
-.order{
-  border:1px solid #e0e7e3;
-  border-radius:16px;
-  padding:13px;
-  margin-top:10px;
-}
-
-.order-head{
-  display:flex;
-  justify-content:space-between;
-  gap:10px;
-}
-
-.status{
-  display:inline-flex;
-  padding:5px 8px;
-  border-radius:999px;
-  background:#edf4ef;
-  color:#087443;
-  font-size:10px;
-  font-weight:800;
-}
-
-.order-items{
-  color:#66736c;
-  font-size:12px;
-  margin-top:8px;
-  line-height:1.5;
-}
-
-.cart-item{
-  display:flex;
-  gap:11px;
-  padding:12px 0;
-  border-bottom:1px solid #e8edea;
-}
-
-.cart-item:last-child{
-  border-bottom:0;
-}
-
-.cart-item img{
-  width:72px;
-  height:72px;
-  object-fit:cover;
-  border-radius:12px;
-}
+.pemoji{font-size:58px}
 
-.cart-info{
-  flex:1;
+.heart{
+position:absolute;
+right:8px;
+top:8px;
+border:0;
+background:#fff;
+border-radius:99px;
+width:32px;
+height:32px;
+font-size:18px
 }
 
-.cart-info strong{
-  font-size:14px;
-}
-
-.quantity{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  margin-top:8px;
-}
-
-.quantity button{
-  width:28px;
-  height:28px;
-  border:0;
-  border-radius:8px;
-  background:#e9efeb;
-}
-
-.total-box{
-  background:#f1f6f3;
-  border-radius:16px;
-  padding:15px;
-  margin-top:14px;
-}
-
-.total-line{
-  display:flex;
-  justify-content:space-between;
-  margin:7px 0;
-}
-
-.total-line.final{
-  font-family:Poppins,sans-serif;
-  font-weight:800;
-  font-size:19px;
-  color:#087443;
-  padding-top:9px;
-  border-top:1px solid #d8e3dd;
-}
-
-.filters{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:9px;
-  margin-bottom:14px;
-}
-
-.conversation{
-  padding:14px;
-  background:white;
-  border:1px solid #e1e8e4;
-  border-radius:16px;
-  margin-bottom:9px;
-}
-
-.chat{
-  background:#edf3ef;
-  border-radius:18px;
-  padding:12px;
-  max-height:55vh;
-  overflow-y:auto;
-}
-
-.message{
-  max-width:82%;
-  padding:10px 12px;
-  border-radius:14px;
-  margin:6px 0;
-  font-size:13px;
-  line-height:1.4;
-}
-
-.message.mine{
-  margin-left:auto;
-  background:#087443;
-  color:white;
-  border-bottom-right-radius:4px;
-}
-
-.message.theirs{
-  background:white;
-  border-bottom-left-radius:4px;
-}
-
-.chat-input{
-  display:flex;
-  gap:7px;
-  margin-top:9px;
-}
-
-.chat-input input{
-  flex:1;
-  border:1px solid #dce4df;
-  border-radius:13px;
-  padding:12px;
-  min-width:0;
-}
-
-.chat-input button{
-  border:0;
-  border-radius:13px;
-  background:#087443;
-  color:white;
-  padding:0 15px;
-  font-weight:700;
-}
-
-.dashboard-grid{
-  display:grid;
-  grid-template-columns:repeat(2,1fr);
-  gap:10px;
-}
-
-.metric{
-  background:white;
-  border:1px solid #e1e8e4;
-  border-radius:17px;
-  padding:14px;
-}
-
-.metric small{
-  color:#738078;
-  display:block;
-  font-size:11px;
-}
-
-.metric strong{
-  display:block;
-  font-family:Poppins,sans-serif;
-  font-size:20px;
-  margin-top:5px;
-}
-
-.metric.green strong{
-  color:#087443;
-}
-
-.dashboard-title{
-  font-family:Poppins,sans-serif;
-  font-size:21px;
-  margin-bottom:12px;
-}
-
-.top-product{
-  display:flex;
-  justify-content:space-between;
-  gap:10px;
-  padding:12px 0;
-  border-bottom:1px solid #e8edea;
-}
-
-.top-product:last-child{
-  border-bottom:0;
-}
-
-.top-product strong{
-  font-size:13px;
-}
-
-.top-product small{
-  display:block;
-  color:#738078;
-  margin-top:3px;
-}
-
-.bottom-nav{
-  position:fixed;
-  z-index:60;
-  left:50%;
-  bottom:0;
-  transform:translateX(-50%);
-  width:100%;
-  max-width:760px;
-  height:72px;
-  background:white;
-  border-top:1px solid #e2e8e4;
-  display:grid;
-  grid-template-columns:repeat(5,1fr);
-  padding-bottom:env(safe-area-inset-bottom);
-}
-
-.nav-btn{
-  border:0;
-  background:white;
-  color:#718078;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  gap:3px;
-  font-size:10px;
-}
-
-.nav-btn .nav-icon{
-  font-size:20px;
-}
-
-.nav-btn.active{
-  color:#087443;
-  font-weight:800;
-}
-
-.toast{
-  position:fixed;
-  left:50%;
-  bottom:88px;
-  transform:translate(-50%,12px);
-  z-index:1000;
-  background:#17221d;
-  color:white;
-  padding:12px 16px;
-  border-radius:13px;
-  font-size:13px;
-  opacity:0;
-  pointer-events:none;
-  transition:.2s;
-  max-width:90%;
-  text-align:center;
-}
-
-.toast.on{
-  opacity:1;
-  transform:translate(-50%,0);
-}
-
-.modal{
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,.52);
-  z-index:200;
-  display:flex;
-  align-items:flex-end;
-  justify-content:center;
-}
+.info{padding:10px}
 
-.modal-box{
-  width:100%;
-  max-width:760px;
-  max-height:90vh;
-  overflow:auto;
-  background:#f5f7f6;
-  border-radius:24px 24px 0 0;
-  padding:18px;
+.name{
+font-weight:900;
+font-size:13px;
+line-height:1.2
 }
 
-.modal-head{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  margin-bottom:14px;
+.price{
+color:var(--g);
+font-weight:1000;
+margin-top:5px
 }
 
-.modal-head h3{
-  font-family:Poppins,sans-serif;
+.muted{
+color:var(--muted);
+font-size:11px
 }
 
-.close{
-  width:36px;
-  height:36px;
-  border:0;
-  border-radius:11px;
-  background:#e8eeea;
+.verify{
+color:var(--g);
+font-weight:900
 }
 
-.notification{
-  padding:12px;
-  border-bottom:1px solid #e8edea;
+.rating{
+font-size:11px;
+margin:4px 0
 }
 
-.small{
-  font-size:12px;
-  color:#738078;
+.chiprow{
+display:flex;
+gap:7px;
+overflow:auto;
+padding-bottom:3px
 }
 
-.center{
-  text-align:center;
+.chip{
+white-space:nowrap;
+border:1px solid var(--line);
+background:#fff;
+border-radius:99px;
+padding:9px 12px;
+font-weight:800;
+font-size:11px
 }
 
-.mt{
-  margin-top:12px;
+.chip.sel{
+background:var(--gd);
+color:#fff;
+border-color:var(--gd)
 }
 
-.mb{
-  margin-bottom:12px;
+.panel{
+border:1px solid var(--line);
+border-radius:18px;
+padding:15px;
+margin:10px 0
 }
 
 .row{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+gap:10px
 }
 
-.wrap{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
+.form{
+display:grid;
+gap:10px
 }
 
-@media(max-width:420px){
-  .products{
-    gap:9px;
-  }
+.form label{
+font-size:11px;
+font-weight:900
+}
 
-  .product-body{
-    padding:9px;
-  }
+.form input,
+.form select,
+.form textarea{
+width:100%;
+padding:13px;
+border:1px solid var(--line);
+border-radius:13px;
+outline:0;
+font:inherit;
+background:#fbfdfc
+}
 
-  .product-name{
-    font-size:13px;
-  }
+.form textarea{
+min-height:105px;
+resize:vertical
+}
 
-  .price{
-    font-size:15px;
-  }
+.photos{
+display:grid;
+grid-template-columns:repeat(5,1fr);
+gap:7px
+}
+
+.slot{
+aspect-ratio:1;
+border:1.5px dashed #9cc5aa;
+border-radius:12px;
+background:#f4faf6;
+display:grid;
+place-items:center;
+overflow:hidden;
+position:relative
+}
+
+.slot img{
+width:100%;
+height:100%;
+object-fit:cover
+}
+
+.slot b{
+font-size:22px;
+color:var(--g)
+}
+
+.slot small{
+position:absolute;
+bottom:3px;
+left:0;
+right:0;
+text-align:center;
+background:#0008;
+color:#fff;
+font-size:8px
+}
+
+.notice{
+padding:10px 12px;
+background:#eef9f1;
+border-radius:12px;
+color:#176238;
+font-size:11px;
+font-weight:800
+}
+
+.scorebox{
+background:linear-gradient(135deg,#eaf9ee,#fff);
+border:1px solid #bde0c9;
+border-radius:18px;
+padding:15px
+}
+
+.score{
+font-size:38px;
+color:var(--g);
+font-weight:1000
+}
+
+.progress{
+height:9px;
+background:#dcebe2;
+border-radius:99px;
+overflow:hidden
+}
+
+.progress span{
+display:block;
+height:100%;
+background:var(--g);
+width:0
+}
+
+.status{
+display:inline-block;
+border-radius:99px;
+padding:5px 8px;
+background:#eef8f1;
+color:#13753d;
+font-size:10px;
+font-weight:900
+}
+
+.storeHero{
+border-radius:20px;
+background:linear-gradient(135deg,#063d25,#0da04b);
+color:#fff;
+padding:16px
+}
+
+.storeLogo{
+width:58px;
+height:58px;
+border-radius:18px;
+background:#fff;
+color:var(--gd);
+display:grid;
+place-items:center;
+font-size:25px;
+font-weight:1000;
+overflow:hidden
+}
+
+.storeLogo img{
+width:100%;
+height:100%;
+object-fit:cover
+}
+
+.gallery{
+display:grid;
+grid-template-columns:2fr 1fr 1fr;
+grid-template-rows:120px 120px;
+gap:5px;
+border-radius:18px;
+overflow:hidden;
+margin-bottom:12px
+}
+
+.gallery div{
+background:#eef6f0;
+overflow:hidden
+}
+
+.gallery div:first-child{
+grid-row:span 2
+}
+
+.gallery img{
+width:100%;
+height:100%;
+object-fit:cover
+}
+
+.detailcard{
+padding:15px;
+border:1px solid var(--line);
+border-radius:18px
+}
+
+.chatlist{
+display:grid;
+gap:9px
+}
+
+.chatitem{
+display:flex;
+gap:10px;
+padding:12px;
+border:1px solid var(--line);
+border-radius:15px;
+background:#fff
+}
+
+.avatar{
+width:45px;
+height:45px;
+border-radius:14px;
+background:#e7f5ec;
+display:grid;
+place-items:center;
+font-size:21px;
+font-weight:900
+}
+
+.bubble{
+max-width:80%;
+padding:10px 12px;
+border-radius:15px;
+background:#edf6f0;
+font-size:12px
+}
+
+.mine{
+margin-left:auto;
+background:#0b8744;
+color:#fff
+}
+
+.chatmsgs{
+height:55vh;
+overflow:auto;
+padding:10px 0;
+display:flex;
+flex-direction:column;
+gap:8px
+}
+
+.chatbar{
+position:sticky;
+bottom:0;
+background:#fff;
+border-top:1px solid var(--line);
+padding:9px 0;
+display:flex;
+gap:7px
+}
+
+.chatbar input{
+flex:1;
+border:1px solid var(--line);
+border-radius:14px;
+padding:12px
+}
+
+.offer{
+border:1px solid #b8dfc5;
+background:#f1faf4;
+border-radius:14px;
+padding:10px;
+font-weight:900
+}
+
+.bottom{
+position:fixed;
+bottom:0;
+left:50%;
+transform:translateX(-50%);
+width:min(560px,100%);
+z-index:30;
+background:#fff;
+border-top:1px solid var(--line);
+display:grid;
+grid-template-columns:repeat(5,1fr);
+padding:7px 4px calc(7px + env(safe-area-inset-bottom));
+box-shadow:0 -8px 25px #001a0d10
+}
+
+.nav{
+border:0;
+background:#fff;
+color:#66736c;
+font-size:9px;
+font-weight:800
+}
+
+.nav i{
+font-style:normal;
+font-size:20px;
+display:block
+}
+
+.nav.active{
+color:var(--g)
+}
+
+.empty{
+text-align:center;
+padding:28px;
+color:var(--muted)
+}
+
+.modal{
+position:fixed;
+inset:0;
+background:#001a0d88;
+z-index:50;
+display:none;
+align-items:flex-end
+}
+
+.modal.show{display:flex}
+
+.sheet{
+width:min(560px,100%);
+max-height:92vh;
+overflow:auto;
+background:#fff;
+border-radius:25px 25px 0 0;
+padding:15px
+}
+
+.close{
+float:right;
+border:0;
+background:#edf5ef;
+border-radius:99px;
+width:35px;
+height:35px
+}
+
+.two{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:8px
+}
+
+.dangerText{
+color:#c83425
+}
+
+.small{
+font-size:10px
+}
+
+.tabs2{
+display:flex;
+gap:7px;
+overflow:auto;
+margin:8px 0
+}
+
+.tabs2 button{
+white-space:nowrap;
+border:1px solid var(--line);
+background:#fff;
+border-radius:99px;
+padding:8px 11px;
+font-size:10px;
+font-weight:800
+}
+
+.tabs2 button.on{
+background:var(--gd);
+color:#fff
+}
+
+/* =========================
+   SELLER DASHBOARD
+========================= */
+
+.dashboardHero{
+background:linear-gradient(135deg,#063d25,#0da04b);
+color:#fff;
+border-radius:20px;
+padding:18px;
+margin-bottom:12px
+}
+
+.dashboardHero h2{
+margin:0 0 5px;
+font-size:22px
+}
+
+.dashboardHero p{
+margin:0;
+font-size:11px;
+opacity:.9
+}
+
+.dashboardPeriod{
+display:flex;
+gap:7px;
+overflow:auto;
+margin:12px 0
+}
+
+.dashboardPeriod button{
+white-space:nowrap;
+border:1px solid var(--line);
+background:#fff;
+border-radius:99px;
+padding:9px 13px;
+font-size:10px;
+font-weight:900
+}
+
+.dashboardPeriod button.active{
+background:var(--gd);
+color:#fff;
+border-color:var(--gd)
+}
+
+.metrics{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:9px
+}
+
+.metric{
+border:1px solid var(--line);
+border-radius:17px;
+padding:13px;
+background:#fff
+}
+
+.metric .icon{
+font-size:19px;
+margin-bottom:7px
+}
+
+.metric .label{
+font-size:10px;
+color:var(--muted);
+font-weight:800
+}
+
+.metric .value{
+font-size:17px;
+font-weight:1000;
+color:var(--ink);
+margin-top:4px;
+line-height:1.2
+}
+
+.metric.green .value{
+color:var(--g)
+}
+
+.metric.red .value{
+color:var(--red)
+}
+
+.wallet{
+background:linear-gradient(135deg,#f0faf4,#fff);
+border:1px solid #b9ddc7;
+border-radius:20px;
+padding:16px;
+margin-top:10px
+}
+
+.walletTitle{
+font-weight:1000;
+font-size:15px;
+margin-bottom:4px
+}
+
+.walletBalance{
+font-size:29px;
+font-weight:1000;
+color:var(--g);
+margin:7px 0
+}
+
+.walletInfo{
+font-size:10px;
+color:var(--muted);
+line-height:1.45
+}
+
+.chart{
+height:190px;
+border:1px solid var(--line);
+border-radius:18px;
+padding:15px;
+display:flex;
+align-items:flex-end;
+gap:7px;
+overflow:hidden;
+background:#fff
+}
+
+.barWrap{
+height:150px;
+flex:1;
+display:flex;
+flex-direction:column;
+justify-content:flex-end;
+align-items:center;
+gap:5px;
+min-width:22px
+}
+
+.bar{
+width:100%;
+max-width:35px;
+background:linear-gradient(180deg,#12a34a,#075b35);
+border-radius:7px 7px 2px 2px;
+min-height:3px
+}
+
+.barLabel{
+font-size:8px;
+color:var(--muted);
+white-space:nowrap
+}
+
+.topProduct{
+display:flex;
+align-items:center;
+gap:10px;
+padding:11px 0;
+border-bottom:1px solid var(--line)
+}
+
+.topProduct:last-child{
+border-bottom:0
+}
+
+.rank{
+width:27px;
+height:27px;
+border-radius:9px;
+background:#eaf7ef;
+display:grid;
+place-items:center;
+font-weight:1000;
+color:var(--g)
+}
+
+.topProductInfo{
+flex:1
+}
+
+.topProductName{
+font-size:12px;
+font-weight:900
+}
+
+.topProductMeta{
+font-size:10px;
+color:var(--muted);
+margin-top:3px
+}
+
+.topProductValue{
+font-size:11px;
+font-weight:1000;
+color:var(--g)
+}
+
+.sellerOrder{
+border:1px solid var(--line);
+border-radius:17px;
+padding:13px;
+margin:9px 0;
+background:#fff
+}
+
+.sellerOrderHead{
+display:flex;
+justify-content:space-between;
+gap:8px
+}
+
+.sellerOrder select{
+margin-top:9px;
+width:100%;
+padding:10px;
+border:1px solid var(--line);
+border-radius:11px;
+background:#fff
+}
+
+.historyRow{
+padding:11px 0;
+border-bottom:1px solid var(--line)
+}
+
+.historyRow:last-child{
+border-bottom:0
+}
+
+.historyMain{
+display:flex;
+justify-content:space-between;
+gap:10px
+}
+
+.historyName{
+font-size:11px;
+font-weight:900
+}
+
+.historyAmount{
+font-size:11px;
+font-weight:1000;
+color:var(--g)
+}
+
+.historyMeta{
+font-size:9px;
+color:var(--muted);
+margin-top:4px
+}
+
+.sectionTitle{
+font-size:15px;
+font-weight:1000;
+margin:18px 0 9px
+}
+
+.commissionNote{
+font-size:10px;
+background:#fff8d9;
+border:1px solid #f0dd8a;
+padding:9px 11px;
+border-radius:11px;
+line-height:1.4;
+margin-top:8px
+}
+
+@media(min-width:700px){
+body{padding:20px 0}
+.app{
+border-radius:28px;
+overflow:hidden;
+box-shadow:0 20px 60px #0005
+}
 }
 </style>
 </head>
@@ -1434,3594 +964,3343 @@ img{
 
 <div class="app">
 
-<header class="topbar">
-  <div class="topbar-inner">
-    <div class="logo">
-      <div class="logo-mark">K</div>
-      <div>
-        <div class="logo-text">KUANZA LINE</div>
-        <div class="logo-sub">Compra. Vende. Confia.</div>
-      </div>
-    </div>
+<header class="top">
+<div class="brand">
 
-    <div class="top-actions">
-      <button class="icon-btn" onclick="showNotifications()">🔔</button>
-      <button class="icon-btn" onclick="go('account')">👤</button>
-    </div>
-  </div>
+<div class="logo">K</div>
+
+<div>
+<b>KUANZA <span>LINE</span></b>
+<div class="tag">Compra. Vende. Confia.</div>
+</div>
+
+<button class="bell" onclick="showNotifications()">
+🔔
+<span id="notifBadge" class="badge">0</span>
+</button>
+
+</div>
 </header>
 
-<main id="appContent"></main>
 
-<nav class="bottom-nav">
-  <button class="nav-btn active" id="nav-home" onclick="go('home')">
-    <span class="nav-icon">⌂</span>
-    <span>Início</span>
-  </button>
+<main>
 
-  <button class="nav-btn" id="nav-explore" onclick="go('explore')">
-    <span class="nav-icon">🔎</span>
-    <span>Explorar</span>
-  </button>
+<!-- HOME -->
 
-  <button class="nav-btn" id="nav-sell" onclick="go('sell')">
-    <span class="nav-icon">＋</span>
-    <span>Vender</span>
-  </button>
+<section id="home" class="page on">
 
-  <button class="nav-btn" id="nav-orders" onclick="go('orders')">
-    <span class="nav-icon">📦</span>
-    <span>Pedidos</span>
-  </button>
+<div class="search">
 
-  <button class="nav-btn" id="nav-account" onclick="go('account')">
-    <span class="nav-icon">👤</span>
-    <span>Conta</span>
-  </button>
+<input
+id="q"
+placeholder="O que estás à procura?"
+oninput="loadProducts()">
+
+<button class="iconbtn" onclick="loadProducts()">⌕</button>
+
+</div>
+
+
+<div class="hero">
+
+<h1>Compra com confiança.</h1>
+
+<p>
+Produtos reais, vendedores verificados
+e uma experiência feita para Angola.
+</p>
+
+<button
+class="btn light"
+onclick="go('explore')">
+Explorar produtos
+</button>
+
+</div>
+
+
+<div class="quick">
+
+<button onclick="go('explore');filterCat('Eletrónicos')">
+<i>▦</i>
+Categorias
+</button>
+
+<button onclick="go('store')">
+<i>🏪</i>
+Lojas
+</button>
+
+<button onclick="go('favorites')">
+<i>♥</i>
+Favoritos
+</button>
+
+<button onclick="go('cart')">
+<i>🛒</i>
+Carrinho
+</button>
+
+<button onclick="go('seller')">
+<i>▥</i>
+Vendedor
+</button>
+
+</div>
+
+
+<div class="head">
+
+<h3>Em destaque</h3>
+
+<button class="link" onclick="go('explore')">
+Ver todos
+</button>
+
+</div>
+
+<div id="homeProducts" class="grid"></div>
+
+</section>
+
+
+<!-- EXPLORE -->
+
+<section id="explore" class="page">
+
+<div class="head">
+
+<h3>🔎 Explorar</h3>
+
+<select
+id="sort"
+onchange="loadProducts()"
+style="border:1px solid var(--line);border-radius:10px;padding:8px">
+
+<option value="">Relevantes</option>
+<option value="low">Menor preço</option>
+<option value="high">Maior preço</option>
+
+</select>
+
+</div>
+
+
+<div class="search">
+
+<input
+id="eq"
+placeholder="Pesquisar produtos ou lojas"
+oninput="loadProducts()">
+
+</div>
+
+
+<div id="cats" class="chiprow"></div>
+
+<div
+id="exploreProducts"
+class="grid"
+style="margin-top:12px">
+</div>
+
+</section>
+
+
+<!-- PRODUCT -->
+
+<section id="product" class="page">
+
+<div id="productBox"></div>
+
+</section>
+
+
+<!-- STORE -->
+
+<section id="store" class="page">
+
+<div id="storeBox"></div>
+
+</section>
+
+
+<!-- FAVORITES -->
+
+<section id="favorites" class="page">
+
+<div class="head">
+
+<h3>♥ Meus favoritos</h3>
+
+</div>
+
+<div id="favBox"></div>
+
+</section>
+
+
+<!-- CART -->
+
+<section id="cart" class="page">
+
+<div class="head">
+
+<h3>🛒 Meu carrinho</h3>
+
+</div>
+
+<div id="cartBox"></div>
+
+</section>
+
+
+<!-- ACCOUNT -->
+
+<section id="account" class="page">
+
+<div id="accountBox"></div>
+
+</section>
+
+
+<!-- SELLER -->
+
+<section id="seller" class="page">
+
+<div id="sellerBox"></div>
+
+</section>
+
+
+<!-- ORDERS -->
+
+<section id="orders" class="page">
+
+<div class="head">
+
+<h3>📦 Meus pedidos</h3>
+
+</div>
+
+<div id="ordersBox"></div>
+
+</section>
+
+
+<!-- CHATS -->
+
+<section id="chats" class="page">
+
+<div id="chatListBox"></div>
+
+</section>
+
+
+<!-- CHAT -->
+
+<section id="chat" class="page">
+
+<div id="chatBox"></div>
+
+</section>
+
+</main>
+
+
+<nav class="bottom">
+
+<button
+class="nav active"
+data-p="home"
+onclick="go('home')">
+
+<i>⌂</i>
+Início
+
+</button>
+
+
+<button
+class="nav"
+data-p="explore"
+onclick="go('explore')">
+
+<i>▦</i>
+Categorias
+
+</button>
+
+
+<button
+class="nav"
+data-p="favorites"
+onclick="go('favorites')">
+
+<i>♡</i>
+Favoritos
+
+</button>
+
+
+<button
+class="nav"
+data-p="cart"
+onclick="go('cart')">
+
+<i>🛒</i>
+Carrinho
+
+</button>
+
+
+<button
+class="nav"
+data-p="account"
+onclick="go('account')">
+
+<i>♙</i>
+Perfil
+
+</button>
+
 </nav>
 
 </div>
 
-<div id="toast" class="toast"></div>
 
-<div id="modal" class="modal hidden" onclick="modalBackground(event)">
-  <div class="modal-box" id="modalBox"></div>
+<div
+id="modal"
+class="modal">
+
+<div class="sheet">
+
+<button
+class="close"
+onclick="closeModal()">
+✕
+</button>
+
+<div id="modalBody"></div>
+
 </div>
 
-<script>
-  let token = localStorage.getItem('kuanza_token') || '';
-let me = null;
-let products = [];
-let cart = JSON.parse(localStorage.getItem('kuanza_cart') || '[]');
-let favorites = JSON.parse(localStorage.getItem('kuanza_favorites') || '[]');
-let currentProduct = null;
-let currentConversation = null;
-let selectedPhotos = [];
+</div>
 
-const categories = [
-  'Todos',
-  'Telemóveis',
-  'Eletrónicos',
-  'Moda',
-  'Casa',
-  'Beleza',
-  'Calçados',
-  'Acessórios',
-  'Automóveis',
-  'Outros'
+
+<div id="toast" class="toast"></div>
+
+
+<script>
+
+let token =
+localStorage.klToken || '';
+
+let me = null;
+
+let currentProduct = null;
+
+let currentConversation = null;
+
+let activeCat = 'Todos';
+
+let photoData = [];
+
+let dashboardPeriod = '30';
+
+
+const $ =
+id => document.getElementById(id);
+
+
+const money =
+n =>
+new Intl.NumberFormat('pt-PT')
+.format(Number(n)||0)+' Kz';
+
+
+const esc =
+v =>
+String(v??'')
+.replace(/[&<>"']/g,m=>({
+'&':'&amp;',
+'<':'&lt;',
+'>':'&gt;',
+'"':'&quot;',
+"'":'&#39;'
+}[m]));
+
+
+async function api(p,o={}){
+
+const h={
+'Content-Type':'application/json'
+};
+
+if(token)
+h.Authorization='Bearer '+token;
+
+const r =
+await fetch(
+p,
+{
+...o,
+headers:{
+...h,
+...(o.headers||{})
+}
+});
+
+const t =
+await r.text();
+
+let d={};
+
+try{
+d=t?JSON.parse(t):{}
+}
+catch{
+d={error:t}
+}
+
+if(!r.ok)
+throw Error(d.error||'Erro');
+
+return d;
+
+}
+
+
+function toast(t){
+
+$('toast').textContent=t;
+
+$('toast').classList.add('on');
+
+setTimeout(
+()=>$('toast').classList.remove('on'),
+2400
+);
+
+}
+
+
+function go(id){
+
+document
+.querySelectorAll('.page')
+.forEach(
+x =>
+x.classList.toggle(
+'on',
+x.id===id
+)
+);
+
+document
+.querySelectorAll('.nav')
+.forEach(
+x =>
+x.classList.toggle(
+'active',
+x.dataset.p===id
+)
+);
+
+if(id==='home')
+loadProducts();
+
+if(id==='explore'){
+renderCats();
+loadProducts();
+}
+
+if(id==='favorites')
+loadFavorites();
+
+if(id==='cart')
+loadCart();
+
+if(id==='account')
+loadAccount();
+
+if(id==='seller')
+loadSeller();
+
+if(id==='orders')
+loadOrders();
+
+if(id==='chats')
+loadChats();
+
+scrollTo(0,0);
+
+}
+
+
+const categories=[
+'Todos',
+'Eletrónicos',
+'Moda',
+'Casa',
+'Beleza',
+'Automóveis',
+'Outros'
 ];
 
-function money(value){
-  return Number(value || 0).toLocaleString('pt-AO') + ' Kz';
-}
 
-function esc(value){
-  return String(value ?? '')
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
-    .replace(/'/g,'&#039;');
-}
-
-function toast(message){
-  const el = document.getElementById('toast');
-  el.textContent = message;
-  el.classList.add('on');
-
-  clearTimeout(window.toastTimer);
-
-  window.toastTimer = setTimeout(()=>{
-    el.classList.remove('on');
-  },2600);
-}
-
-async function api(path, options={}){
-  const headers = {
-    'Content-Type':'application/json',
-    ...(options.headers || {})
-  };
-
-  if(token){
-    headers.Authorization = 'Bearer ' + token;
-  }
-
-  const response = await fetch(API + path,{
-    ...options,
-    headers
-  });
-
-  const text = await response.text();
-
-  let data = {};
-
-  try{
-    data = text ? JSON.parse(text) : {};
-  }catch{
-    data = {message:text};
-  }
-
-  if(!response.ok){
-    throw new Error(data.message || data.error || 'Ocorreu um erro.');
-  }
-
-  return data;
-}
-
-function saveCart(){
-  localStorage.setItem('kuanza_cart',JSON.stringify(cart));
-}
-
-function saveFavorites(){
-  localStorage.setItem('kuanza_favorites',JSON.stringify(favorites));
-}
-
-function setActiveNav(id){
-  document.querySelectorAll('.nav-btn').forEach(btn=>{
-    btn.classList.remove('active');
-  });
-
-  const el = document.getElementById('nav-' + id);
-
-  if(el){
-    el.classList.add('active');
-  }
-}
-
-async function go(id){
-  setActiveNav(id);
-
-  if(id === 'home'){
-    await loadHome();
-  }
-
-  if(id === 'explore'){
-    await loadExplore();
-  }
-
-  if(id === 'sell'){
-    await loadSell();
-  }
-
-  if(id === 'orders'){
-    await loadOrders();
-  }
-
-  if(id === 'account'){
-    await loadAccount();
-  }
-
-  if(id === 'store'){
-    await loadStore();
-  }
-
-  if(id === 'favorites'){
-    await loadFavorites();
-  }
-
-  if(id === 'cart'){
-    await loadCart();
-  }
-
-  if(id === 'dashboard'){
-    await loadDashboard();
-  }
-
-  if(id === 'conversations'){
-    await loadConversations();
-  }
-}
-
-async function loadHome(){
-  const root = document.getElementById('appContent');
-
-  root.innerHTML = `
-    <div class="page">
-
-      <section class="hero">
-        <h1>Compra. Vende. Confia.</h1>
-        <p>
-          O marketplace feito para aproximar compradores e vendedores
-          em Angola com mais segurança e confiança.
-        </p>
-      </section>
-
-      <div class="search-box">
-        <input id="homeSearch" placeholder="O que estás à procura?">
-        <button onclick="searchFromHome()">Pesquisar</button>
-      </div>
-
-      <div class="section-title">
-        <h2>Categorias</h2>
-        <span onclick="go('explore')">Ver tudo</span>
-      </div>
-
-      <div class="categories">
-        ${categories.map((c,i)=>`
-          <button class="category ${i===0?'active':''}"
-            onclick="filterCategory('${esc(c)}')">
-            ${esc(c)}
-          </button>
-        `).join('')}
-      </div>
-
-      <div class="quick-grid">
-
-        <button class="quick" onclick="go('sell')">
-          <span class="emoji">🏪</span>
-          Vender produto
-          <small>Cria a tua loja</small>
-        </button>
-
-        <button class="quick" onclick="go('favorites')">
-          <span class="emoji">❤️</span>
-          Favoritos
-          <small>Produtos guardados</small>
-        </button>
-
-        <button class="quick" onclick="go('cart')">
-          <span class="emoji">🛒</span>
-          Carrinho
-          <small>${cart.length} produto(s)</small>
-        </button>
-
-        <button class="quick" onclick="go('account')">
-          <span class="emoji">🛡️</span>
-          Kuanza Score
-          <small>Compra com confiança</small>
-        </button>
-
-      </div>
-
-      <div class="section-title">
-        <h2>Produtos em destaque</h2>
-        <span onclick="go('explore')">Explorar</span>
-      </div>
-
-      <div id="homeProducts" class="products">
-        <div class="empty">A carregar produtos...</div>
-      </div>
-
-    </div>
-  `;
-
-  try{
-    const data = await api('/api/products');
-
-    products = Array.isArray(data)
-      ? data
-      : (data.products || []);
-
-    renderProducts(products,'homeProducts');
-
-  }catch(e){
-    document.getElementById('homeProducts').innerHTML =
-      `<div class="empty">Não foi possível carregar os produtos.</div>`;
-  }
-}
-
-function renderProducts(list,targetId){
-  const target = document.getElementById(targetId);
-
-  if(!target) return;
-
-  if(!list.length){
-    target.innerHTML = `
-      <div class="empty" style="grid-column:1/-1">
-        <div class="emoji">📦</div>
-        <strong>Nenhum produto encontrado</strong>
-        <p class="small mt">Tenta outra pesquisa ou categoria.</p>
-      </div>
-    `;
-    return;
-  }
-
-  target.innerHTML = list.map(productCard).join('');
-}
-
-function productCard(p){
-  const image =
-    p.images?.[0] ||
-    p.image ||
-    'https://placehold.co/600x600?text=Kuanza+Line';
-
-  const favorite = favorites.includes(p.id);
-
-  return `
-    <article class="product-card">
-
-      <button class="card-heart"
-        onclick="event.stopPropagation();toggleFavorite('${esc(p.id)}')">
-        ${favorite ? '❤️' : '♡'}
-      </button>
-
-      <img
-        class="product-image"
-        src="${image}"
-        alt="${esc(p.name)}"
-        onclick="openProduct('${esc(p.id)}')"
-      >
-
-      <div class="product-body" onclick="openProduct('${esc(p.id)}')">
-
-        <div class="product-name">${esc(p.name || 'Produto')}</div>
-
-        <div class="price">${money(p.price)}</div>
-
-        <div class="product-meta">
-          ${esc(p.category || 'Outros')}
-        </div>
-
-        ${
-          p.seller?.verified || p.verified
-          ? `<div class="mt"><span class="badge">✓ Verificado</span></div>`
-          : ''
-        }
-
-      </div>
-    </article>
-  `;
-}
-
-function searchFromHome(){
-  const value = document.getElementById('homeSearch')?.value || '';
-
-  go('explore').then(()=>{
-    const input = document.getElementById('exploreSearch');
-
-    if(input){
-      input.value = value;
-      applyExploreFilters();
-    }
-  });
-}
-
-async function loadExplore(){
-  const root = document.getElementById('appContent');
-
-  root.innerHTML = `
-    <div class="page">
-
-      <div class="section-title">
-        <h2>Explorar</h2>
-      </div>
-
-      <div class="search-box">
-        <input
-          id="exploreSearch"
-          placeholder="Pesquisar produtos..."
-          oninput="applyExploreFilters()"
-        >
-
-        <button onclick="applyExploreFilters()">
-          Pesquisar
-        </button>
-      </div>
-
-      <div class="categories">
-        ${categories.map((c,i)=>`
-          <button
-            class="category ${i===0?'active':''}"
-            data-category="${esc(c)}"
-            onclick="selectExploreCategory('${esc(c)}')"
-          >
-            ${esc(c)}
-          </button>
-        `).join('')}
-      </div>
-
-      <div class="sort-row">
-        <select id="exploreSort" onchange="applyExploreFilters()">
-          <option value="recent">Mais recentes</option>
-          <option value="price_asc">Menor preço</option>
-          <option value="price_desc">Maior preço</option>
-          <option value="name">Nome</option>
-        </select>
-      </div>
-
-      <div id="exploreProducts" class="products">
-        <div class="empty">A carregar produtos...</div>
-      </div>
-
-    </div>
-  `;
-
-  try{
-    const data = await api('/api/products');
-
-    products = Array.isArray(data)
-      ? data
-      : (data.products || []);
-
-    applyExploreFilters();
-
-  }catch(e){
-    document.getElementById('exploreProducts').innerHTML =
-      `<div class="empty">Não foi possível carregar os produtos.</div>`;
-  }
-}
-
-let exploreCategory = 'Todos';
-
-function selectExploreCategory(category){
-  exploreCategory = category;
-
-  document.querySelectorAll('[data-category]').forEach(btn=>{
-    btn.classList.toggle(
-      'active',
-      btn.dataset.category === category
-    );
-  });
-
-  applyExploreFilters();
-}
-
-function filterCategory(category){
-  exploreCategory = category;
-  go('explore');
-}
-
-function applyExploreFilters(){
-  const search =
-    (document.getElementById('exploreSearch')?.value || '')
-      .trim()
-      .toLowerCase();
-
-  const sort =
-    document.getElementById('exploreSort')?.value || 'recent';
-
-  let list = [...products];
-
-  if(search){
-    list = list.filter(p=>{
-      const text = [
-        p.name,
-        p.description,
-        p.category,
-        p.location
-      ].join(' ').toLowerCase();
-
-      return text.includes(search);
-    });
-  }
-
-  if(exploreCategory && exploreCategory !== 'Todos'){
-    list = list.filter(p =>
-      String(p.category || 'Outros') === exploreCategory
-    );
-  }
-
-  if(sort === 'price_asc'){
-    list.sort((a,b)=>Number(a.price||0)-Number(b.price||0));
-  }
-
-  if(sort === 'price_desc'){
-    list.sort((a,b)=>Number(b.price||0)-Number(a.price||0));
-  }
-
-  if(sort === 'name'){
-    list.sort((a,b)=>
-      String(a.name||'').localeCompare(
-        String(b.name||''),
-        'pt'
-      )
-    );
-  }
-
-  renderProducts(list,'exploreProducts');
-}
-
-async function openProduct(id){
-  const product =
-    products.find(p=>String(p.id) === String(id));
-
-  if(!product) return;
-
-  currentProduct = product;
-
-  const modal = document.getElementById('modal');
-
-  const images =
-    product.images?.length
-      ? product.images
-      : [product.image || 'https://placehold.co/600x600?text=Kuanza+Line'];
-
-  const seller =
-    product.seller || {};
-
-  modal.innerHTML = `
-    <div class="modal-card">
-
-      <button class="modal-close" onclick="closeModal()">×</button>
-
-      <div class="gallery">
-        <img
-          id="mainProductImage"
-          src="${images[0]}"
-          class="main-product-image"
-        >
-
-        <div class="thumbs">
-          ${images.map((img,i)=>`
-            <img
-              src="${img}"
-              onclick="document.getElementById('mainProductImage').src='${img}'"
-              class="${i===0?'selected':''}"
-            >
-          `).join('')}
-        </div>
-      </div>
-
-      <div class="modal-content">
-
-        <div class="product-name big">
-          ${esc(product.name || 'Produto')}
-        </div>
-
-        <div class="price big">
-          ${money(product.price)}
-        </div>
-
-        <div class="product-meta">
-          ${esc(product.category || 'Outros')}
-        </div>
-
-        <div class="divider"></div>
-
-        <h3>Descrição</h3>
-
-        <p>
-          ${esc(product.description || 'Sem descrição.')}
-        </p>
-
-        <div class="seller-box">
-
-          <div>
-            <strong>${esc(seller.name || product.sellerName || 'Vendedor')}</strong>
-
-            ${
-              seller.verified || product.verified
-              ? `<span class="badge">✓ Verificado</span>`
-              : ''
-            }
-          </div>
-
-          <div class="small">
-            Kuanza Score:
-            <strong>${seller.score ?? product.sellerScore ?? '—'}</strong>
-          </div>
-
-        </div>
-
-        <div class="modal-actions">
-
-          <button class="btn secondary"
-            onclick="toggleFavorite('${esc(product.id)}')">
-            ❤️ Favoritar
-          </button>
-
-          <button class="btn secondary"
-            onclick="openChatWithSeller()">
-            💬 Falar com vendedor
-          </button>
-
-          <button class="btn primary"
-            onclick="addToCart('${esc(product.id)}')">
-            🛒 Adicionar ao carrinho
-          </button>
-
-        </div>
-
-      </div>
-
-    </div>
-  `;
-
-  modal.classList.add('show');
-}
-
-function closeModal(){
-  document.getElementById('modal')?.classList.remove('show');
-}
-
-function toggleFavorite(id){
-  const index = favorites.indexOf(id);
-
-  if(index >= 0){
-    favorites.splice(index,1);
-    toast('Removido dos favoritos.');
-  }else{
-    favorites.push(id);
-    toast('Adicionado aos favoritos.');
-  }
-
-  saveFavorites();
-
-  if(currentProduct){
-    openProduct(currentProduct.id);
-  }
-}
-
-function addToCart(id){
-  const product =
-    products.find(p=>String(p.id) === String(id));
-
-  if(!product){
-    toast('Produto não encontrado.');
-    return;
-  }
-
-  const existing = cart.find(
-    item=>String(item.id) === String(id)
-  );
-
-  if(existing){
-    existing.quantity = Number(existing.quantity || 1) + 1;
-  }else{
-    cart.push({
-      id:product.id,
-      name:product.name,
-      price:Number(product.price || 0),
-      image:product.images?.[0] || product.image || '',
-      sellerId:product.sellerId || product.seller?.id || null,
-      quantity:1
-    });
-  }
-
-  saveCart();
-  toast('Produto adicionado ao carrinho.');
-}
-
-function removeFromCart(id){
-  cart = cart.filter(
-    item=>String(item.id) !== String(id)
-  );
-
-  saveCart();
-  loadCart();
-}
-
-function changeCartQty(id,delta){
-  const item = cart.find(
-    item=>String(item.id) === String(id)
-  );
-
-  if(!item) return;
-
-  item.quantity =
-    Math.max(1,Number(item.quantity || 1) + delta);
-
-  saveCart();
-  loadCart();
-}
-
-async function loadCart(){
-  const root = document.getElementById('appContent');
-
-  const total = cart.reduce(
-    (sum,item)=>
-      sum + Number(item.price||0) * Number(item.quantity||1),
-    0
-  );
-
-  root.innerHTML = `
-    <div class="page">
-
-      <div class="section-title">
-        <h2>Meu carrinho</h2>
-      </div>
-
-      ${
-        cart.length
-        ? `
-          <div class="cart-list">
-
-            ${cart.map(item=>`
-              <div class="cart-item">
-
-                <img
-                  src="${item.image || 'https://placehold.co/200x200?text=Produto'}"
-                  class="cart-image"
-                >
-
-                <div class="cart-info">
-
-                  <strong>${esc(item.name)}</strong>
-
-                  <div class="price">
-                    ${money(item.price)}
-                  </div>
-
-                  <div class="qty">
-
-                    <button onclick="changeCartQty('${esc(item.id)}',-1)">
-                      −
-                    </button>
-
-                    <span>${item.quantity}</span>
-
-                    <button onclick="changeCartQty('${esc(item.id)}',1)">
-                      +
-                    </button>
-
-                  </div>
-
-                  <button
-                    class="link danger"
-                    onclick="removeFromCart('${esc(item.id)}')"
-                  >
-                    Remover
-                  </button>
-
-                </div>
-
-              </div>
-            `).join('')}
-
-          </div>
-
-          <div class="checkout-box">
-
-            <div class="summary-line">
-              <span>Total</span>
-              <strong>${money(total)}</strong>
-            </div>
-
-            <button
-              class="btn primary full"
-              onclick="checkout()"
-            >
-              Finalizar compra
-            </button>
-
-          </div>
-        `
-        : `
-          <div class="empty">
-
-            <div class="emoji">🛒</div>
-
-            <strong>O teu carrinho está vazio.</strong>
-
-            <p class="small mt">
-              Adiciona produtos para começar.
-            </p>
-
-            <button
-              class="btn primary mt"
-              onclick="go('explore')"
-            >
-              Explorar produtos
-            </button>
-
-          </div>
-        `
-      }
-
-    </div>
-  `;
-}
-  async function checkout(){
-
-  if(!token){
-    toast('Inicia sessão para finalizar a compra.');
-    go('account');
-    return;
-  }
-
-  if(!cart.length){
-    toast('O carrinho está vazio.');
-    return;
-  }
-
-  const total = cart.reduce(
-    (sum,item)=>
-      sum + Number(item.price||0) * Number(item.quantity||1),
-    0
-  );
-
-  const confirmed = confirm(
-    'Confirmar compra de ' + money(total) + '?'
-  );
-
-  if(!confirmed) return;
-
-  try{
-
-    for(const item of cart){
-
-      await api('/api/orders',{
-        method:'POST',
-        body:JSON.stringify({
-          productId:item.id,
-          quantity:Number(item.quantity||1)
-        })
-      });
-
-    }
-
-    cart = [];
-    saveCart();
-
-    toast('Compra realizada com sucesso!');
-
-    await go('orders');
-
-  }catch(e){
-
-    toast(e.message || 'Não foi possível finalizar a compra.');
-
-  }
-}
-
-async function loadOrders(){
-
-  const root = document.getElementById('appContent');
-
-  if(!token){
-
-    root.innerHTML = `
-      <div class="page">
-
-        <div class="empty">
-
-          <div class="emoji">📦</div>
-
-          <strong>Entra na tua conta</strong>
-
-          <p class="small mt">
-            Inicia sessão para veres as tuas compras.
-          </p>
-
-          <button
-            class="btn primary mt"
-            onclick="go('account')"
-          >
-            Entrar
-          </button>
-
-        </div>
-
-      </div>
-    `;
-
-    return;
-  }
-
-  root.innerHTML = `
-    <div class="page">
-
-      <div class="section-title">
-        <h2>Minhas encomendas</h2>
-      </div>
-
-      <div id="ordersList">
-        <div class="empty">A carregar encomendas...</div>
-      </div>
-
-    </div>
-  `;
-
-  try{
-
-    const data = await api('/api/orders');
-
-    const orders =
-      Array.isArray(data)
-      ? data
-      : (data.orders || []);
-
-    const target =
-      document.getElementById('ordersList');
-
-    if(!orders.length){
-
-      target.innerHTML = `
-        <div class="empty">
-
-          <div class="emoji">📦</div>
-
-          <strong>Ainda não tens encomendas.</strong>
-
-          <p class="small mt">
-            Quando fizeres uma compra, ela aparecerá aqui.
-          </p>
-
-        </div>
-      `;
-
-      return;
-    }
-
-    target.innerHTML = orders.map(order=>`
-
-      <div class="order-card">
-
-        <div class="order-head">
-
-          <strong>
-            ${esc(
-              order.productName ||
-              order.product?.name ||
-              'Produto'
-            )}
-          </strong>
-
-          <span class="status">
-            ${esc(order.status || 'pending')}
-          </span>
-
-        </div>
-
-        <div class="order-body">
-
-          <div>
-            <span class="small">Quantidade</span>
-            <strong>${order.quantity || 1}</strong>
-          </div>
-
-          <div>
-            <span class="small">Total</span>
-            <strong>
-              ${money(
-                Number(order.total || order.price || 0)
-              )}
-            </strong>
-          </div>
-
-        </div>
-
-        <div class="small">
-          Pedido:
-          ${esc(order.id || '')}
-        </div>
-
-      </div>
-
-    `).join('');
-
-  }catch(e){
-
-    document.getElementById('ordersList').innerHTML =
-      `<div class="empty">
-        Não foi possível carregar as encomendas.
-      </div>`;
-
-  }
-}
-
-async function loadAccount(){
-
-  const root = document.getElementById('appContent');
-
-  if(!token){
-
-    root.innerHTML = `
-      <div class="page">
-
-        <div class="account-login">
-
-          <div class="logo-large">
-            K
-          </div>
-
-          <h2>Entra no Kuanza Line</h2>
-
-          <p class="small">
-            Compra e vende com mais confiança.
-          </p>
-
-          <div class="form">
-
-            <input
-              id="loginEmail"
-              type="email"
-              placeholder="Email"
-            >
-
-            <input
-              id="loginPassword"
-              type="password"
-              placeholder="Palavra-passe"
-            >
-
-            <button
-              class="btn primary full"
-              onclick="login()"
-            >
-              Entrar
-            </button>
-
-          </div>
-
-          <div class="divider"></div>
-
-          <h3>Criar conta</h3>
-
-          <div class="form">
-
-            <input
-              id="registerName"
-              placeholder="Nome"
-            >
-
-            <input
-              id="registerEmail"
-              type="email"
-              placeholder="Email"
-            >
-
-            <input
-              id="registerPassword"
-              type="password"
-              placeholder="Palavra-passe"
-            >
-
-            <select id="registerRole">
-
-              <option value="buyer">
-                Comprar
-              </option>
-
-              <option value="seller">
-                Vender
-              </option>
-
-            </select>
-
-            <button
-              class="btn secondary full"
-              onclick="register()"
-            >
-              Criar conta
-            </button>
-
-          </div>
-
-        </div>
-
-      </div>
-    `;
-
-    return;
-  }
-
-  try{
-
-    const data = await api('/api/me');
-
-    me = data.user || data;
-
-  }catch(e){
-
-    token = '';
-    localStorage.removeItem('kuanza_token');
-
-    toast('Sessão expirada.');
-
-    return loadAccount();
-  }
-
-  let scoreData = null;
-
-  try{
-
-    scoreData = await api('/api/me/score');
-
-  }catch(e){
-
-    scoreData = null;
-
-  }
-
-  const score =
-    scoreData?.score ??
-    me?.score ??
-    50;
-
-  const label =
-    scoreData?.label ??
-    me?.scoreLabel ??
-    'Regular';
-
-  const isSeller =
-    me?.role === 'seller';
-
-  root.innerHTML = `
-
-    <div class="page">
-
-      <div class="profile-card">
-
-        <div class="avatar">
-          ${esc(
-            (me.name || 'U')
-              .charAt(0)
-              .toUpperCase()
-          )}
-        </div>
-
-        <div class="profile-info">
-
-          <h2>
-            ${esc(me.name || 'Utilizador')}
-          </h2>
-
-          <p>
-            ${esc(me.email || '')}
-          </p>
-
-          <span class="badge">
-            ${isSeller ? 'Vendedor' : 'Comprador'}
-          </span>
-
-        </div>
-
-      </div>
-
-      <div class="score-box">
-
-        <div class="score-number">
-          ${score}
-        </div>
-
-        <div>
-
-          <strong>Kuanza Score</strong>
-
-          <div class="score-label">
-            ${esc(label)}
-          </div>
-
-          <p class="small">
-            O teu nível de confiança no marketplace.
-          </p>
-
-        </div>
-
-      </div>
-
-      <div class="account-grid">
-
-        <button
-          class="quick"
-          onclick="switchRole()"
-        >
-          <span class="emoji">🔄</span>
-
-          Mudar de conta
-
-          <small>
-            ${isSeller
-              ? 'Mudar para comprador'
-              : 'Mudar para vendedor'}
-          </small>
-
-        </button>
-
-        ${
-          isSeller
-          ? `
-            <button
-              class="quick"
-              onclick="go('store')"
-            >
-              <span class="emoji">🏪</span>
-              Minha loja
-              <small>Ver produtos</small>
-            </button>
-
-            <button
-              class="quick"
-              onclick="go('dashboard')"
-            >
-              <span class="emoji">📊</span>
-              Dashboard
-              <small>Ver vendas</small>
-            </button>
-          `
-          : ''
-        }
-
-        <button
-          class="quick"
-          onclick="go('orders')"
-        >
-          <span class="emoji">📦</span>
-          Encomendas
-          <small>Ver compras</small>
-        </button>
-
-        <button
-          class="quick"
-          onclick="go('favorites')"
-        >
-          <span class="emoji">❤️</span>
-          Favoritos
-          <small>Produtos guardados</small>
-        </button>
-
-        <button
-          class="quick"
-          onclick="go('conversations')"
-        >
-          <span class="emoji">💬</span>
-          Conversas
-          <small>Falar com vendedores</small>
-        </button>
-
-      </div>
-
-      <button
-        class="btn danger full mt"
-        onclick="logout()"
-      >
-        Terminar sessão
-      </button>
-
-    </div>
-
-  `;
+function renderCats(){
+
+$('cats').innerHTML =
+categories
+.map(
+c =>
+`<button
+class="chip ${c===activeCat?'sel':''}"
+onclick="filterCat('${esc(c)}')">
+${esc(c)}
+</button>`
+)
+.join('');
 
 }
 
-async function login(){
 
-  const email =
-    document.getElementById('loginEmail')?.value.trim();
+function filterCat(c){
 
-  const password =
-    document.getElementById('loginPassword')?.value;
+activeCat=c;
 
-  if(!email || !password){
+renderCats();
 
-    toast('Preenche email e palavra-passe.');
-
-    return;
-  }
-
-  try{
-
-    const data = await api('/api/login',{
-      method:'POST',
-      body:JSON.stringify({
-        email,
-        password
-      })
-    });
-
-    token = data.token;
-
-    localStorage.setItem(
-      'kuanza_token',
-      token
-    );
-
-    me = data.user || null;
-
-    toast('Bem-vindo ao Kuanza Line!');
-
-    await go('home');
-
-  }catch(e){
-
-    toast(
-      e.message ||
-      'Não foi possível iniciar sessão.'
-    );
-
-  }
-}
-
-async function register(){
-
-  const name =
-    document.getElementById('registerName')?.value.trim();
-
-  const email =
-    document.getElementById('registerEmail')?.value.trim();
-
-  const password =
-    document.getElementById('registerPassword')?.value;
-
-  const role =
-    document.getElementById('registerRole')?.value ||
-    'buyer';
-
-  if(!name || !email || !password){
-
-    toast('Preenche todos os campos.');
-
-    return;
-  }
-
-  try{
-
-    const data = await api('/api/register',{
-      method:'POST',
-      body:JSON.stringify({
-        name,
-        email,
-        password,
-        role
-      })
-    });
-
-    token = data.token;
-
-    localStorage.setItem(
-      'kuanza_token',
-      token
-    );
-
-    me = data.user || null;
-
-    toast('Conta criada com sucesso!');
-
-    await go('home');
-
-  }catch(e){
-
-    toast(
-      e.message ||
-      'Não foi possível criar a conta.'
-    );
-
-  }
-}
-
-function logout(){
-
-  token = '';
-
-  me = null;
-
-  localStorage.removeItem(
-    'kuanza_token'
-  );
-
-  toast('Sessão terminada.');
-
-  go('home');
+loadProducts();
 
 }
 
-async function switchRole(){
 
-  if(!token){
+async function loadProducts(){
 
-    toast('Inicia sessão primeiro.');
+try{
 
-    go('account');
+const q =
+$('explore')
+?.classList.contains('on')
+?
+($('eq')?.value||'')
+:
+($('q')?.value||'');
 
-    return;
-  }
+const sort =
+$('sort')?.value||'';
 
-  try{
-
-    const currentRole =
-      me && me.role === 'seller'
-      ? 'seller'
-      : 'buyer';
-
-    const newRole =
-      currentRole === 'seller'
-      ? 'buyer'
-      : 'seller';
-
-    await api('/api/me/role',{
-      method:'PATCH',
-      body:JSON.stringify({
-        role:newRole
-      })
-    });
-
-    const fresh =
-      await api('/api/me');
-
-    me =
-      fresh.user ||
-      fresh;
-
-    if(
-      !me ||
-      me.role !== newRole
-    ){
-
-      throw new Error(
-        'O servidor não confirmou a mudança de conta.'
-      );
-
-    }
-
-    toast(
-      newRole === 'seller'
-      ? 'Agora estás no modo vendedor.'
-      : 'Agora estás no modo comprador.'
-    );
-
-    await loadAccount();
-
-  }catch(e){
-
-    toast(
-      e.message ||
-      'Não foi possível mudar de conta.'
-    );
-
-  }
-
-}
-
-window.addEventListener(
-  'error',
-  function(event){
-
-    console.error(
-      'Kuanza Line error:',
-      event.error || event.message
-    );
-
-  }
+const ps =
+await api(
+'/api/products?search='+
+encodeURIComponent(q)+
+'&cat='+
+encodeURIComponent(activeCat)+
+'&sort='+
+encodeURIComponent(sort)
 );
-      if(input){
-      input.value = value;
-      runExploreSearch();
-    }
-  });
+
+const html =
+ps.map(card).join('') ||
+'<div class="empty" style="grid-column:1/-1">Nenhum produto encontrado.</div>';
+
+$('homeProducts').innerHTML =
+ps
+.slice(0,6)
+.map(card)
+.join('') ||
+'<div class="empty" style="grid-column:1/-1">Nenhum produto encontrado.</div>';
+
+$('exploreProducts').innerHTML=html;
+
+}
+catch(e){
+console.log(e);
 }
 
-function filterCategory(category){
-  go('explore').then(()=>{
-    const select = document.getElementById('exploreCategory');
-
-    if(select){
-      select.value = category;
-      runExploreSearch();
-    }
-  });
 }
 
-async function loadExplore(){
-  const root = document.getElementById('appContent');
 
-  root.innerHTML = `
-    <div class="page">
+function card(p){
 
-      <div class="section-title">
-        <h2>Explorar</h2>
-      </div>
+const img =
+p.photos?.[0]
+?
+`<img src="${p.photos[0]}" alt="">`
+:
+`<div class="pemoji">${esc(p.emoji||'📦')}</div>`;
 
-      <div class="search-box">
-        <input id="exploreSearch"
-          placeholder="Pesquisar produto..."
-          oninput="runExploreSearch()">
-        <button onclick="runExploreSearch()">🔎</button>
-      </div>
+return `
 
-      <div class="filters">
+<article
+class="product"
+onclick="openProduct('${p.id}')">
 
-        <select id="exploreCategory" onchange="runExploreSearch()">
-          ${categories.map(c=>`
-            <option value="${esc(c)}">${esc(c)}</option>
-          `).join('')}
-        </select>
+<div class="pimg">
 
-        <select id="exploreSort" onchange="runExploreSearch()">
-          <option value="recent">Mais recentes</option>
-          <option value="low">Menor preço</option>
-          <option value="high">Maior preço</option>
-        </select>
+${img}
 
-      </div>
+<button
+class="heart"
+onclick="event.stopPropagation();toggleFav('${p.id}',this)">
+♡
+</button>
 
-      <div id="exploreProducts" class="products">
-        <div class="empty">A carregar...</div>
-      </div>
+</div>
 
-    </div>
-  `;
 
-  try{
-    const data = await api('/api/products');
+<div class="info">
 
-    products = Array.isArray(data)
-      ? data
-      : (data.products || []);
+<div class="name">
+${esc(p.name)}
+</div>
 
-    runExploreSearch();
+<div class="price">
+${money(p.price)}
+</div>
 
-  }catch(e){
-    document.getElementById('exploreProducts').innerHTML =
-      `<div class="empty">Erro ao carregar produtos.</div>`;
-  }
+<div class="muted">
+${esc(p.seller)}
+${p.verified?
+'<span class="verify"> ✓</span>':
+''}
+</div>
+
+<div class="rating">
+⭐ ${p.rating||5}
+·
+<span class="verify">
+Kuanza ${p.score||100}/100
+</span>
+</div>
+
+</div>
+
+</article>
+
+`;
+
 }
 
-function runExploreSearch(){
-  const search =
-    (document.getElementById('exploreSearch')?.value || '')
-      .toLowerCase()
-      .trim();
-
-  const category =
-    document.getElementById('exploreCategory')?.value || 'Todos';
-
-  const sort =
-    document.getElementById('exploreSort')?.value || 'recent';
-
-  let list = [...products];
-
-  if(search){
-    list = list.filter(p =>
-      String(p.name || '').toLowerCase().includes(search) ||
-      String(p.description || '').toLowerCase().includes(search)
-    );
-  }
-
-  if(category !== 'Todos'){
-    list = list.filter(p =>
-      String(p.category || '').toLowerCase() === category.toLowerCase()
-    );
-  }
-
-  if(sort === 'low'){
-    list.sort((a,b)=>Number(a.price||0)-Number(b.price||0));
-  }
-
-  if(sort === 'high'){
-    list.sort((a,b)=>Number(b.price||0)-Number(a.price||0));
-  }
-
-  renderProducts(list,'exploreProducts');
-}
 
 async function openProduct(id){
-  let product = products.find(p=>String(p.id)===String(id));
 
-  if(!product){
-    try{
-      product = await api('/api/products/' + encodeURIComponent(id));
-    }catch(e){
-      toast(e.message);
-      return;
-    }
-  }
+try{
 
-  currentProduct = product;
+currentProduct =
+await api(
+'/api/products/'+id
+);
 
-  const images =
-    product.images?.length
-      ? product.images
-      : [product.image || 'https://placehold.co/800x800?text=Kuanza+Line'];
+renderProduct();
 
-  const seller = product.seller || {};
-
-  const score =
-    seller.score ??
-    seller.kuanzaScore ??
-    product.sellerScore ??
-    0;
-
-  document.getElementById('appContent').innerHTML = `
-    <div class="page">
-
-      <button class="btn btn-secondary mb" onclick="go('explore')">
-        ← Voltar
-      </button>
-
-      <img
-        id="mainProductImage"
-        class="detail-image"
-        src="${images[0]}"
-        alt="${esc(product.name)}"
-      >
-
-      <div class="gallery">
-        ${images.slice(0,5).map((img,i)=>`
-          <img
-            src="${img}"
-            class="${i===0?'active':''}"
-            onclick="changeMainImage('${img}',this)"
-          >
-        `).join('')}
-      </div>
-
-      <h1 class="detail-title">${esc(product.name)}</h1>
-
-      <div class="detail-price">${money(product.price)}</div>
-
-      <div class="wrap mt">
-        <span class="badge">${esc(product.category || 'Outros')}</span>
-
-        ${
-          product.verified
-          ? `<span class="badge">✓ Verificado</span>`
-          : ''
-        }
-      </div>
-
-      <div class="detail-description">
-        ${esc(product.description || 'O vendedor ainda não adicionou uma descrição.')}
-      </div>
-
-      <div class="action-row">
-
-        <button class="btn btn-primary"
-          onclick="addToCart('${esc(product.id)}')">
-          🛒 Adicionar ao carrinho
-        </button>
-
-        <button class="btn btn-secondary"
-          onclick="toggleFavorite('${esc(product.id)}')">
-          ${favorites.includes(product.id) ? '❤️ Favorito' : '♡ Favoritar'}
-        </button>
-
-      </div>
-
-      <div class="seller-box">
-
-        <div class="seller-line">
-
-          <div>
-            <div class="seller-name">
-              ${esc(seller.name || seller.storeName || 'Vendedor')}
-            </div>
-
-            <div class="small mt">
-              ${seller.verified ? '✓ Vendedor verificado' : 'Vendedor Kuanza Line'}
-            </div>
-          </div>
-
-          <div class="center">
-            <strong style="font-size:22px;color:#087443">
-              ${Number(score).toFixed(0)}
-            </strong>
-
-            <div class="small">Kuanza Score</div>
-          </div>
-
-        </div>
-
-        <button
-          class="btn btn-primary btn-full mt"
-          onclick="startChatWithSeller('${esc(product.sellerId || seller.id || '')}')">
-          💬 Conversar com vendedor
-        </button>
-
-      </div>
-
-    </div>
-  `;
+}
+catch(e){
+toast(e.message)
 }
 
-function changeMainImage(src,el){
-  document.getElementById('mainProductImage').src = src;
-
-  document.querySelectorAll('.gallery img')
-    .forEach(img=>img.classList.remove('active'));
-
-  el.classList.add('active');
 }
 
-function toggleFavorite(id){
-  const index = favorites.findIndex(x=>String(x)===String(id));
 
-  if(index >= 0){
-    favorites.splice(index,1);
-    toast('Removido dos favoritos');
-  }else{
-    favorites.push(id);
-    toast('Adicionado aos favoritos ❤️');
-  }
+function renderProduct(){
 
-  saveFavorites();
+const p=currentProduct;
 
-  if(currentProduct){
-    openProduct(currentProduct.id);
-  }
+const photos=p.photos||[];
+
+let gal=photos.slice(0,5);
+
+while(gal.length<5)
+gal.push(null);
+
+$('productBox').innerHTML=`
+
+<button
+class="link"
+onclick="go('explore')">
+‹ Voltar
+</button>
+
+<div class="gallery">
+
+${gal.map(
+(x,i)=>
+`<div>
+${
+x
+?
+`<img src="${x}" alt="Foto ${i+1}">`
+:
+`<div class="pemoji">
+${esc(p.emoji||'📦')}
+</div>`
 }
+</div>`
+).join('')}
+
+</div>
+
+
+<div class="detailcard">
+
+<span class="status">
+✓ ${photos.length} fotos reais
+</span>
+
+<h2>
+${esc(p.name)}
+</h2>
+
+<div
+class="price"
+style="font-size:25px">
+${money(p.price)}
+</div>
+
+<div class="rating">
+⭐ ${p.rating||5}
+· ${esc(p.seller)}
+·
+<b class="verify">
+Kuanza Score ${p.score||100}/100
+</b>
+</div>
+
+<p>
+${esc(p.description)}
+</p>
+
+<p class="muted">
+Estado:
+${esc(p.condition||'Não informado')}
+${p.location?
+' · '+esc(p.location):
+''}
+</p>
+
+<div class="two">
+
+<button
+class="btn light"
+onclick="startChat('${p.sellerId}','${p.id}')">
+💬 Conversar
+</button>
+
+<button
+class="btn"
+onclick="addCart('${p.id}')">
+🛒 Carrinho
+</button>
+
+</div>
+
+</div>
+
+`;
+
+go('product');
+
+}
+
+
+async function addCart(id){
+
+if(!token){
+
+toast(
+'Inicia sessão para adicionar ao carrinho.'
+);
+
+go('account');
+
+return;
+
+}
+
+try{
+
+await api(
+'/api/cart',
+{
+method:'POST',
+body:JSON.stringify({
+productId:id,
+qty:1
+})
+}
+);
+
+toast('Adicionado ao carrinho ✓');
+
+}
+catch(e){
+toast(e.message)
+}
+
+}
+
+
+async function toggleFav(id,b){
+
+if(!token){
+
+toast(
+'Inicia sessão para guardar favoritos.'
+);
+
+go('account');
+
+return;
+
+}
+
+try{
+
+const fs =
+await api('/api/favorites');
+
+const yes =
+fs.some(x=>x.id===id);
+
+await api(
+'/api/favorites/'+id,
+{
+method:
+yes
+?
+'DELETE'
+:
+'POST'
+}
+);
+
+b.textContent =
+yes
+?
+'♡'
+:
+'♥';
+
+toast(
+yes
+?
+'Removido dos favoritos'
+:
+'Adicionado aos favoritos ♥'
+);
+
+}
+catch(e){
+toast(e.message)
+}
+
+}
+
 
 async function loadFavorites(){
-  const root = document.getElementById('appContent');
 
-  const list = products.filter(p =>
-    favorites.some(id=>String(id)===String(p.id))
-  );
+if(!token){
 
-  root.innerHTML = `
-    <div class="page">
+$('favBox').innerHTML=
+'<div class="empty">Inicia sessão para usar favoritos.</div>';
 
-      <div class="section-title">
-        <h2>❤️ Favoritos</h2>
-      </div>
+return;
 
-      <div id="favoriteProducts" class="products"></div>
-
-    </div>
-  `;
-
-  renderProducts(list,'favoriteProducts');
 }
 
-function addToCart(id){
-  const product = products.find(p=>String(p.id)===String(id));
+try{
 
-  if(!product){
-    toast('Produto não encontrado.');
-    return;
-  }
+const ps =
+await api('/api/favorites');
 
-  const existing = cart.find(item=>String(item.id)===String(id));
+$('favBox').innerHTML =
+ps.length
+?
+`<div class="grid">
+${ps.map(card).join('')}
+</div>`
+:
+'<div class="empty">Ainda não tens favoritos.</div>';
 
-  if(existing){
-    existing.quantity += 1;
-  }else{
-    cart.push({
-      id:product.id,
-      name:product.name,
-      price:Number(product.price||0),
-      image:product.images?.[0] || product.image || '',
-      sellerId:product.sellerId || product.seller?.id || null,
-      quantity:1
-    });
-  }
-
-  saveCart();
-  updateCartCount();
-  toast('Produto adicionado ao carrinho 🛒');
 }
-        quantity:1
-    });
-  }
-
-  saveCart();
-  toast('Produto adicionado ao carrinho 🛒');
+catch(e){
+$('favBox').textContent=e.message
 }
 
-function changeQuantity(id,delta){
-  const item = cart.find(x=>String(x.id)===String(id));
-
-  if(!item) return;
-
-  item.quantity += delta;
-
-  if(item.quantity <= 0){
-    cart = cart.filter(x=>String(x.id)!==String(id));
-  }
-
-  saveCart();
-  loadCart();
 }
 
-function cartTotal(){
-  return cart.reduce((sum,item)=>
-    sum + Number(item.price||0) * Number(item.quantity||1),0
-  );
-}
 
 async function loadCart(){
-  const root = document.getElementById('appContent');
 
-  if(!cart.length){
-    root.innerHTML = `
-      <div class="page">
+if(!token){
 
-        <div class="section-title">
-          <h2>🛒 Carrinho</h2>
-        </div>
+$('cartBox').innerHTML=
+'<div class="empty">Inicia sessão para usar o carrinho.</div>';
 
-        <div class="empty">
-          <div class="emoji">🛒</div>
-          <strong>O teu carrinho está vazio</strong>
-          <p class="small mt">
-            Adiciona produtos para começar a comprar.
-          </p>
-          <button class="btn btn-primary mt" onclick="go('explore')">
-            Explorar produtos
-          </button>
-        </div>
+return;
 
-      </div>
-    `;
-    return;
-  }
-
-  root.innerHTML = `
-    <div class="page">
-
-      <div class="section-title">
-        <h2>🛒 Carrinho</h2>
-      </div>
-
-      <div class="card">
-
-        ${cart.map(item=>`
-          <div class="cart-item">
-
-            <img src="${item.image || 'https://placehold.co/200x200?text=Produto'}">
-
-            <div class="cart-info">
-
-              <strong>${esc(item.name)}</strong>
-
-              <div class="price">
-                ${money(item.price)}
-              </div>
-
-              <div class="quantity">
-
-                <button onclick="changeQuantity('${esc(item.id)}',-1)">
-                  −
-                </button>
-
-                <strong>${item.quantity}</strong>
-
-                <button onclick="changeQuantity('${esc(item.id)}',1)">
-                  +
-                </button>
-
-                <button
-                  class="btn-danger"
-                  onclick="removeFromCart('${esc(item.id)}')">
-                  🗑️
-                </button>
-
-              </div>
-
-            </div>
-
-          </div>
-        `).join('')}
-
-      </div>
-
-      <div class="total-box">
-
-        <div class="total-line">
-          <span>Subtotal</span>
-          <strong>${money(cartTotal())}</strong>
-        </div>
-
-        <div class="total-line">
-          <span>Entrega</span>
-          <strong>A combinar</strong>
-        </div>
-
-        <div class="total-line final">
-          <span>Total</span>
-          <span>${money(cartTotal())}</span>
-        </div>
-
-      </div>
-
-      <button class="btn btn-primary btn-full mt"
-        onclick="checkout()">
-        Finalizar compra
-      </button>
-
-    </div>
-  `;
 }
 
-function removeFromCart(id){
-  cart = cart.filter(x=>String(x.id)!==String(id));
+try{
 
-  saveCart();
-  toast('Produto removido.');
-  loadCart();
+const items =
+await api('/api/cart');
+
+if(!items.length){
+
+$('cartBox').innerHTML=
+'<div class="empty">O teu carrinho está vazio.</div>';
+
+return;
+
 }
 
-async function checkout(){
-  if(!token){
-    toast('Inicia sessão para finalizar a compra.');
-    go('account');
-    return;
-  }
+let total =
+items.reduce(
+(s,x)=>
+s+
+x.product.price*x.qty,
+0
+);
 
-  if(!cart.length){
-    toast('O carrinho está vazio.');
-    return;
-  }
+$('cartBox').innerHTML=
 
-  const items = cart.map(item=>({
-    productId:item.id,
-    quantity:item.quantity
-  }));
+items.map(
+x =>
+`<div class="panel">
 
-  try{
-    const result = await api('/api/orders',{
-      method:'POST',
-      body:JSON.stringify({
-        items
-      })
-    });
+<div class="row">
 
-    cart = [];
-    saveCart();
+<div>
 
-    toast('Pedido criado com sucesso ✓');
+<b>
+${esc(x.product.name)}
+</b>
 
-    setTimeout(()=>{
-      go('orders');
-    },700);
+<div class="price">
+${money(x.product.price)}
+</div>
 
-  }catch(e){
-    toast(e.message);
-  }
+<div class="muted">
+Quantidade: ${x.qty}
+</div>
+
+</div>
+
+<button
+class="iconbtn"
+onclick="removeCart('${x.product.id}')">
+🗑
+</button>
+
+</div>
+
+</div>`
+).join('')
+
++
+
+`
+
+<div class="scorebox">
+
+<div class="muted">
+Total
+</div>
+
+<div
+class="score"
+style="font-size:26px">
+${money(total)}
+</div>
+
+<button
+class="btn"
+style="width:100%"
+onclick='checkout(${total},${JSON.stringify(
+items.map(
+x=>({
+id:x.product.id,
+qty:x.qty
+})
+)
+)})'>
+Finalizar pedido
+</button>
+
+</div>
+
+`;
+
+}
+catch(e){
+$('cartBox').textContent=e.message
 }
 
-async function loadOrders(){
-  const root = document.getElementById('appContent');
-
-  if(!token){
-    root.innerHTML = `
-      <div class="page">
-        <div class="empty">
-          <div class="emoji">📦</div>
-          <strong>Inicia sessão para veres os teus pedidos.</strong>
-          <button class="btn btn-primary mt" onclick="go('account')">
-            Entrar
-          </button>
-        </div>
-      </div>
-    `;
-    return;
-  }
-
-  root.innerHTML = `
-    <div class="page">
-
-      <div class="section-title">
-        <h2>📦 Meus pedidos</h2>
-      </div>
-
-      <div id="ordersList">
-        <div class="empty">A carregar...</div>
-      </div>
-
-    </div>
-  `;
-
-  try{
-    const data = await api('/api/orders');
-
-    const orders = Array.isArray(data)
-      ? data
-      : (data.orders || []);
-
-    const target = document.getElementById('ordersList');
-
-    if(!orders.length){
-      target.innerHTML = `
-        <div class="empty">
-          <div class="emoji">📦</div>
-          <strong>Ainda não tens pedidos.</strong>
-        </div>
-      `;
-      return;
-    }
-
-    target.innerHTML = orders.map(order=>`
-
-      <div class="order">
-
-        <div class="order-head">
-          <strong>
-            Pedido #${esc(String(order.id).slice(-8))}
-          </strong>
-
-          <span class="status">
-            ${esc(order.status || 'Pendente')}
-          </span>
-        </div>
-
-        <div class="order-items">
-          ${
-            (order.items || []).map(item=>`
-              ${esc(item.productName || item.name || 'Produto')}
-              × ${item.quantity || 1}
-            `).join('<br>')
-          }
-        </div>
-
-        <div class="row mt">
-          <strong>Total</strong>
-          <strong style="color:#087443">
-            ${money(order.total || 0)}
-          </strong>
-        </div>
-
-      </div>
-
-    `).join('');
-
-  }catch(e){
-    document.getElementById('ordersList').innerHTML =
-      `<div class="empty">${esc(e.message)}</div>`;
-  }
 }
+
+
+async function removeCart(id){
+
+try{
+
+await api(
+'/api/cart/'+id,
+{
+method:'DELETE'
+}
+);
+
+loadCart();
+
+toast('Removido.');
+
+}
+catch(e){
+toast(e.message)
+}
+
+}
+
+
+async function checkout(total,items){
+
+try{
+
+await api(
+'/api/orders',
+{
+method:'POST',
+body:JSON.stringify({
+items,
+total
+})
+}
+);
+
+toast('Pedido criado ✓');
+
+go('orders');
+
+}
+catch(e){
+toast(e.message)
+}
+
+}
+
 
 async function loadAccount(){
-  const root = document.getElementById('appContent');
 
-  if(!token){
-    root.innerHTML = `
-      <div class="page">
+if(!token){
 
-        <div class="card">
+$('accountBox').innerHTML=`
 
-          <h2 style="font-family:Poppins,sans-serif">
-            Entrar no Kuanza Line
-          </h2>
+<div class="panel">
 
-          <p class="small mt">
-            Cria a tua conta ou entra para comprar, vender
-            e acompanhar os teus pedidos.
-          </p>
+<h2>
+Bem-vindo ao Kuanza Line 👋
+</h2>
 
-          <div class="form mt">
+<p class="muted">
+Compra, vende e conversa com confiança.
+</p>
 
-            <div>
-              <label>Email</label>
-              <input id="loginEmail" type="email"
-                placeholder="teu@email.com">
-            </div>
+<div class="two">
 
-            <div>
-              <label>Senha</label>
-                            placeholder="••••••••">
-                                        </div>
+<button
+class="btn"
+onclick="authForm('login')">
+Entrar
+</button>
 
-            <button class="btn btn-primary"
-              onclick="login()">
-              Entrar
-            </button>
+<button
+class="btn dark"
+onclick="authForm('register')">
+Criar conta
+</button>
 
-            <button class="btn btn-secondary"
-              onclick="showRegister()">
-              Criar conta
-            </button>
+</div>
 
-          </div>
+</div>
 
-        </div>
+`;
 
-      </div>
-    `;
-    return;
-  }
+return;
 
-  try{
-    const fresh = await api('/api/me');
-
-    me = fresh.user || fresh;
-
-  }catch(e){
-    console.error(e);
-  }
-
-  if(!me){
-    token = '';
-    localStorage.removeItem('kuanza_token');
-    return loadAccount();
-  }
-
-  const score =
-    Number(
-      me.score ??
-      me.kuanzaScore ??
-      me.kuanza_score ??
-      0
-    );
-
-  const label =
-    me.scoreInfo?.label ||
-    me.scoreLabel ||
-    scoreText(score).label;
-
-  root.innerHTML = `
-    <div class="page">
-
-      <div class="card">
-
-        <div class="profile-head">
-
-          <div class="avatar">
-            ${(me.name || me.email || 'K').charAt(0).toUpperCase()}
-          </div>
-
-          <div class="profile-info">
-            <h2>${esc(me.name || 'Utilizador')}</h2>
-
-            <p>${esc(me.email || '')}</p>
-
-            <div class="mt">
-              <span class="badge">
-                ${me.role === 'seller' ? '🏪 Vendedor' : '🛒 Comprador'}
-              </span>
-
-              ${
-                me.verified
-                ? `<span class="badge">✓ Verificado</span>`
-                : ''
-              }
-            </div>
-
-          </div>
-
-        </div>
-
-        <div class="score-box">
-
-          <div class="score-row">
-
-            <div>
-              <div class="small" style="color:rgba(255,255,255,.75)">
-                Kuanza Score
-              </div>
-
-              <div class="score-number">
-                ${score}
-              </div>
-            </div>
-
-            <div class="score-label">
-              ${esc(label)}
-            </div>
-
-          </div>
-
-          <div class="score-bar">
-            <div class="score-fill"
-              style="width:${Math.max(0,Math.min(100,score))}%">
-            </div>
-          </div>
-
-          <div class="small"
-            style="color:rgba(255,255,255,.8)">
-            Quanto maior o score, maior o nível de confiança.
-          </div>
-
-        </div>
-
-        <div class="stats">
-
-          <div class="stat">
-            <strong>${me.completedOrders || 0}</strong>
-            <small>Concluídos</small>
-          </div>
-
-          <div class="stat">
-            <strong>${me.receivedReviews || 0}</strong>
-            <small>Avaliações</small>
-          </div>
-
-          <div class="stat">
-            <strong>${me.cancelledOrders || 0}</strong>
-            <small>Cancelados</small>
-          </div>
-
-        </div>
-
-      </div>
-
-      <div class="card">
-
-        <h3>Tipo de conta</h3>
-
-        <p class="small">
-          Podes utilizar a mesma conta como comprador ou vendedor.
-        </p>
-
-        <button class="btn btn-primary btn-full mt"
-          onclick="switchRole()">
-          ${me.role === 'seller'
-            ? '🛒 Mudar para conta de comprador'
-            : '🏪 Mudar para conta de vendedor'}
-        </button>
-
-      </div>
-
-      ${
-        me.role === 'seller'
-        ? `
-          <div class="card">
-
-            <h3>🏪 Área do vendedor</h3>
-
-            <p class="small">
-              Gere a tua loja, produtos, pedidos e vendas.
-            </p>
-
-            <div class="quick-grid mt">
-
-              <button class="quick" onclick="go('sell')">
-                <span class="emoji">➕</span>
-                Produto
-                <small>Publicar produto</small>
-              </button>
-
-              <button class="quick" onclick="go('dashboard')">
-                <span class="emoji">📊</span>
-                Dashboard
-                <small>Ver vendas</small>
-              </button>
-
-              <button class="quick" onclick="go('store')">
-                <span class="emoji">🏪</span>
-                Minha loja
-                <small>Gerir loja</small>
-              </button>
-
-              <button class="quick" onclick="loadSellerOrders()">
-                <span class="emoji">📦</span>
-                Vendas
-                <small>Gerir pedidos</small>
-              </button>
-
-            </div>
-
-          </div>
-        `
-        : ''
-      }
-
-      <div class="card">
-
-        <h3>Mais opções</h3>
-
-        <button class="btn btn-secondary btn-full mb"
-          onclick="go('favorites')">
-          ❤️ Meus favoritos
-        </button>
-
-        <button class="btn btn-secondary btn-full mb"
-          onclick="go('conversations')">
-          💬 Minhas conversas
-        </button>
-
-        <button class="btn btn-secondary btn-full"
-          onclick="go('orders')">
-          📦 Meus pedidos
-        </button>
-
-      </div>
-
-      <button class="btn btn-danger btn-full"
-        onclick="logout()">
-        Sair da conta
-      </button>
-
-    </div>
-  `;
 }
 
-function scoreText(score){
-  score = Number(score || 0);
+try{
 
-  if(score >= 90){
-    return {
-      label:'Excelente',
-      text:'Perfil altamente confiável.'
-    };
-  }
+me =
+await api('/api/me');
 
-  if(score >= 75){
-    return {
-      label:'Bom',
-      text:'Perfil confiável.'
-    };
-  }
+$('accountBox').innerHTML=`
 
-  if(score >= 50){
-    return {
-      label:'Regular',
-      text:'Recomenda-se atenção.'
-    };
-  }
+<div class="panel">
 
-  if(score >= 25){
-    return {
-      label:'Baixo',
-      text:'Perfil com sinais de atenção.'
-    };
-  }
+<div class="row">
 
-  return {
-    label:'Crítico',
-    text:'Perfil com elevado risco.'
-  };
+<div>
+
+<h2 style="margin:0">
+${esc(me.name)}
+</h2>
+
+<div class="muted">
+${esc(me.email)}
+</div>
+
+<span class="status">
+${me.role==='seller'?'Vendedor':'Comprador'}
+</span>
+
+</div>
+
+<div class="avatar">
+${esc(
+(me.name||'U')[0]
+.toUpperCase()
+)}
+</div>
+
+</div>
+
+</div>
+
+
+<div class="scorebox">
+
+<div class="row">
+
+<div>
+
+<b>Kuanza Score</b>
+
+<div class="muted">
+Perfil confiável
+</div>
+
+</div>
+
+<div class="score">
+${me.score}
+<small>/100</small>
+</div>
+
+</div>
+
+<div class="progress">
+
+<span
+style="width:${me.score}%">
+</span>
+
+</div>
+
+</div>
+
+
+<div class="panel">
+
+<button
+class="btn light"
+style="width:100%;margin-bottom:8px"
+onclick="switchRole()">
+
+🔄 Mudar para
+${me.role==='seller'?'comprador':'vendedor'}
+
+</button>
+
+
+<button
+class="btn light"
+style="width:100%;margin-bottom:8px"
+onclick="go('seller')">
+
+🏪 Área do vendedor
+
+</button>
+
+
+<button
+class="btn light"
+style="width:100%;margin-bottom:8px"
+onclick="go('chats')">
+
+💬 Minhas conversas
+
+</button>
+
+
+<button
+class="btn light"
+style="width:100%;margin-bottom:8px"
+onclick="go('orders')">
+
+📦 Meus pedidos
+
+</button>
+
+
+<button
+class="btn dark"
+style="width:100%"
+onclick="logout()">
+
+Terminar sessão
+
+</button>
+
+</div>
+
+`;
+
 }
+catch(e){
+
+token='';
+
+localStorage.removeItem('klToken');
+
+loadAccount();
+
+}
+
+}
+
+
+function authForm(mode){
+
+$('accountBox').innerHTML=`
+
+<div class="panel">
+
+<h2>
+${mode==='login'?'Entrar':'Criar conta'}
+</h2>
+
+<form
+class="form"
+onsubmit="submitAuth(event,'${mode}')">
+
+${
+mode==='register'
+?
+'<input id="aname" required placeholder="Nome completo">'
+:
+''
+}
+
+<input
+id="aemail"
+type="email"
+required
+placeholder="Email">
+
+<input
+id="apass"
+type="password"
+required
+placeholder="Palavra-passe">
+
+${
+mode==='register'
+?
+`
+<select id="arole">
+
+<option value="buyer">
+Quero comprar
+</option>
+
+<option value="seller">
+Quero vender
+</option>
+
+</select>
+`
+:
+''
+}
+
+<button class="btn">
+${mode==='login'?'Entrar':'Criar conta'}
+</button>
+
+</form>
+
+<button
+class="link"
+onclick="loadAccount()">
+Voltar
+</button>
+
+</div>
+
+`;
+
+}
+
+
+async function submitAuth(e,mode){
+
+e.preventDefault();
+
+try{
+
+const b =
+mode==='login'
+?
+{
+email:$('aemail').value,
+password:$('apass').value
+}
+:
+{
+name:$('aname').value,
+email:$('aemail').value,
+password:$('apass').value,
+role:$('arole').value
+};
+
+const d =
+await api(
+'/api/'+
+(mode==='login'?'login':'register'),
+{
+method:'POST',
+body:JSON.stringify(b)
+}
+);
+
+token=d.token;
+
+localStorage.klToken=token;
+
+me=d.user;
+
+toast(
+mode==='login'
+?
+'Sessão iniciada ✓'
+:
+'Conta criada ✓'
+);
+
+loadAccount();
+
+}
+catch(e){
+toast(e.message)
+}
+
+}
+
 
 async function switchRole(){
-  if(!token){
-    toast('Inicia sessão primeiro.');
-    go('account');
-    return;
-  }
 
-  try{
-    const currentRole = me && me.role === 'seller' ? 'seller' : 'buyer';
-    const newRole = currentRole === 'seller' ? 'buyer' : 'seller';
+try{
 
-    toast('A alterar tipo de conta...');
-
-    await api('/api/me/role',{
-      method:'PATCH',
-      body:JSON.stringify({role:newRole})
-    });
-
-    const fresh = await api('/api/me');
-    me = fresh.user || fresh;
-
-    if(!me || me.role !== newRole){
-      throw new Error('O servidor não confirmou a mudança de conta.');
-    }
-
-    toast(newRole === 'seller'
-      ? '🏪 Agora estás como vendedor ✓'
-      : '🛒 Agora estás como comprador ✓');
-
-    await loadAccount();
-
-  }catch(e){
-    console.error('Erro ao mudar conta:',e);
-    toast(e.message || 'Não foi possível mudar o tipo de conta.');
-  }
+me =
+await api(
+'/api/me/role',
+{
+method:'PATCH',
+body:JSON.stringify({
+role:
+me.role==='seller'
+?
+'buyer'
+:
+'seller'
+})
 }
-  async function loadSell(){
+);
 
-  const root = document.getElementById('appContent');
+toast('Conta alterada ✓');
 
-  if(!token){
-    root.innerHTML = `
-      <div class="page">
-        <div class="empty">
-          <div class="emoji">🏪</div>
-          <strong>Inicia sessão para vender.</strong>
-          <button class="btn btn-primary mt"
-            onclick="go('account')">
-            Entrar
-          </button>
-        </div>
-      </div>
-    `;
-    return;
-  }
+loadAccount();
 
-  if(!me){
-    try{
-      const data = await api('/api/me');
-      me = data.user || data;
-    }catch(e){}
-  }
-
-  if(!me){
-    return;
-  }
-
-  if(me.role !== 'seller'){
-    root.innerHTML = `
-      <div class="page">
-
-        <div class="empty">
-
-          <div class="emoji">🏪</div>
-
-          <strong>
-            Estás no modo comprador.
-          </strong>
-
-          <p class="small mt">
-            Muda para conta de vendedor para publicar produtos.
-          </p>
-
-          <button class="btn btn-primary mt"
-            onclick="switchRole()">
-            Mudar para vendedor
-          </button>
-
-        </div>
-
-      </div>
-    `;
-    return;
-  }
-
-  selectedPhotos = [];
-
-  root.innerHTML = `
-    <div class="page">
-
-      <div class="section-title">
-        <h2>🏪 Publicar produto</h2>
-      </div>
-
-      <div class="seller-progress">
-
-        <strong>Fotos reais do produto</strong>
-
-        <p class="small mt">
-          Para proteger compradores e aumentar a confiança,
-          o Kuanza Line exige pelo menos 5 fotos reais do produto.
-        </p>
-
-        <div class="progress-line">
-
-          <div id="photoProgress"
-            class="progress-fill"
-            style="width:0%">
-          </div>
-
-        </div>
-
-        <div class="small">
-          <span id="photoCount">0</span>/5 fotos mínimas
-        </div>
-
-      </div>
-
-      <div class="card mt">
-
-        <div class="form">
-
-          <div>
-
-            <label>Fotos do produto — mínimo 5</label>
-
-            <input
-              id="productPhotos"
-              type="file"
-              multiple
-              accept="image/*"
-              onchange="handlePhotos(event)"
-            >
-
-            <div id="photoPreview"
-              class="photo-grid">
-            </div>
-
-          </div>
-
-          <div>
-
-            <label>Nome do produto</label>
-
-            <input
-              id="productName"
-              placeholder="Ex.: iPhone 13 128GB"
-            >
-
-          </div>
-
-          <div>
-
-            <label>Preço em Kz</label>
-
-            <input
-              id="productPrice"
-              type="number"
-              min="0"
-              placeholder="Ex.: 450000"
-            >
-
-          </div>
-
-          <div>
-
-            <label>Categoria</label>
-
-            <select id="productCategory">
-
-              <option value="Eletrónicos">
-                Eletrónicos
-              </option>
-
-              <option value="Moda">
-                Moda
-              </option>
-
-              <option value="Casa">
-                Casa
-              </option>
-
-              <option value="Beleza">
-                Beleza
-              </option>
-
-              <option value="Desporto">
-                Desporto
-              </option>
-
-              <option value="Automóveis">
-                Automóveis
-              </option>
-
-              <option value="Imóveis">
-                Imóveis
-              </option>
-
-              <option value="Serviços">
-                Serviços
-              </option>
-
-              <option value="Outros">
-                Outros
-              </option>
-
-            </select>
-
-          </div>
-
-          <div>
-
-            <label>Descrição</label>
-
-            <textarea
-              id="productDescription"
-              rows="5"
-              placeholder="Descreve o produto com detalhes..."
-            ></textarea>
-
-          </div>
-
-          <div>
-
-            <label>Quantidade disponível</label>
-
-            <input
-              id="productStock"
-              type="number"
-              min="1"
-              value="1"
-            >
-
-          </div>
-
-          <button
-            class="btn btn-primary btn-full"
-            onclick="publishProduct()">
-
-            Publicar produto
-
-          </button>
-
-        </div>
-
-      </div>
-
-    </div>
-  `;
 }
-              <select id="productCategory">
-              ${categories.filter(c=>c!=='Todos').map(c=>`
-                <option value="${esc(c)}">${esc(c)}</option>
-              `).join('')}
-            </select>
-
-          </div>
-
-          <div>
-
-            <label>Descrição</label>
-
-            <textarea
-              id="productDescription"
-              placeholder="Descreve o produto, estado, características, garantia, etc."
-            ></textarea>
-
-          </div>
-
-          <button
-            class="btn btn-primary btn-full"
-            onclick="publishProduct()">
-            Publicar produto
-          </button>
-
-        </div>
-
-      </div>
-
-    </div>
-  `;
+catch(e){
+toast(e.message)
 }
 
-async function handlePhotos(event){
-
-  const files =
-    Array.from(event.target.files || []);
-
-  if(!files.length){
-    return;
-  }
-
-  if(files.length > 10){
-    toast('Podes selecionar no máximo 10 fotos.');
-    event.target.value = '';
-    return;
-  }
-
-  try{
-
-    selectedPhotos = [];
-
-    for(const file of files){
-
-      const dataUrl =
-        await compressImage(file);
-
-      selectedPhotos.push(dataUrl);
-    }
-
-    renderPhotoPreview();
-
-  }catch(e){
-
-    toast('Não foi possível processar as fotos.');
-
-  }
 }
 
-function compressImage(file){
 
-  return new Promise((resolve,reject)=>{
+/* =========================
+   SELLER
+========================= */
 
-    const reader = new FileReader();
+async function loadSeller(){
 
-    reader.onload = event=>{
+if(!token){
 
-      const img = new Image();
+$('sellerBox').innerHTML=
+'<div class="empty">Inicia sessão para aceder à área do vendedor.</div>';
 
-      img.onload = ()=>{
+return;
 
-        const max = 1000;
-
-        let width = img.width;
-        let height = img.height;
-
-        if(width > max || height > max){
-
-          if(width > height){
-
-            height =
-              Math.round(height * max / width);
-
-            width = max;
-
-          }else{
-
-            width =
-              Math.round(width * max / height);
-
-            height = max;
-
-          }
-        }
-
-        const canvas =
-          document.createElement('canvas');
-
-        canvas.width = width;
-        canvas.height = height;
-
-        const ctx =
-          canvas.getContext('2d');
-
-        ctx.drawImage(
-          img,
-          0,
-          0,
-          width,
-          height
-        );
-
-        resolve(
-          canvas.toDataURL(
-            'image/jpeg',
-            .72
-          )
-        );
-
-      };
-
-      img.onerror = reject;
-
-      img.src = event.target.result;
-
-    };
-
-    reader.onerror = reject;
-
-    reader.readAsDataURL(file);
-
-  });
 }
 
-function renderPhotoPreview(){
+try{
 
-  const target =
-    document.getElementById('photoPreview');
+me =
+await api('/api/me');
 
-  if(!target) return;
+if(me.role!=='seller'){
 
-  target.innerHTML =
-    selectedPhotos.map(img=>`
-      <div class="photo-slot">
-        <img src="${img}">
-      </div>
-    `).join('');
+$('sellerBox').innerHTML=`
 
-  const count =
-    document.getElementById('photoCount');
+<div class="panel">
 
-  const progress =
-    document.getElementById('photoProgress');
+<h3>
+🏪 Área do vendedor
+</h3>
 
-  if(count){
-    count.textContent = selectedPhotos.length;
-  }
+<p class="muted">
+A tua conta está como Comprador.
+</p>
 
-  if(progress){
-    progress.style.width =
-      Math.min(100,(selectedPhotos.length/5)*100) + '%';
-  }
+<button
+class="btn"
+onclick="switchRole().then(()=>loadSeller())">
+
+Mudar para vendedor
+
+</button>
+
+</div>
+
+`;
+
+return;
+
 }
 
-async function publishProduct(){
 
-  if(selectedPhotos.length < 5){
-    toast('Adiciona pelo menos 5 fotos reais.');
-    return;
-  }
+/* =========================
+   STORE + DASHBOARD
+========================= */
 
-  const name =
-    document.getElementById('productName')?.value.trim();
+let st=null;
 
-  const price =
-    Number(document.getElementById('productPrice')?.value);
+try{
 
-  const category =
-    document.getElementById('productCategory')?.value;
+st =
+await api(
+'/api/stores?ownerId='+me.id
+);
 
-  const description =
-    document.getElementById('productDescription')?.value.trim();
-
-  if(!name){
-    toast('Indica o nome do produto.');
-    return;
-  }
-
-  if(!price || price <= 0){
-    toast('Indica um preço válido.');
-    return;
-  }
-
-  if(!description){
-    toast('Adiciona uma descrição.');
-    return;
-  }
-
-  try{
-
-    await api('/api/products',{
-      method:'POST',
-      body:JSON.stringify({
-        name,
-        price,
-        category,
-        description,
-        images:selectedPhotos.slice(0,10)
-      })
-    });
-
-    toast('Produto publicado com sucesso ✓');
-
-    selectedPhotos = [];
-
-    await loadHome();
-
-  }catch(e){
-
-    toast(e.message);
-
-  }
 }
-              <div class="card">
-                <h3>📈 Histórico de vendas</h3>
+catch{}
 
-                ${
-                  salesHistory.length
-                  ? salesHistory.map(item=>`
-                      <div class="top-product">
 
-                        <div>
-                          <strong>
-                            ${esc(item.date || item.label || '')}
-                          </strong>
+const products =
+st?.products||[];
 
-                          <small>
-                            ${item.orders || item.sales || 0} venda(s)
-                          </small>
-                        </div>
 
-                        <strong style="color:#087443">
-                          ${money(item.revenue || 0)}
-                        </strong>
+$('sellerBox').innerHTML=`
 
-                      </div>
-                    `).join('')
-                  : `
-                    <div class="empty">
-                      Ainda não existem vendas neste período.
-                    </div>
-                  `
-                }
+<div class="storeHero">
 
-              </div>
+<div class="row">
 
-              <div class="card">
-                <h3>🧾 Resumo financeiro</h3>
+<div class="storeLogo">
 
-                <div class="summary-list">
-
-                  <div class="summary-row">
-                    <span>Faturamento bruto</span>
-                    <strong>
-                      ${money(s.grossRevenue)}
-                    </strong>
-                  </div>
-
-                  <div class="summary-row">
-                    <span>Comissão Kuanza</span>
-                    <strong>
-                      ${money(s.commission)}
-                    </strong>
-                  </div>
-
-                  <div class="summary-row">
-                    <span>Receita líquida</span>
-                    <strong>
-                      ${money(s.netRevenue)}
-                    </strong>
-                  </div>
-
-                  <div class="summary-row">
-                    <span>Saldo disponível</span>
-                    <strong>
-                      ${money(s.availableBalance)}
-                    </strong>
-                  </div>
-
-                  <div class="summary-row">
-                    <span>Valores pendentes</span>
-                    <strong>
-                      ${money(s.pendingRevenue)}
-                    </strong>
-                  </div>
-
-                </div>
-
-              </div>
-    `;
-    
-  }catch(e){
-
-    target.innerHTML = `
-      <div class="empty">
-        ${esc(e.message)}
-      </div>
-    `;
-
-  }
+${
+st?.logo
+?
+`<img src="${st.logo}">`
+:
+'K'
 }
 
+</div>
+
+<div style="flex:1">
+
+<h2 style="margin:0">
+${esc(st?.name||me.name+' Store')}
+</h2>
+
+<div>
+⭐ ${st?.rating||5}
+·
+Kuanza Score ${me.score}/100
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+
+<!-- DASHBOARD -->
+
+<div
+class="dashboardHero"
+style="margin-top:12px">
+
+<h2>
+📊 Painel de vendas
+</h2>
+
+<p>
+Acompanha o desempenho da tua loja em tempo real.
+</p>
+
+</div>
+
+
+<div class="dashboardPeriod">
+
+<button
+id="period7"
+onclick="setDashboardPeriod('7')">
+7 dias
+</button>
+
+<button
+id="period30"
+onclick="setDashboardPeriod('30')">
+30 dias
+</button>
+
+<button
+id="period90"
+onclick="setDashboardPeriod('90')">
+90 dias
+</button>
+
+<button
+id="periodAll"
+onclick="setDashboardPeriod('all')">
+Tudo
+</button>
+
+</div>
+
+
+<div id="dashboardBox">
+
+<div class="empty">
+A carregar dados das vendas...
+</div>
+
+</div>
+
+
+<!-- PUBLICAR -->
+
+<div class="sectionTitle">
+🚀 Publicar produto
+</div>
+
+
+<div class="panel">
+
+<form
+class="form"
+onsubmit="publish(event)">
+
+<label>
+
+Nome do produto
+
+<input
+id="pn"
+required
+placeholder="Ex.: iPhone 13 128GB">
+
+</label>
+
+
+<label>
+
+Preço em Kz
+
+<input
+id="pp"
+type="number"
+min="1"
+required
+placeholder="450000">
+
+</label>
+
+
+<label>
+
+Categoria
+
+<select id="pc">
+
+<option>Eletrónicos</option>
+<option>Moda</option>
+<option>Casa</option>
+<option>Beleza</option>
+<option>Automóveis</option>
+<option>Outros</option>
+
+</select>
+
+</label>
+
+
+<label>
+
+Estado
+
+<select id="pcondition">
+
+<option>Novo</option>
+<option>Seminovo</option>
+<option>Usado</option>
+
+</select>
+
+</label>
+
+
+<label>
+
+Localização
+
+<input
+id="plocation"
+placeholder="Luanda">
+
+</label>
+
+
+<label>
+
+Descrição
+
+<textarea
+id="pd"
+required
+minlength="15"
+placeholder="Descreve o produto, estado, acessórios, garantia, etc.">
+</textarea>
+
+</label>
+
+
+<label>
+
+Fotos reais — mínimo 5, máximo 10
+
+<div class="notice">
+
+📸 Para aumentar a credibilidade,
+o Kuanza Line exige pelo menos
+<strong>5 fotos reais</strong>.
+
+</div>
+
+
+<input
+id="pfiles"
+type="file"
+accept="image/*"
+multiple
+onchange="handlePhotos(event)"
+style="margin-top:8px">
+
+
+<div
+id="photoCount"
+class="muted"
+style="margin:7px 0">
+
+0/5 fotos mínimas
+
+</div>
+
+
+<div
+id="photoGrid"
+class="photos">
+</div>
+
+</label>
+
+
+<button class="btn">
+Publicar produto
+</button>
+
+</form>
+
+</div>
+
+
+<!-- SCORE -->
+
+<div class="sectionTitle">
+🛡️ Reputação
+</div>
+
+
+<div class="scorebox">
+
+<div class="row">
+
+<div>
+
+<b>Kuanza Score</b>
+
+<div class="muted">
+Reputação da conta
+</div>
+
+</div>
+
+<div class="score">
+${me.score}
+</div>
+
+</div>
+
+<div class="progress">
+
+<span
+style="width:${me.score}%">
+</span>
+
+</div>
+
+</div>
+
+
+<!-- PRODUCTS -->
+
+<div class="sectionTitle">
+📦 Os meus produtos
+</div>
+
+
+${
+products.length
+?
+`
+<div class="grid">
+${products.map(card).join('')}
+</div>
+`
+:
+'<div class="empty">Ainda não publicaste produtos.</div>'
+}
+
+`;
+
+photoData=[];
+
+renderPhotoSlots();
+
+setDashboardPeriod(dashboardPeriod);
+
+}
+catch(e){
+
+$('sellerBox').innerHTML=
+`<div class="empty">${esc(e.message)}</div>`;
+
+}
+
+}
+
+
+/* =========================
+   DASHBOARD PERIOD
+========================= */
+
+function setDashboardPeriod(period){
+
+dashboardPeriod=period;
+
+['7','30','90','all'].forEach(
+x=>{
+
+const el=$('period'+
+(
+x==='7'
+?'7':
+x==='30'
+?'30':
+x==='90'
+?'90':
+'All'
+));
+
+if(el)
+el.classList.toggle(
+'active',
+x===period
+);
+
+}
+);
+
+loadSellerDashboard();
+
+}
+
+
+async function loadSellerDashboard(){
+
+const box=$('dashboardBox');
+
+if(!box || !token)
+return;
+
+box.innerHTML=
+'<div class="empty">A carregar painel...</div>';
+
+try{
+
+const d =
+await api(
+'/api/seller/dashboard?period='+
+encodeURIComponent(dashboardPeriod)
+);
+
+
+const s =
+d.summary||{};
+
+
+const seller =
+d.seller||{};
+
+
+const top =
+d.topProducts||[];
+
+
+const history =
+d.salesHistory||[];
+
+
+box.innerHTML=`
+
+<div class="metrics">
+
+
+<div class="metric green">
+
+<div class="icon">💰</div>
+
+<div class="label">
+Faturamento bruto
+</div>
+
+<div class="value">
+${money(s.grossRevenue)}
+</div>
+
+</div>
+
+
+<div class="metric green">
+
+<div class="icon">💵</div>
+
+<div class="label">
+Ganhos líquidos
+</div>
+
+<div class="value">
+${money(s.netRevenue)}
+</div>
+
+</div>
+
+
+<div class="metric green">
+
+<div class="icon">🏦</div>
+
+<div class="label">
+Saldo disponível
+</div>
+
+<div class="value">
+${money(s.availableBalance)}
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="icon">⏳</div>
+
+<div class="label">
+Valores pendentes
+</div>
+
+<div class="value">
+${money(s.pendingRevenue)}
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="icon">🛒</div>
+
+<div class="label">
+Total de vendas
+</div>
+
+<div class="value">
+${s.totalSales||0}
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="icon">📦</div>
+
+<div class="label">
+Produtos vendidos
+</div>
+
+<div class="value">
+${s.totalProductsSold||0}
+</div>
+
+</div>
+
+
+<div class="metric red">
+
+<div class="icon">❌</div>
+
+<div class="label">
+Cancelamentos
+</div>
+
+<div class="value">
+${s.cancelledSales||0}
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="icon">🎯</div>
+
+<div class="label">
+Ticket médio
+</div>
+
+<div class="value">
+${money(s.averageTicket)}
+</div>
+
+</div>
+
+</div>
+
+
+<div class="wallet">
+
+<div class="walletTitle">
+🏦 Carteira do vendedor
+</div>
+
+<div class="muted">
+Saldo calculado sobre pedidos entregues
+</div>
+
+<div class="walletBalance">
+${money(s.availableBalance)}
+</div>
+
+<button
+class="btn"
+style="width:100%;margin-top:5px"
+disabled>
+
+💸 Levantar saldo — Em breve
+
+</button>
+
+<div class="walletInfo">
+
+O levantamento real será integrado
+posteriormente com os meios de pagamento
+suportados pelo Kuanza Line.
+
+</div>
+
+<div class="commissionNote">
+
+ℹ️ Comissão atual de demonstração:
+<strong>${d.commissionPercent||10}%</strong>.
+Este valor é provisório e será definido
+com a estrutura comercial definitiva
+do Kuanza Line.
+
+</div>
+
+</div>
+
+
+<div class="sectionTitle">
+📊 Vendas
+</div>
+
+<div class="panel">
+
+<div class="row">
+
+<div>
+
+<b>
+Desempenho do período
+</b>
+
+<div class="muted">
+${history.length} registos disponíveis
+</div>
+
+</div>
+
+<div class="verify">
+${money(s.grossRevenue)}
+</div>
+
+</div>
+
+<div
+id="salesChart"
+class="chart"
+style="margin-top:12px">
+
+</div>
+
+</div>
+
+
+<div class="sectionTitle">
+🏆 Produtos mais vendidos
+</div>
+
+<div class="panel">
+
+${
+top.length
+?
+top
+.map(
+(p,i)=>
+`
+
+<div class="topProduct">
+
+<div class="rank">
+${i+1}
+</div>
+
+<div class="topProductInfo">
+
+<div class="topProductName">
+${esc(p.name||'Produto')}
+</div>
+
+<div class="topProductMeta">
+${p.quantity||0} unidades vendidas
+</div>
+
+</div>
+
+<div class="topProductValue">
+${money(p.revenue||0)}
+</div>
+
+</div>
+
+`
+)
+.join('')
+:
+'<div class="empty">Ainda não existem vendas registadas.</div>'
+}
+
+</div>
+
+
+<div class="sectionTitle">
+📜 Histórico de vendas
+</div>
+
+<div class="panel">
+
+${
+history.length
+?
+history
+.slice(0,50)
+.map(
+o =>
+`
+
+<div class="historyRow">
+
+<div class="historyMain">
+
+<div>
+
+<div class="historyName">
+Pedido #${esc(
+String(o.id||'').slice(0,8)
+)}
+</div>
+
+<div class="historyMeta">
+${o.createdAt?
+new Date(o.createdAt)
+.toLocaleString('pt-PT'):
+''}
+</div>
+
+</div>
+
+<div class="historyAmount">
+${money(o.amount||o.total||0)}
+</div>
+
+</div>
+
+<div style="margin-top:5px">
+
+<span class="status">
+${esc(o.status||'Pendente')}
+</span>
+
+</div>
+
+</div>
+
+`
+)
+.join('')
+:
+'<div class="empty">Ainda não existem vendas.</div>'
+}
+
+</div>
+
+
+<div class="sectionTitle">
+📦 Gestão de pedidos
+</div>
+
+<div id="sellerOrdersBox">
+
+<div class="empty">
+A carregar pedidos...
+</div>
+
+</div>
+
+`;
+
+
+renderSalesChart(history);
+
+loadSellerOrders();
+
+}
+catch(e){
+
+box.innerHTML=
+`<div class="empty">
+${esc(e.message)}
+</div>`;
+
+}
+
+}
+
+
+/* =========================
+   SALES CHART
+========================= */
+
+function renderSalesChart(history){
+
+const chart=$('salesChart');
+
+if(!chart)
+return;
+
+if(!history.length){
+
+chart.innerHTML=
+'<div class="empty" style="width:100%;padding:20px">Sem vendas para apresentar.</div>';
+
+return;
+
+}
+
+
+/*
+Agrupa as vendas por dia.
+*/
+
+const groups={};
+
+history
+.filter(
+o =>
+o.status!=='Cancelado'
+)
+.forEach(
+o => {
+
+const date =
+o.createdAt
+?
+new Date(o.createdAt)
+:
+new Date();
+
+const key =
+date.toLocaleDateString(
+'pt-PT',
+{
+day:'2-digit',
+month:'2-digit'
+}
+);
+
+groups[key]=
+(groups[key]||0)+
+Number(
+o.amount||
+o.total||
+0
+);
+
+}
+);
+
+
+let entries =
+Object.entries(groups)
+.slice(-7);
+
+
+if(!entries.length){
+
+chart.innerHTML=
+'<div class="empty" style="width:100%">Sem vendas válidas.</div>';
+
+return;
+
+}
+
+
+const max =
+Math.max(
+...entries.map(x=>x[1]),
+1
+);
+
+
+chart.innerHTML =
+entries
+.map(
+([label,value])=>{
+
+const height =
+Math.max(
+4,
+(value/max)*125
+);
+
+return `
+
+<div class="barWrap">
+
+<div
+class="bar"
+style="height:${height}px"
+title="${money(value)}">
+</div>
+
+<div class="barLabel">
+${label}
+</div>
+
+</div>
+
+`;
+
+}
+)
+.join('');
+
+}
+
+
+/* =========================
+   SELLER ORDERS
+========================= */
 
 async function loadSellerOrders(){
 
-  const root =
-    document.getElementById('appContent');
+const box=$('sellerOrdersBox');
 
-  if(!token){
+if(!box)
+return;
 
-    root.innerHTML = `
-      <div class="page">
-        <div class="empty">
-          Inicia sessão para acessar os pedidos.
-        </div>
-      </div>
-    `;
+try{
 
-    return;
-  }
+const orders =
+await api('/api/seller/orders');
 
-  root.innerHTML = `
-    <div class="page">
+if(!orders.length){
 
-      <div class="section-title">
-        <h2>📦 Pedidos recebidos</h2>
-      </div>
+box.innerHTML=
+'<div class="empty">Ainda não tens pedidos de clientes.</div>';
 
-      <div id="sellerOrdersList">
-        <div class="empty">
-          A carregar pedidos...
-        </div>
-      </div>
+return;
 
-    </div>
-  `;
-
-  const target =
-    document.getElementById('sellerOrdersList');
-
-  try{
-
-    const data =
-      await api('/api/seller/orders');
-
-    const orders =
-      data.orders || data || [];
-
-    if(!orders.length){
-
-      target.innerHTML = `
-        <div class="empty">
-          Ainda não tens pedidos.
-        </div>
-      `;
-
-      return;
-    }
-
-    target.innerHTML =
-      orders.map(order=>`
-
-        <div class="card">
-
-          <div class="row">
-
-            <div>
-              <strong>
-                Pedido #${esc(String(order.id || '').slice(-8))}
-              </strong>
-
-              <div class="small mt">
-                ${esc(order.productName || order.product?.name || 'Produto')}
-              </div>
-
-            </div>
-
-            <span class="badge">
-              ${esc(order.status || 'pending')}
-            </span>
-
-          </div>
-
-          <div class="summary-list mt">
-
-            <div class="summary-row">
-              <span>Quantidade</span>
-              <strong>
-                ${order.quantity || 1}
-              </strong>
-            </div>
-
-            <div class="summary-row">
-              <span>Valor</span>
-              <strong>
-                ${money(order.total || order.price || 0)}
-              </strong>
-            </div>
-
-          </div>
-
-          <div class="actions mt">
-
-            <button
-              class="btn btn-secondary"
-              onclick="updateSellerOrder('${order.id}','processing')">
-              Preparar
-            </button>
-
-            <button
-              class="btn btn-primary"
-              onclick="updateSellerOrder('${order.id}','shipped')">
-              Enviar
-            </button>
-
-            <button
-              class="btn btn-yellow"
-              onclick="updateSellerOrder('${order.id}','completed')">
-              Concluir
-            </button>
-
-          </div>
-
-        </div>
-
-      `).join('');
-
-  }catch(e){
-
-    target.innerHTML = `
-      <div class="empty">
-        ${esc(e.message)}
-      </div>
-    `;
-
-  }
 }
-        <div class="chat-input">
 
-        <input
-          id="chatText"
-          placeholder="Escreve uma mensagem..."
-          onkeydown="if(event.key==='Enter') sendMessage()">
+box.innerHTML =
+orders
+.map(
+o => {
 
-        <button
-          class="btn btn-primary"
-          onclick="sendMessage()">
-          Enviar
-        </button>
+const status =
+o.status||'Pendente';
 
-      </div>
+return `
 
-      <div class="offer-box">
+<div class="sellerOrder">
 
-        <input
-          id="offerAmount"
-          type="number"
-          placeholder="Valor da oferta em Kz">
+<div class="sellerOrderHead">
 
-        <button
-          class="btn btn-yellow"
-          onclick="sendOffer()">
-          Fazer oferta
-        </button>
+<div>
 
-      </div>
+<b>
+Pedido #${esc(
+String(o.id||'').slice(0,8)
+)}
+</b>
 
-    `);
+<div class="muted">
+${o.createdAt?
+new Date(o.createdAt)
+.toLocaleString('pt-PT'):
+''}
+</div>
 
-    const chat =
-      document.getElementById('chatMessages');
+</div>
 
-    if(chat){
-      chat.scrollTop = chat.scrollHeight;
-    }
+<div class="price">
+${money(o.total||0)}
+</div>
 
-  }catch(e){
+</div>
 
-    toast(e.message);
 
-  }
+<div class="muted"
+style="margin-top:8px">
+
+${
+(o.items||[])
+.map(
+i =>
+`${esc(
+i.productName||
+i.name||
+'Produto'
+)} × ${i.quantity||i.qty||1}`
+)
+.join('<br>')
+}
+
+</div>
+
+
+<select
+onchange="updateSellerOrder('${o.id}',this.value)">
+
+<option
+value="Pendente"
+${status==='Pendente'?'selected':''}>
+Pendente
+</option>
+
+<option
+value="Confirmado"
+${status==='Confirmado'?'selected':''}>
+Confirmado
+</option>
+
+<option
+value="Em preparação"
+${status==='Em preparação'?'selected':''}>
+Em preparação
+</option>
+
+<option
+value="Enviado"
+${status==='Enviado'?'selected':''}>
+Enviado
+</option>
+
+<option
+value="Entregue"
+${status==='Entregue'?'selected':''}>
+Entregue
+</option>
+
+<option
+value="Cancelado"
+${status==='Cancelado'?'selected':''}>
+Cancelado
+</option>
+
+</select>
+
+</div>
+
+`;
+
+}
+)
+.join('');
+
+}
+catch(e){
+
+box.innerHTML=
+`<div class="empty">${esc(e.message)}</div>`;
+
+}
+
 }
 
 
-function renderMessage(message){
+async function updateSellerOrder(id,status){
 
-  const mine =
-    String(message.senderId || '') === String(me?.id || '');
+try{
 
-  return `
-    <div class="message ${mine ? 'mine' : ''}">
+await api(
+'/api/seller/orders/'+id,
+{
+method:'PATCH',
+body:JSON.stringify({
+status
+})
+}
+);
 
-      <div class="message-bubble">
+toast(
+'📦 Pedido atualizado: '+status
+);
 
-        ${esc(message.text || '')}
+loadSellerDashboard();
 
-        ${
-          message.offerAmount
-          ? `
-            <div class="offer">
-              💰 Oferta:
-              <strong>
-                ${money(message.offerAmount)}
-              </strong>
-            </div>
-          `
-          : ''
-        }
+}
+catch(e){
 
-      </div>
+toast(e.message);
 
-      <small>
-        ${
-          message.createdAt
-          ? new Date(message.createdAt)
-              .toLocaleString('pt-AO')
-          : ''
-        }
-      </small>
+loadSellerOrders();
 
-    </div>
-  `;
+}
+
+}
+
+
+/* =========================
+   PHOTOS
+========================= */
+
+function handlePhotos(e){
+
+const files =
+[...e.target.files]
+.slice(0,10);
+
+photoData=[];
+
+if(!files.length){
+
+renderPhotoSlots();
+
+return;
+
+}
+
+let done=0;
+
+files.forEach(
+f=>{
+
+const r=
+new FileReader();
+
+r.onload=()=>{
+
+const img=
+new Image();
+
+img.onload=()=>{
+
+const c=
+document.createElement(
+'canvas'
+);
+
+const max=1000;
+
+const scale =
+Math.min(
+1,
+max/
+Math.max(
+img.width,
+img.height
+)
+);
+
+c.width =
+Math.max(
+1,
+Math.round(
+img.width*scale
+)
+);
+
+c.height =
+Math.max(
+1,
+Math.round(
+img.height*scale
+)
+);
+
+c
+.getContext('2d')
+.drawImage(
+img,
+0,
+0,
+c.width,
+c.height
+);
+
+photoData.push(
+c.toDataURL(
+'image/jpeg',
+.72
+)
+);
+
+done++;
+
+if(done===files.length){
+
+photoData=
+photoData.slice(0,10);
+
+renderPhotoSlots();
+
+}
+
+};
+
+img.src=r.result;
+
+};
+
+r.readAsDataURL(f);
+
+}
+);
+
+}
+
+
+function renderPhotoSlots(){
+
+if(!$('photoGrid'))
+return;
+
+$('photoCount').textContent =
+photoData.length+
+'/5 fotos mínimas';
+
+$('photoGrid').innerHTML =
+Array.from(
+{
+length:
+Math.max(
+5,
+photoData.length
+)
+},
+(_,i)=>
+`
+
+<div class="slot">
+
+${
+photoData[i]
+?
+`<img src="${photoData[i]}">
+<small>${i+1}</small>`
+:
+'<b>+</b>'
+}
+
+</div>
+
+`
+).join('');
+
+}
+
+
+/* =========================
+   PUBLISH
+========================= */
+
+async function publish(e){
+
+e.preventDefault();
+
+if(photoData.length<5){
+
+toast(
+'Adiciona pelo menos 5 fotos reais.'
+);
+
+return;
+
+}
+
+try{
+
+await api(
+'/api/products',
+{
+method:'POST',
+
+body:JSON.stringify({
+
+name:$('pn').value,
+
+price:$('pp').value,
+
+cat:$('pc').value,
+
+condition:
+$('pcondition').value,
+
+location:
+$('plocation').value,
+
+description:
+$('pd').value,
+
+photos:
+photoData
+
+})
+}
+);
+
+toast(
+'Produto publicado com 5+ fotos ✓'
+);
+
+e.target.reset();
+
+photoData=[];
+
+renderPhotoSlots();
+
+await loadSeller();
+
+}
+catch(x){
+toast(x.message)
+}
+
+}
+
+
+/* =========================
+   CHAT
+========================= */
+
+async function startChat(
+sellerId,
+productId
+){
+
+if(!token){
+
+toast(
+'Inicia sessão para conversar com o vendedor.'
+);
+
+go('account');
+
+return;
+
+}
+
+try{
+
+const c =
+await api(
+'/api/conversations',
+{
+method:'POST',
+body:JSON.stringify({
+sellerId,
+productId
+})
+}
+);
+
+currentConversation=c;
+
+await loadChat(c.id);
+
+go('chat');
+
+}
+catch(e){
+toast(e.message)
+}
+
+}
+
+
+async function loadChats(){
+
+if(!token){
+
+$('chatListBox').innerHTML=
+'<div class="empty">Inicia sessão para ver as conversas.</div>';
+
+return;
+
+}
+
+try{
+
+const cs =
+await api('/api/conversations');
+
+$('chatListBox').innerHTML=
+
+`
+
+<div class="head">
+<h3>💬 Minhas conversas</h3>
+</div>
+
+`
+
++
+
+(
+
+cs.length
+?
+`
+
+<div class="chatlist">
+
+${cs.map(
+c=>
+`
+
+<button
+class="chatitem"
+onclick="loadChat('${c.id}');go('chat')">
+
+<div class="avatar">
+${esc(
+(c.other?.name||'V')[0]
+)}
+</div>
+
+<div style="text-align:left">
+
+<b>
+${esc(
+c.other?.name||
+'Vendedor'
+)}
+</b>
+
+<div class="muted">
+${esc(
+c.lastMessage?.text||
+'Nova conversa'
+)}
+</div>
+
+${
+c.product
+?
+`<div class="small">
+${esc(c.product.name)}
+</div>`
+:
+''
+}
+
+</div>
+
+</button>
+
+`
+).join('')}
+
+</div>
+
+`
+:
+'<div class="empty">Ainda não tens conversas.</div>'
+
+);
+
+}
+catch(e){
+$('chatListBox').textContent=e.message
+}
+
+}
+
+
+async function loadChat(id){
+
+try{
+
+const d =
+await api(
+'/api/conversations/'+id
+);
+
+currentConversation=
+d.conversation;
+
+$('chatBox').innerHTML=
+
+`
+
+<button
+class="link"
+onclick="go('chats')">
+‹ Conversas
+</button>
+
+
+<div class="panel">
+
+<div class="row">
+
+<div>
+
+<b>
+💬
+${esc(
+d.conversation.other?.name||
+'Utilizador'
+)}
+</b>
+
+<div class="muted">
+
+${
+d.conversation.product
+?
+esc(
+d.conversation.product.name
+)
+:
+'Conversa Kuanza Line'
+}
+
+</div>
+
+</div>
+
+<span class="status">
+Protegido
+</span>
+
+</div>
+
+</div>
+
+
+<div
+id="chatMsgs"
+class="chatmsgs">
+
+${d.messages
+.map(messageHtml)
+.join('')}
+
+</div>
+
+
+<div class="chatbar">
+
+<input
+id="chatInput"
+placeholder="Escreve uma mensagem..."
+onkeydown="if(event.key==='Enter')sendMessage()">
+
+<button
+class="iconbtn"
+onclick="sendOffer()">
+💰
+</button>
+
+<button
+class="btn"
+onclick="sendMessage()">
+Enviar
+</button>
+
+</div>
+
+`;
+
+$('chatMsgs').scrollTop=
+$('chatMsgs').scrollHeight;
+
+}
+catch(e){
+toast(e.message)
+}
+
+}
+
+
+function messageHtml(m){
+
+const mine =
+m.senderId===me?.id;
+
+return `
+
+<div
+class="bubble ${mine?'mine':''}">
+
+${
+m.type==='offer'
+?
+`
+<div class="offer">
+💰 Oferta: ${money(m.amount)}
+</div>
+`
+:
+esc(m.text)
+}
+
+<div
+class="small"
+style="opacity:.7;margin-top:4px">
+
+${
+m.createdAt
+?
+new Date(m.createdAt)
+.toLocaleTimeString(
+'pt-PT',
+{
+hour:'2-digit',
+minute:'2-digit'
+}
+)
+:
+''
+}
+
+</div>
+
+</div>
+
+`;
 
 }
 
 
 async function sendMessage(){
 
-  if(!currentConversation){
-    toast('Conversa não encontrada.');
-    return;
-  }
+const text =
+$('chatInput')
+?.value
+.trim();
 
-  const input =
-    document.getElementById('chatText');
+if(!text)
+return;
 
-  const text =
-    input?.value.trim();
+try{
 
-  if(!text){
-    return;
-  }
+await api(
+'/api/conversations/'+
+currentConversation.id,
+{
+method:'POST',
+body:JSON.stringify({
+text
+})
+}
+);
 
-  try{
+loadChat(
+currentConversation.id
+);
 
-    await api(
-      '/api/conversations/' +
-      encodeURIComponent(currentConversation) +
-      '/messages',
-      {
-        method:'POST',
-        body:JSON.stringify({
-          text
-        })
-      }
-    );
+}
+catch(e){
+toast(e.message)
+}
 
-    input.value = '';
-
-    await openConversation(
-      currentConversation
-    );
-
-  }catch(e){
-
-    toast(e.message);
-
-  }
 }
 
 
 async function sendOffer(){
 
-  if(!currentConversation){
-    toast('Conversa não encontrada.');
-    return;
-  }
+const a =
+prompt(
+'Qual é o valor da oferta em Kz?'
+);
 
-  const input =
-    document.getElementById('offerAmount');
+if(!a)
+return;
 
-  const amount =
-    Number(input?.value || 0);
+const amount =
+Number(
+String(a)
+.replace(/[^0-9]/g,'')
+);
 
-  if(!amount || amount <= 0){
-    toast('Indica um valor válido.');
-    return;
-  }
+if(!amount){
 
-  try{
+toast('Valor inválido.');
 
-    await api(
-      '/api/conversations/' +
-      encodeURIComponent(currentConversation) +
-      '/messages',
-      {
-        method:'POST',
-        body:JSON.stringify({
-          text:'Fiz uma oferta pelo produto.',
-          offerAmount:amount
-        })
-      }
-    );
+return;
 
-    input.value = '';
+}
 
-    toast('Oferta enviada ✓');
+try{
 
-    await openConversation(
-      currentConversation
-    );
+await api(
+'/api/conversations/'+
+currentConversation.id,
+{
+method:'POST',
+body:JSON.stringify({
+type:'offer',
+amount
+})
+}
+);
 
-  }catch(e){
+loadChat(
+currentConversation.id
+);
 
-    toast(e.message);
-
-  }
+}
+catch(e){
+toast(e.message)
+}
 
 }
 
 
-function goToChat(){
+/* =========================
+   ORDERS
+========================= */
 
-  if(!token){
-    toast('Inicia sessão primeiro.');
-    go('account');
-    return;
-  }
+async function loadOrders(){
 
-  go('conversations');
+if(!token){
+
+$('ordersBox').innerHTML=
+'<div class="empty">Inicia sessão para ver pedidos.</div>';
+
+return;
+
+}
+
+try{
+
+const os =
+await api('/api/orders');
+
+$('ordersBox').innerHTML =
+
+os.length
+
+?
+
+os
+.map(
+o=>
+`
+
+<div class="order">
+
+<div class="row">
+
+<b>
+#${esc(o.id)}
+</b>
+
+<span class="status">
+${esc(o.status)}
+</span>
+
+</div>
+
+<div class="muted">
+
+${
+o.createdAt
+?
+new Date(o.createdAt)
+.toLocaleString('pt-PT')
+:
+''
+}
+
+</div>
+
+<div class="price">
+${money(o.total)}
+</div>
+
+</div>
+
+`
+)
+.join('')
+
+:
+
+'<div class="empty">Ainda não tens pedidos.</div>';
+
+}
+catch(e){
+$('ordersBox').textContent=e.message
+}
 
 }
 
 
-function openSellerProfile(sellerId){
+/* =========================
+   STORE
+========================= */
 
-  if(!sellerId){
-    toast('Vendedor não encontrado.');
-    return;
-  }
+async function loadStore(){
 
-  go('seller-' + sellerId);
+const box=$('storeBox');
+
+try{
+
+const stores =
+await api('/api/stores');
+
+const list =
+Array.isArray(stores)
+?
+stores
+:
+(stores?[stores]:[]);
+
+if(!list.length){
+
+box.innerHTML=
+'<div class="empty">Ainda não existem lojas.</div>';
+
+return;
+
+}
+
+box.innerHTML=
+
+`
+
+<div class="head">
+<h3>🏪 Lojas</h3>
+</div>
+
+${list.map(
+s=>
+`
+
+<div class="panel">
+
+<div class="row">
+
+<div class="storeLogo">
+
+${
+s.logo
+?
+`<img src="${s.logo}">`
+:
+'K'
+}
+
+</div>
+
+<div style="flex:1">
+
+<b>
+${esc(s.name||'Loja')}
+</b>
+
+<div class="muted">
+⭐ ${s.rating||5}
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+`
+).join('')}
+
+`;
+
+}
+catch(e){
+
+box.innerHTML=
+`<div class="empty">${esc(e.message)}</div>`;
+
+}
 
 }
 
 
-async function loadSellerProfile(sellerId){
-
-  const root =
-    document.getElementById('appContent');
-
-  root.innerHTML = `
-    <div class="page">
-      <div class="empty">
-        A carregar perfil do vendedor...
-      </div>
-    </div>
-  `;
-
-  try{
-
-    const data =
-      await api(
-        '/api/users/' +
-        encodeURIComponent(sellerId)
-      );
-
-    const seller =
-      data.user || data;
-
-    root.innerHTML = `
-
-      <div class="page">
-
-        <button
-          class="btn btn-secondary"
-          onclick="go('explore')">
-          ← Voltar
-        </button>
-
-        <div class="seller-profile card mt">
-
-          <div class="seller-avatar">
-            ${esc(
-              (seller.name || 'V')
-                .charAt(0)
-                .toUpperCase()
-            )}
-          </div>
-
-          <h2>
-            ${esc(seller.name || 'Vendedor')}
-          </h2>
-
-          <div class="small">
-            ${esc(seller.email || '')}
-          </div>
-
-          <div class="score-box mt">
-
-            <div class="score-number">
-              ${seller.score ?? 50}
-            </div>
-
-            <div>
-              <strong>
-                Kuanza Score
-              </strong>
-
-              <div class="small">
-                ${esc(
-                  seller.scoreLabel ||
-                  'Em avaliação'
-                )}
-              </div>
-            </div>
-
-          </div>
-
-          <div class="mt">
-
-            <span class="badge">
-              ${seller.verified
-                ? '✓ Verificado'
-                : 'Vendedor'}
-            </span>
-
-          </div>
-
-        </div>
-
-      </div>
-
-    `;
-
-  }catch(e){
-
-    root.innerHTML = `
-      <div class="page">
-        <div class="empty">
-          ${esc(e.message)}
-        </div>
-      </div>
-    `;
-
-  }
-
-}
-      <div class="chat-input">
-
-        <input
-          id="chatInput"
-          placeholder="Escreve uma mensagem..."
-          onkeydown="if(event.key==='Enter')sendChatMessage()">
-
-        <button onclick="sendChatMessage()">
-          Enviar
-        </button>
-
-      </div>
-
-      <button class="btn btn-secondary btn-full mt"
-        onclick="sendOffer()">
-        💰 Fazer proposta
-      </button>
-
-    `);
-
-    setTimeout(()=>{
-      const chat =
-        document.getElementById('chatMessages');
-
-      if(chat){
-        chat.scrollTop = chat.scrollHeight;
-      }
-    },50);
-
-  }catch(e){
-    toast(e.message);
-  }
-}
-
-function renderMessage(message){
-
-  const mine =
-    String(message.senderId || message.userId) === String(me?.id);
-
-  return `
-    <div class="message ${mine?'mine':'theirs'}">
-
-      ${esc(message.text || '')}
-
-      ${
-        message.amount
-        ? `
-          <div class="mt">
-            <strong>
-              Proposta: ${money(message.amount)}
-            </strong>
-          </div>
-        `
-        : ''
-      }
-
-    </div>
-  `;
-}
-
-async function sendChatMessage(){
-
-  const input =
-    document.getElementById('chatInput');
-
-  const text =
-    input?.value.trim();
-
-  if(!text || !currentConversation){
-    return;
-  }
-
-  try{
-
-    await api('/api/conversations/' +
-      encodeURIComponent(currentConversation),{
-        method:'POST',
-        body:JSON.stringify({
-          text,
-          type:'text'
-        })
-      });
-
-    input.value = '';
-
-    await openConversation(currentConversation);
-
-  }catch(e){
-    toast(e.message);
-  }
-}
-
-async function sendOffer(){
-
-  if(!currentConversation){
-    return;
-  }
-
-  const amount =
-    prompt('Qual é o valor da tua proposta em Kz?');
-
-  if(!amount){
-    return;
-  }
-
-  const value =
-    Number(String(amount).replace(/\D/g,''));
-
-  if(!value || value <= 0){
-    toast('Valor inválido.');
-    return;
-  }
-
-  try{
-
-    await api('/api/conversations/' +
-      encodeURIComponent(currentConversation),{
-        method:'POST',
-        body:JSON.stringify({
-          text:'Nova proposta de preço',
-          type:'offer',
-          amount:value
-        })
-      });
-
-    await openConversation(currentConversation);
-
-  }catch(e){
-    toast(e.message);
-  }
-}
+/* =========================
+   NOTIFICATIONS
+========================= */
 
 function showNotifications(){
 
-  openModal(`
-    <div class="modal-head">
-
-      <h3>🔔 Notificações</h3>
-
-      <button class="close"
-        onclick="closeModal()">
-        ✕
-      </button>
-
-    </div>
-
-    <div class="notification">
-
-      <strong>Bem-vindo ao Kuanza Line!</strong>
-
-      <div class="small mt">
-        Aqui receberás atualizações sobre pedidos,
-        mensagens, vendas e segurança da tua conta.
-      </div>
-
-    </div>
-
-    <div class="notification">
-
-      <strong>🛡️ Kuanza Score</strong>
-
-      <div class="small mt">
-        Mantém boas avaliações, entrega os pedidos
-        e evita cancelamentos para aumentar a tua confiança.
-      </div>
-
-    </div>
-
-  `);
+toast(
+'🔔 Notificações de chats, ofertas e pedidos aparecerão aqui.'
+);
 
 }
 
-function openModal(content){
 
-  const modal =
-    document.getElementById('modal');
-
-  const box =
-    document.getElementById('modalBox');
-
-  box.innerHTML = content;
-
-  modal.classList.remove('hidden');
-}
+/* =========================
+   MODAL
+========================= */
 
 function closeModal(){
 
-  document
-    .getElementById('modal')
-    .classList.add('hidden');
-}
-
-function modalBackground(event){
-
-  if(event.target.id === 'modal'){
-    closeModal();
-  }
+$('modal')
+.classList
+.remove('show');
 
 }
 
-window.addEventListener('error',function(e){
-  console.error(
-    'Kuanza Line JS:',
-    e.error || e.message
-  );
-});
 
-async function init(){
+/* =========================
+   LOGOUT
+========================= */
 
-  if(token){
+function logout(){
 
-    try{
+token='';
 
-      const data =
-        await api('/api/me');
+me=null;
 
-      me =
-        data.user ||
-        data;
+localStorage.removeItem(
+'klToken'
+);
 
-    }catch(e){
+toast(
+'Sessão terminada.'
+);
 
-      console.log('Sessão não encontrada.');
+loadAccount();
 
-      token = '';
-
-      localStorage.removeItem('kuanza_token');
-
-      me = null;
-
-    }
-
-  }
-
-  await loadHome();
+go('home');
 
 }
 
-init();
+
+/* =========================
+   BOOT
+========================= */
+
+async function boot(){
+
+renderCats();
+
+if(token){
+
+try{
+
+me =
+await api('/api/me');
+
+}
+catch{
+
+token='';
+
+localStorage.removeItem(
+'klToken'
+);
+
+}
+
+}
+
+await loadProducts();
+
+if(me)
+loadAccount();
+
+}
+
+boot();
+
 </script>
 
 </body>
 </html>
-
