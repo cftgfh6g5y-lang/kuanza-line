@@ -2965,8 +2965,36 @@ async function loadStore(){
   if(!token){
     root.innerHTML = `
       <div class="page">
+        <div class="empty">Inicia sessão para gerir a tua loja.</div>
+      </div>
+    `;
+    return;
+  }
+
+  if(!me){
+    try{
+      const fresh = await api('/api/me');
+      me = fresh.user || fresh;
+    }catch(e){}
+  }
+
+  if(!me){
+    root.innerHTML = `
+      <div class="page">
+        <div class="empty">Não foi possível carregar a tua conta.</div>
+      </div>
+    `;
+    return;
+  }
+
+  if(me.role !== 'seller'){
+    root.innerHTML = `
+      <div class="page">
         <div class="empty">
-          Inicia sessão para ver a tua loja.
+          <div class="emoji">🏪</div>
+          <strong>Estás no modo comprador.</strong>
+          <p class="small mt">Muda para Vendedor para gerir a tua loja.</p>
+          <button class="btn btn-primary mt" onclick="switchRole()">Mudar para vendedor</button>
         </div>
       </div>
     `;
@@ -2975,74 +3003,104 @@ async function loadStore(){
 
   try{
 
-    const data =
-      await api('/api/stores?ownerId=' + encodeURIComponent(me?.id || ''));
+    const data = await api('/api/stores?ownerId=' + encodeURIComponent(me.id));
 
-    const stores =
-      Array.isArray(data)
-        ? data
-        : (data.stores || []);
+    const store =
+      data?.store ||
+      (Array.isArray(data?.stores) ? data.stores[0] : null) ||
+      (Array.isArray(data) ? data[0] : null) ||
+      null;
 
-    const store = stores[0];
+    const storeProducts =
+      Array.isArray(data?.products)
+        ? data.products
+        : products.filter(p => String(p.sellerId) === String(me.id));
 
     root.innerHTML = `
       <div class="page">
 
         <div class="section-title">
-          <h2>🏪 Minha loja</h2>
+          <h2>🏪 Gerir loja</h2>
         </div>
 
-        ${
-          store
-          ? `
-            <div class="card">
+        <div class="card">
 
-              <h3>${esc(store.name || 'Minha loja')}</h3>
+          <div style="display:flex;align-items:center;gap:14px">
 
-              <p class="small">
-                ${esc(store.description || 'Sem descrição.')}
-              </p>
-
-              <div class="stats">
-
-                <div class="stat">
-                  <strong>${store.rating || 0}</strong>
-                  <small>Avaliação</small>
-                </div>
-
-                <div class="stat">
-                  <strong>${me?.score || 0}</strong>
-                  <small>Score</small>
-                </div>
-
-                <div class="stat">
-                  <strong>${products.filter(p=>String(p.sellerId)===String(me?.id)).length}</strong>
-                  <small>Produtos</small>
-                </div>
-
-              </div>
-
+            <div style="
+              width:76px;
+              height:76px;
+              border-radius:20px;
+              overflow:hidden;
+              background:#e9efeb;
+              display:flex;
+              align-items:center;
+              justify-content:center;
+              flex-shrink:0;
+            ">
+              ${
+                store?.logo
+                ? `<img
+                    src="${esc(store.logo)}"
+                    alt="Logotipo da loja"
+                    style="width:100%;height:100%;object-fit:cover"
+                    onerror="this.style.display='none';this.parentElement.innerHTML='🏪';"
+                  >`
+                : `<span style="font-size:32px">🏪</span>`
+              }
             </div>
-          `
-          : `
-            <div class="empty">
 
-              <div class="emoji">🏪</div>
-
-              <strong>Ainda não tens uma loja.</strong>
-
+            <div style="flex:1">
+              <h3>${esc(store?.name || 'Minha loja')}</h3>
               <p class="small mt">
-                Cria a tua loja para começar a vender.
+                ${esc(store?.description || 'Ainda não adicionaste uma descrição.')}
               </p>
-
-              <button class="btn btn-primary mt"
-                onclick="createStore()">
-                Criar loja
-              </button>
-
             </div>
-          `
-        }
+
+          </div>
+
+          <div class="stats mt">
+
+            <div class="stat">
+              <strong>${Number(store?.rating || 5).toFixed(1)}</strong>
+              <small>Avaliação</small>
+            </div>
+
+            <div class="stat">
+              <strong>${Number(me.score || 0)}</strong>
+              <small>Kuanza Score</small>
+            </div>
+
+            <div class="stat">
+              <strong>${storeProducts.length}</strong>
+              <small>Produtos</small>
+            </div>
+
+          </div>
+
+          <button
+            class="btn btn-primary btn-full mt"
+            onclick="editStore(${store ? 'true' : 'false'})">
+            ✏️ ${store ? 'Editar loja' : 'Criar loja'}
+          </button>
+
+        </div>
+
+        <div class="card mt">
+
+          <h3>🏪 Informações da loja</h3>
+
+          <div class="small mt">
+            Nome, descrição, logotipo/foto e informações básicas da tua loja.
+          </div>
+
+          <button
+            class="btn btn-secondary btn-full mt"
+            onclick="editStore(${store ? 'true' : 'false'})">
+            ${store ? 'Gerir informações' : 'Criar a minha loja'}
+          </button>
+
+        </div>
 
       </div>
     `;
@@ -3052,18 +3110,18 @@ async function loadStore(){
     root.innerHTML = `
       <div class="page">
         <div class="empty">
-          ${esc(e.message)}
+          ${esc(e.message || 'Não foi possível carregar a loja.')}
         </div>
       </div>
     `;
   }
 }
 
-function createStore(){
+function editStore(hasStore){
 
   openModal(`
     <div class="modal-head">
-      <h3>Criar loja</h3>
+      <h3>${hasStore ? 'Editar loja' : 'Criar loja'}</h3>
       <button class="close" onclick="closeModal()">✕</button>
     </div>
 
@@ -3081,16 +3139,105 @@ function createStore(){
           placeholder="Fala um pouco sobre a tua loja"></textarea>
       </div>
 
-      <button class="btn btn-primary"
-        onclick="submitStore()">
-        Criar loja
+      <div>
+        <label>Logotipo / foto da loja</label>
+        <input
+          id="storeLogoFile"
+          type="file"
+          accept="image/*"
+          onchange="previewStoreLogo(event)"
+        >
+        <div id="storeLogoPreview" class="photo-slot mt" style="height:150px">
+          🏪
+        </div>
+      </div>
+
+      <div class="small">
+        Escolhe uma imagem quadrada ou horizontal de boa qualidade.
+      </div>
+
+      <button
+        class="btn btn-primary btn-full"
+        onclick="saveStore()">
+        💾 Guardar alterações
       </button>
 
     </div>
   `);
+
+  loadStoreForm(hasStore);
 }
 
-async function submitStore(){
+async function loadStoreForm(hasStore){
+
+  try{
+
+    const data = await api('/api/stores?ownerId=' + encodeURIComponent(me.id));
+
+    const store =
+      data?.store ||
+      (Array.isArray(data?.stores) ? data.stores[0] : null) ||
+      (Array.isArray(data) ? data[0] : null) ||
+      null;
+
+    const name = document.getElementById('storeName');
+    const description = document.getElementById('storeDescription');
+    const preview = document.getElementById('storeLogoPreview');
+
+    if(name) name.value = store?.name || '';
+    if(description) description.value = store?.description || '';
+
+    if(preview && store?.logo){
+      preview.innerHTML = `
+        <img
+          src="${esc(store.logo)}"
+          alt="Logo da loja"
+          style="width:100%;height:100%;object-fit:cover"
+          onerror="this.style.display='none';this.parentElement.innerHTML='🏪';"
+        >
+      `;
+    }
+
+  }catch(e){
+    console.error('Erro ao carregar dados da loja:',e);
+  }
+}
+
+function previewStoreLogo(event){
+
+  const file = event.target.files?.[0];
+  const preview = document.getElementById('storeLogoPreview');
+
+  if(!file || !preview)return;
+
+  if(!file.type.startsWith('image/')){
+    toast('Seleciona uma imagem válida.');
+    event.target.value = '';
+    return;
+  }
+
+  if(file.size > 4 * 1024 * 1024){
+    toast('A imagem da loja deve ter no máximo 4 MB.');
+    event.target.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = () => {
+    preview.innerHTML = `
+      <img
+        src="${esc(String(reader.result || ''))}"
+        alt="Pré-visualização"
+        style="width:100%;height:100%;object-fit:cover"
+      >
+    `;
+  };
+
+  reader.readAsDataURL(file);
+}
+
+async function saveStore(){
 
   const name =
     document.getElementById('storeName')?.value.trim();
@@ -3098,30 +3245,79 @@ async function submitStore(){
   const description =
     document.getElementById('storeDescription')?.value.trim();
 
+  const file =
+    document.getElementById('storeLogoFile')?.files?.[0];
+
   if(!name){
     toast('Indica o nome da loja.');
     return;
   }
 
+  if(name.length < 2){
+    toast('O nome da loja deve ter pelo menos 2 caracteres.');
+    return;
+  }
+
+  if(description && description.length > 500){
+    toast('A descrição deve ter no máximo 500 caracteres.');
+    return;
+  }
+
   try{
 
+    let logo;
+
+    if(file){
+
+      if(file.size > 4 * 1024 * 1024){
+        toast('A imagem da loja deve ter no máximo 4 MB.');
+        return;
+      }
+
+      logo = await new Promise((resolve,reject)=>{
+
+        const reader = new FileReader();
+
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
+
+        reader.readAsDataURL(file);
+
+      });
+
+    }
+
+    const payload = {
+      name,
+      description
+    };
+
+    if(logo){
+      payload.logo = logo;
+    }
+
     await api('/api/stores',{
-      method:'POST',
-      body:JSON.stringify({
-        name,
-        description
-      })
+      method:'PATCH',
+      body:JSON.stringify(payload)
     });
 
     closeModal();
 
-    toast('Loja criada ✓');
+    toast('Loja guardada com sucesso ✓');
 
-    loadStore();
+    await loadStore();
 
   }catch(e){
-    toast(e.message);
+    toast(e.message || 'Não foi possível guardar a loja.');
   }
+}
+
+async function createStore(){
+  editStore(false);
+}
+
+async function submitStore(){
+  await saveStore();
 }
 
 async function loadDashboard(){
