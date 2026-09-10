@@ -56,17 +56,27 @@ function token(){return crypto.randomBytes(24).toString('hex');}
 
 async function auth(db,req){
   const accessToken=(req.headers.authorization||'').replace('Bearer ','').trim();
-  if(!accessToken || !supabaseAuth || !supabaseAdmin) return null;
+  if(!accessToken || !supabaseAuth) return null;
 
   const { data, error } = await supabaseAuth.auth.getUser(accessToken);
   if(error || !data?.user) return null;
 
   const au=data.user;
-  const { data: profile } = await supabaseAdmin
+  const supabaseUser=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
+    global:{headers:{Authorization:`Bearer ${accessToken}`}},
+    auth:{persistSession:false,autoRefreshToken:false}
+  });
+
+  const { data: profile, error: profileError } = await supabaseUser
     .from('profiles')
     .select('id,full_name,phone,avatar_url,role,verified,score,created_at,updated_at')
     .eq('id',au.id)
     .maybeSingle();
+
+  if(profileError){
+    console.error('Erro ao carregar perfil Supabase:',profileError.message);
+    return null;
+  }
 
   const p=profile||{};
   const user={
@@ -217,8 +227,8 @@ const server=http.createServer(async(req,res)=>{
     if(!rateLimit(req, u.pathname.startsWith('/api/login')?'login':u.pathname.startsWith('/api/register')?'register':'api', u.pathname.startsWith('/api/login')?12:u.pathname.startsWith('/api/register')?8:120, 60000)) return json(res,429,{error:'Muitas solicitações. Tenta novamente em instantes.'});
     const currentUser=await auth(db,req);
     if(currentUser && isBlocked(db,currentUser.id)) return json(res,403,{error:'A tua conta está temporariamente bloqueada.'});
-    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.9.1',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
-    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'1.9.1',supabase:!!(supabaseAuth&&supabaseAdmin)});
+    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.9.3',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
+    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'1.9.3',supabase:!!(supabaseAuth&&supabaseAdmin)});
 
     if(u.pathname==='/api/products'&&req.method==='GET'){
       let list=db.products.map(p=>publicProduct(db,p));
