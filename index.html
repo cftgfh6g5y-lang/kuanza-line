@@ -1309,6 +1309,7 @@ function renderProducts(list,targetId){
 
 function productCard(p){
   const image =
+    (Array.isArray(p.photos) && p.photos[0]) ||
     p.images?.[0] ||
     p.image ||
     'https://placehold.co/600x600?text=Kuanza+Line';
@@ -1326,6 +1327,7 @@ function productCard(p){
       <img
         class="product-image"
         src="${image}"
+        onerror="this.onerror=null;this.src='https://placehold.co/600x600?text=Kuanza+Line'"
         alt="${esc(p.name)}"
         onclick="openProduct('${esc(p.id)}')"
       >
@@ -1337,7 +1339,7 @@ function productCard(p){
         <div class="price">${money(p.price)}</div>
 
         <div class="product-meta">
-          ${esc(p.category || 'Outros')}
+          ${esc(p.cat || p.category || 'Outros')}
         </div>
 
         ${
@@ -1483,9 +1485,11 @@ async function openProduct(id){
   currentProduct = product;
 
   const images =
-    product.images?.length
-      ? product.images
-      : [product.image || 'https://placehold.co/800x800?text=Kuanza+Line'];
+    Array.isArray(product.photos) && product.photos.length
+      ? product.photos
+      : (Array.isArray(product.images) && product.images.length
+          ? product.images
+          : [product.image || 'https://placehold.co/800x800?text=Kuanza+Line']);
 
   const seller = product.seller || {};
 
@@ -1507,6 +1511,7 @@ async function openProduct(id){
         id="mainProductImage"
         class="detail-image"
         src="${images[0]}"
+        onerror="this.onerror=null;this.src='https://placehold.co/800x800?text=Kuanza+Line'"
         alt="${esc(product.name)}"
       >
 
@@ -2848,7 +2853,7 @@ async function publishProduct(){
       body:JSON.stringify({
         name,
         price,
-        cat:category,
+        category,
         description,
         photos:selectedPhotos.slice(0,10)
       })
