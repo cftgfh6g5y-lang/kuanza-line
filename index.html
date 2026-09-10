@@ -3442,347 +3442,140 @@ async function updateSellerOrderStatus(id,status){
 }
 
 async function loadConversations(){
-
-  const root =
-    document.getElementById('appContent');
-
+  const root=document.getElementById('appContent');
   if(!token){
-    root.innerHTML = `
-      <div class="page">
-        <div class="empty">
-          Inicia sessão para ver as conversas.
-        </div>
-      </div>
-    `;
+    root.innerHTML='<div class="page"><div class="empty">Inicia sessão para ver as conversas.</div></div>';
     return;
   }
-
-  root.innerHTML = `
-    <div class="page">
-
-      <div class="section-title">
-        <h2>💬 Minhas conversas</h2>
-      </div>
-
-      <div id="conversationsList">
-        <div class="empty">A carregar...</div>
-      </div>
-
-    </div>
-  `;
-
+  root.innerHTML=`<div class="page"><div class="section-title"><h2>💬 Minhas conversas</h2></div><div id="conversationsList"><div class="empty">A carregar...</div></div></div>`;
   try{
-
-    const data =
-      await api('/api/conversations');
-
-    const conversations =
-      Array.isArray(data)
-        ? data
-        : (data.conversations || []);
-
-    const target =
-      document.getElementById('conversationsList');
-
+    const data=await api('/api/conversations');
+    const conversations=Array.isArray(data)?data:(data.conversations||data.items||[]);
+    const target=document.getElementById('conversationsList');
+    if(!target)return;
     if(!conversations.length){
-      target.innerHTML = `
-        <div class="empty">
-
-          <div class="emoji">💬</div>
-
-          <strong>Nenhuma conversa ainda.</strong>
-
-          <p class="small mt">
-            Abre um produto e fala com o vendedor.
-          </p>
-
-        </div>
-      `;
+      target.innerHTML='<div class="empty"><div class="emoji">💬</div><strong>Nenhuma conversa ainda.</strong><p class="small mt">Abre um produto e fala com o vendedor.</p></div>';
       return;
     }
-
-    target.innerHTML =
-      conversations.map(c=>`
-
-        <div class="conversation"
-          onclick="openConversation('${esc(c.id)}')">
-
-          <div class="row">
-
-            <strong>
-              ${esc(c.productName || 'Conversa')}
-            </strong>
-
-            <span class="small">
-              ${c.updatedAt ? new Date(c.updatedAt).toLocaleDateString('pt-AO') : ''}
-            </span>
-
-          </div>
-
-          <div class="small mt">
-            ${esc(c.lastMessage || 'Abrir conversa')}
-          </div>
-
-        </div>
-
-      `).join('');
-
+    target.innerHTML=conversations.map(c=>{
+      const productName=c.productName||c.product?.name||'Conversa Kuanza Line';
+      const last=c.lastMessage;
+      const lastMessageText=c.lastMessageText||(
+        typeof last==='string'?last:(last?.type==='offer'?`💰 Proposta: ${money(last.amount)}`:(last?.text||'Abrir conversa'))
+      );
+      const date=last?.createdAt||c.updatedAt||c.createdAt;
+      const otherName=c.other?.name||c.other?.full_name||c.otherName||'';
+      return `<div class="conversation" onclick="openConversation('${esc(c.id)}')">
+        <div class="row"><strong>${esc(productName)}</strong><span class="small">${date?new Date(date).toLocaleDateString('pt-AO'):''}</span></div>
+        ${otherName?`<div class="small mt">${esc(otherName)}</div>`:''}
+        <div class="small mt">${esc(lastMessageText)}</div>
+      </div>`;
+    }).join('');
   }catch(e){
-
-    document.getElementById('conversationsList').innerHTML =
-      `<div class="empty">${esc(e.message)}</div>`;
+    const target=document.getElementById('conversationsList');
+    if(target)target.innerHTML=`<div class="empty">${esc(e.message)}</div>`;
   }
 }
 
 async function startChatWithSeller(sellerId){
-
-  if(!token){
-    toast('Inicia sessão para conversar.');
-    go('account');
-    return;
-  }
-
-  if(!currentProduct){
-    return;
-  }
-
-  if(!sellerId){
-    toast('Este vendedor não está disponível para chat.');
-    return;
-  }
-
-  if(String(sellerId) === String(me?.id)){
-    toast('Não podes iniciar uma conversa contigo mesmo.');
-    return;
-  }
-
+  if(!token){toast('Inicia sessão para conversar.');go('account');return;}
+  if(!currentProduct)return;
+  if(!sellerId){toast('Este vendedor não está disponível para chat.');return;}
+  if(String(sellerId)===String(me?.id)){toast('Não podes iniciar uma conversa contigo mesmo.');return;}
   try{
-
-    const data =
-      await api('/api/conversations',{
-        method:'POST',
-        body:JSON.stringify({
-          sellerId,
-          productId:currentProduct.id
-        })
-      });
-
-    const conversation =
-      data.conversation || data;
-
-    currentConversation =
-      conversation.id || conversation._id;
-
-    await openConversation(currentConversation);
-
-  }catch(e){
-    toast(e.message);
-  }
+    const data=await api('/api/conversations',{method:'POST',body:JSON.stringify({sellerId,productId:currentProduct.id})});
+    const conversation=data.conversation||data;
+    const id=conversation.id||conversation._id;
+    if(!id)throw new Error('O servidor não devolveu o ID da conversa.');
+    currentConversation=id;
+    await openConversation(id);
+  }catch(e){toast(e.message);}
 }
 
 async function openConversation(id){
-
-  if(!token){
-    toast('Inicia sessão.');
-    return;
-  }
-
+  if(!token){toast('Inicia sessão.');return;}
+  if(!id){toast('Conversa inválida.');return;}
   try{
-
-    const data =
-      await api('/api/conversations/' + encodeURIComponent(id));
-
-    const conversation =
-      data.conversation || data;
-
-    currentConversation =
-      conversation.id || id;
-
-    const messages =
-      conversation.messages || [];
-
+    const data=await api('/api/conversations/'+encodeURIComponent(id));
+    const conversation=data.conversation||data;
+    currentConversation=conversation.id||id;
+    const messages=Array.isArray(data.messages)?data.messages:(Array.isArray(conversation.messages)?conversation.messages:[]);
+    const productName=conversation.productName||conversation.product?.name||'Conversa Kuanza Line';
+    const otherName=conversation.other?.name||conversation.other?.full_name||conversation.otherName||'';
     openModal(`
-      <div class="modal-head">
-
-        <h3>
-          💬 ${esc(conversation.productName || 'Conversa')}
-        </h3>
-
-        <button class="close"
-          onclick="closeModal()">
-          ✕
-        </button>
-
-      </div>
-
-      <div class="chat" id="chatMessages">
-
-        ${
-          messages.length
-          ? messages.map(renderMessage).join('')
-          : `
-            <div class="center small">
-              Nenhuma mensagem ainda.
-            </div>
-          `
-        }
-
-      </div>
-
-      <div class="chat-input">
-
-        <input
-          id="chatInput"
-          placeholder="Escreve uma mensagem..."
-          onkeydown="if(event.key==='Enter')sendChatMessage()">
-
-        <button onclick="sendChatMessage()">
-          Enviar
-        </button>
-
-      </div>
-
-      <button class="btn btn-secondary btn-full mt"
-        onclick="sendOffer()">
-        💰 Fazer proposta
-      </button>
-
+      <div class="modal-head"><h3>💬 ${esc(productName)}</h3><button class="close" onclick="closeModal()">✕</button></div>
+      ${otherName?`<div class="small mb">Com ${esc(otherName)}</div>`:''}
+      <div class="chat" id="chatMessages">${messages.length?messages.map(renderMessage).join(''):'<div class="center small">Nenhuma mensagem ainda.</div>'}</div>
+      <div class="chat-input"><input id="chatInput" placeholder="Escreve uma mensagem..." onkeydown="if(event.key==='Enter')sendChatMessage()"><button onclick="sendChatMessage()">Enviar</button></div>
+      <button class="btn btn-secondary btn-full mt" onclick="sendOffer()">💰 Fazer proposta</button>
     `);
-
-    setTimeout(()=>{
-      const chat =
-        document.getElementById('chatMessages');
-
-      if(chat){
-        chat.scrollTop = chat.scrollHeight;
-      }
-    },50);
-
-  }catch(e){
-    toast(e.message);
-  }
+    setTimeout(()=>{const chat=document.getElementById('chatMessages');if(chat)chat.scrollTop=chat.scrollHeight;},50);
+  }catch(e){toast(e.message);}
 }
 
 function renderMessage(message){
-
-  const mine =
-    String(message.senderId || message.userId) === String(me?.id);
-
-  return `
-    <div class="message ${mine?'mine':'theirs'}">
-
-      ${esc(message.text || '')}
-
-      ${
-        message.amount
-        ? `
-          <div class="mt">
-            <strong>
-              Proposta: ${money(message.amount)}
-            </strong>
-          </div>
-        `
-        : ''
-      }
-
-    </div>
-  `;
+  const mine=String(message.senderId||message.userId)===String(me?.id);
+  return `<div class="message ${mine?'mine':'theirs'}">${message.type==='offer'?`<strong>💰 Proposta: ${money(message.amount)}</strong>`:esc(message.text||'')}<div class="small mt" style="opacity:.65">${message.createdAt?new Date(message.createdAt).toLocaleTimeString('pt-AO',{hour:'2-digit',minute:'2-digit'}):''}</div></div>`;
 }
 
 async function sendChatMessage(){
-
-  const input =
-    document.getElementById('chatInput');
-
-  const text =
-    input?.value.trim();
-
-  if(!text || !currentConversation){
-    return;
-  }
-
+  const input=document.getElementById('chatInput');
+  const text=input?.value.trim();
+  if(!text||!currentConversation)return;
   try{
-
-    await api('/api/conversations/' +
-      encodeURIComponent(currentConversation),{
-        method:'POST',
-        body:JSON.stringify({
-          text,
-          type:'text'
-        })
-      });
-
-    input.value = '';
-
+    await api('/api/conversations/'+encodeURIComponent(currentConversation),{method:'POST',body:JSON.stringify({text,type:'text'})});
+    input.value='';
     await openConversation(currentConversation);
-
-  }catch(e){
-    toast(e.message);
-  }
+  }catch(e){toast(e.message);}
 }
 
 async function sendOffer(){
-
-  if(!currentConversation){
-    return;
-  }
-
-  const amount =
-    prompt('Qual é o valor da tua proposta em Kz?');
-
-  if(!amount){
-    return;
-  }
-
-  const value =
-    Number(String(amount).replace(/\D/g,''));
-
-  if(!value || value <= 0){
-    toast('Valor inválido.');
-    return;
-  }
-
+  if(!currentConversation)return;
+  const amount=prompt('Qual é o valor da tua proposta em Kz?');
+  if(!amount)return;
+  const value=Number(String(amount).replace(/\D/g,''));
+  if(!value||value<=0){toast('Valor inválido.');return;}
   try{
-
-    await api('/api/conversations/' +
-      encodeURIComponent(currentConversation),{
-        method:'POST',
-        body:JSON.stringify({
-          text:'Nova proposta de preço',
-          type:'offer',
-          amount:value
-        })
-      });
-
+    await api('/api/conversations/'+encodeURIComponent(currentConversation),{method:'POST',body:JSON.stringify({text:'Nova proposta de preço',type:'offer',amount:value})});
     await openConversation(currentConversation);
-
-  }catch(e){
-    toast(e.message);
-  }
+  }catch(e){toast(e.message);}
 }
 
 async function showNotifications(){
-  if(!token){
-    openModal(`<div class="modal-head"><h3>🔔 Notificações</h3><button class="close" onclick="closeModal()">✕</button></div><div class="empty mt">Inicia sessão para receber notificações.</div>`);
-    return;
-  }
+  if(!token){toast('Inicia sessão para ver as notificações.');return;}
   try{
     const data=await api('/api/notifications');
-    const items=Array.isArray(data)?data:(data.items||[]);
-    const content=items.length?items.map(n=>`<div class="notification" style="margin-bottom:10px;padding:12px;border-radius:14px;background:${n.read?'#f7f9f8':'#eaf7f0'};border:1px solid #e1e9e4" onclick="markNotificationRead('${esc(n.id)}')">
-      <strong>${esc(n.title||'Notificação')}</strong><div class="small mt">${esc(n.message||'')}</div><div class="small mt" style="opacity:.65">${esc(new Date(n.createdAt).toLocaleString('pt-PT'))}</div>
-    </div>`).join(''):`<div class="empty mt"><div class="emoji">🔔</div><strong>Nenhuma notificação.</strong></div>`;
-    openModal(`<div class="modal-head"><h3>🔔 Notificações ${data.unread?`(${data.unread})`:''}</h3><button class="close" onclick="closeModal()">✕</button></div>
-      ${items.length?`<button class="btn btn-outline mt" onclick="markAllNotificationsRead()">Marcar todas como lidas</button>`:''}<div class="mt">${content}</div>`);
+    const items=Array.isArray(data)?data:(Array.isArray(data.items)?data.items:[]);
+    openModal(`
+      <div class="modal-head"><h3>🔔 Notificações</h3><button class="close" onclick="closeModal()">✕</button></div>
+      ${items.length?items.map(n=>{
+        const conversationId=n.data?.conversationId||n.meta?.conversationId||n.conversationId||'';
+        const clickable=n.type==='message'&&conversationId;
+        return `<div class="notification ${n.read?'':'unread'}" ${clickable?`onclick="openNotificationConversation('${esc(conversationId)}','${esc(n.id)}')" style="cursor:pointer"`:''}>
+          <strong>${esc(n.title||'Notificação')}</strong>
+          <div class="small mt">${esc(n.message||'')}</div>
+          <div class="small mt" style="opacity:.65">${n.createdAt?new Date(n.createdAt).toLocaleString('pt-AO'):''}</div>
+        </div>`;
+      }).join(''):'<div class="empty"><div class="emoji">🔔</div><strong>Nenhuma notificação.</strong></div>'}
+      <button class="btn btn-secondary btn-full mt" onclick="markAllNotificationsRead()">Marcar todas como lidas</button>
+    `);
   }catch(e){toast(e.message);}
 }
-async function markNotificationRead(id){
-  try{await api('/api/notifications/'+encodeURIComponent(id)+'/read',{method:'PATCH'});showNotifications();}
-  catch(e){toast(e.message);}
+
+async function openNotificationConversation(conversationId,notificationId){
+  try{
+    if(notificationId)await api('/api/notifications/'+encodeURIComponent(notificationId)+'/read',{method:'PATCH'});
+    closeModal();
+    await openConversation(conversationId);
+  }catch(e){toast(e.message);}
 }
+
 async function markAllNotificationsRead(){
-  try{await api('/api/notifications/read-all',{method:'PATCH'});showNotifications();}
-  catch(e){toast(e.message);}
+  try{
+    await api('/api/notifications/read-all',{method:'PATCH'});
+    toast('Notificações marcadas como lidas ✓');
+    await showNotifications();
+  }catch(e){toast(e.message);}
 }
 
 function openModal(content){
