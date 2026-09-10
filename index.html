@@ -1055,6 +1055,7 @@ img{
 </div>
 
 <script>
+window.addEventListener('error',()=>{try{const e=document.getElementById('app');if(e&&e.innerText.includes('Cannot')){}}catch(_){}});
 const API = location.origin;
 
 let token = localStorage.getItem('kuanza_token') || '';
