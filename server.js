@@ -232,7 +232,7 @@ const server=http.createServer(async(req,res)=>{
       if(!paymentMethods.includes(paymentMethod))return json(res,400,{error:'Método de pagamento inválido.'});
       if(!deliveryMethods.includes(deliveryMethod))return json(res,400,{error:'Forma de entrega inválida.'});
       if(!deliveryAddress)return json(res,400,{error:'Indica a morada ou ponto de entrega.'});
-      const deliveryFee=0;
+      const deliveryFee=deliveryMethod==='delivery'?1500:0;
       const grandTotal=total+deliveryFee;
       const now=new Date().toISOString();
       const order={id:'KL-'+Date.now().toString().slice(-7),userId:user.id,items,total:grandTotal,subtotal:total,deliveryFee,payment:{method:paymentMethod,status:'Pendente',reference:null},delivery:{method:deliveryMethod,address:deliveryAddress,fee:deliveryFee,recipient,phone},status:'Pendente',statusHistory:[{status:'Pendente',at:now}],createdAt:now};
