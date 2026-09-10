@@ -15,12 +15,12 @@ const demoProducts = [
   {id:'p3',name:'Conjunto Streetwear',price:45000,cat:'Moda',emoji:'👕',seller:'Style AO',sellerId:'demo3',verified:true,rating:4.7,description:'Conjunto streetwear moderno.',photos:[]}
 ];
 
-if (!fs.existsSync(DB)) fs.writeFileSync(DB, JSON.stringify({users:[],stores:[],products:demoProducts,orders:[],sessions:[],favorites:[],carts:[],conversations:[],messages:[],reviews:[],notifications:[],disputes:[],wallets:[],walletTransactions:[]}, null, 2));
+if (!fs.existsSync(DB)) fs.writeFileSync(DB, JSON.stringify({users:[],stores:[],products:demoProducts,orders:[],sessions:[],favorites:[],carts:[],conversations:[],messages:[],reviews:[],notifications:[],disputes:[],wallets:[],walletTransactions:[],deliveries:[]}, null, 2));
 
 function read(){return JSON.parse(fs.readFileSync(DB,'utf8'));}
 function write(d){fs.writeFileSync(DB,JSON.stringify(d,null,2));}
 function ensureDB(db){
-  for(const k of ['users','stores','products','orders','sessions','favorites','carts','conversations','messages','reviews','notifications','disputes','wallets','walletTransactions']) if(!Array.isArray(db[k])) db[k]=[];
+  for(const k of ['users','stores','products','orders','sessions','favorites','carts','conversations','messages','reviews','notifications','disputes','wallets','walletTransactions','deliveries']) if(!Array.isArray(db[k])) db[k]=[];
   for(const p of db.products){ if(!Array.isArray(p.photos)) p.photos=[]; if(!p.description) p.description='Produto disponível na Kuanza Line.'; }
   return db;
 }
@@ -80,6 +80,43 @@ function walletSummary(db,userId){
   const tx=db.walletTransactions.filter(x=>x.userId===userId).slice(0,50);
   return {...w,available:Number(w.available||0),pending:Number(w.pending||0),totalEarned:Number(w.totalEarned||0),totalWithdrawn:Number(w.totalWithdrawn||0),transactions:tx};
 }
+function deliveryStatusFromOrderStatus(status){
+  const map={
+    'Pendente':'A preparar',
+    'Confirmado':'A preparar',
+    'Em preparação':'A preparar',
+    'Enviado':'Em trânsito',
+    'Entregue':'Entregue',
+    'Cancelado':'Cancelada'
+  };
+  return map[status]||'A preparar';
+}
+
+function ensureDeliveryForOrder(db,order){
+  if(!Array.isArray(db.deliveries))db.deliveries=[];
+  let d=db.deliveries.find(x=>x.orderId===order.id);
+  if(!d){
+    d={
+      id:'DEL-'+crypto.randomUUID(),
+      orderId:order.id,
+      buyerId:order.userId,
+      sellerIds:[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))],
+      recipient:order.delivery?.recipient||'',
+      phone:order.delivery?.phone||'',
+      address:order.delivery?.address||'',
+      method:order.delivery?.method||'delivery',
+      fee:Number(order.delivery?.fee||0),
+      status:deliveryStatusFromOrderStatus(order.status),
+      statusHistory:[{status:deliveryStatusFromOrderStatus(order.status),at:order.createdAt||new Date().toISOString()}],
+      confirmationCode:String(Math.floor(100000+Math.random()*900000)),
+      createdAt:order.createdAt||new Date().toISOString(),
+      updatedAt:new Date().toISOString()
+    };
+    db.deliveries.unshift(d);
+  }
+  return d;
+}
+
 function addWalletTx(db,userId,type,amount,description,meta={}){
   const tx={id:'TX-'+Date.now().toString(36)+'-'+crypto.randomBytes(3).toString('hex'),userId,type,amount:Number(amount||0),description,meta,createdAt:new Date().toISOString()};
   db.walletTransactions.unshift(tx);return tx;
@@ -111,7 +148,7 @@ const server=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type,Authorization','Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS'});return res.end();}
   try{
     let db=ensureDB(read());
-    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.6'});
+    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.7'});
 
     if(u.pathname==='/api/products'&&req.method==='GET'){
       let list=db.products.map(p=>publicProduct(db,p));
@@ -190,16 +227,19 @@ const server=http.createServer(async(req,res)=>{
       const paymentMethod=String(b.paymentMethod||'');
       const deliveryMethod=String(b.deliveryMethod||'delivery');
       const deliveryAddress=String(b.deliveryAddress||'').trim().slice(0,500);
+      const recipient=String(b.recipient||user.name||'').trim().slice(0,120);
+      const phone=String(b.phone||'').trim().slice(0,40);
       if(!paymentMethods.includes(paymentMethod))return json(res,400,{error:'Método de pagamento inválido.'});
       if(!deliveryMethods.includes(deliveryMethod))return json(res,400,{error:'Forma de entrega inválida.'});
       if(!deliveryAddress)return json(res,400,{error:'Indica a morada ou ponto de entrega.'});
       const deliveryFee=0;
       const grandTotal=total+deliveryFee;
       const now=new Date().toISOString();
-      const order={id:'KL-'+Date.now().toString().slice(-7),userId:user.id,items,total:grandTotal,subtotal:total,deliveryFee,payment:{method:paymentMethod,status:'Pendente',reference:null},delivery:{method:deliveryMethod,address:deliveryAddress,fee:deliveryFee},status:'Pendente',statusHistory:[{status:'Pendente',at:now}],createdAt:now};
+      const order={id:'KL-'+Date.now().toString().slice(-7),userId:user.id,items,total:grandTotal,subtotal:total,deliveryFee,payment:{method:paymentMethod,status:'Pendente',reference:null},delivery:{method:deliveryMethod,address:deliveryAddress,fee:deliveryFee,recipient,phone},status:'Pendente',statusHistory:[{status:'Pendente',at:now}],createdAt:now};
       db.orders.unshift(order);
       const sellerIds=[...new Set(items.map(i=>i.sellerId).filter(Boolean))];
-      for(const sid of sellerIds){
+      ensureDeliveryForOrder(db,order);
+        for(const sid of sellerIds){
         const share=calculateSellerShare(order,sid); const wallet=ensureWallet(db,sid);
         wallet.pending=Number(wallet.pending||0)+share.net;
         addWalletTx(db,sid,'sale_pending',share.net,`Venda #${String(order.id).slice(-8)} pendente de entrega`,{orderId:order.id,gross:share.gross,commission:share.commission});
@@ -327,8 +367,35 @@ const server=http.createServer(async(req,res)=>{
           }
         }
         notify(db,order.userId,'order','Pedido atualizado',`O pedido #${String(order.id).slice(-8)} está agora: ${next}.`,{orderId:order.id,status:next});
+        const delivery=ensureDeliveryForOrder(db,order); const ds=deliveryStatusFromOrderStatus(next); if(delivery.status!==ds){delivery.status=ds;delivery.updatedAt=new Date().toISOString(); if(!Array.isArray(delivery.statusHistory))delivery.statusHistory=[]; delivery.statusHistory.push({status:ds,at:delivery.updatedAt}); notify(db,order.userId,'delivery','Entrega atualizada',`A entrega do pedido #${String(order.id).slice(-8)} está agora: ${ds}.`,{orderId:order.id,deliveryId:delivery.id,status:ds});}
       }
       write(db);return json(res,200,order);
+    }
+
+    if(u.pathname==='/api/deliveries'&&req.method==='GET'){
+      const user=auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const list=db.deliveries.filter(d=>d.buyerId===user.id||d.sellerIds?.includes(user.id));
+      return json(res,200,list.slice(0,100));
+    }
+
+    if(u.pathname.startsWith('/api/deliveries/')&&req.method==='GET'){
+      const user=auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const id=decodeURIComponent(u.pathname.split('/').pop()||''); const d=db.deliveries.find(x=>x.id===id);
+      if(!d)return json(res,404,{error:'Entrega não encontrada.'});
+      if(d.buyerId!==user.id&&!d.sellerIds?.includes(user.id))return json(res,403,{error:'Sem permissão.'});
+      return json(res,200,d);
+    }
+
+    if(u.pathname.startsWith('/api/deliveries/')&&req.method==='PATCH'){
+      const user=auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão.'});
+      if(user.role!=='seller')return json(res,403,{error:'Apenas vendedores podem atualizar a entrega.'});
+      const id=decodeURIComponent(u.pathname.split('/').pop()||''); const d=db.deliveries.find(x=>x.id===id);
+      if(!d)return json(res,404,{error:'Entrega não encontrada.'});
+      if(!d.sellerIds?.includes(user.id))return json(res,403,{error:'Sem permissão.'});
+      const b=await body(req); const allowed=['A preparar','Recolhida','Em trânsito','Chegou à zona','Entregue','Cancelada']; const next=String(b.status||'');
+      if(!allowed.includes(next))return json(res,400,{error:'Estado de entrega inválido.'});
+      if(d.status!==next){d.status=next;d.updatedAt=new Date().toISOString();d.statusHistory.push({status:next,at:d.updatedAt}); const order=db.orders.find(o=>o.id===d.orderId); if(order&&next==='Entregue'){order.status='Entregue';order.updatedAt=d.updatedAt;if(!Array.isArray(order.statusHistory))order.statusHistory=[];order.statusHistory.push({status:'Entregue',at:d.updatedAt});settleDeliveredOrder(db,order);} if(d.buyerId)notify(db,d.buyerId,'delivery','Estado da entrega',`A entrega do pedido #${String(d.orderId).slice(-8)} está agora: ${next}.`,{orderId:d.orderId,deliveryId:d.id,status:next});}
+      write(db); return json(res,200,d);
     }
 
     if(u.pathname==='/api/reviews'&&req.method==='GET'){
