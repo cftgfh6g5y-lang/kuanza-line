@@ -15,12 +15,12 @@ const demoProducts = [
   {id:'p3',name:'Conjunto Streetwear',price:45000,cat:'Moda',emoji:'👕',seller:'Style AO',sellerId:'demo3',verified:true,rating:4.7,description:'Conjunto streetwear moderno.',photos:[]}
 ];
 
-if (!fs.existsSync(DB)) fs.writeFileSync(DB, JSON.stringify({users:[],stores:[],products:demoProducts,orders:[],sessions:[],favorites:[],carts:[],conversations:[],messages:[],reviews:[],notifications:[],disputes:[],wallets:[],walletTransactions:[],deliveries:[]}, null, 2));
+if (!fs.existsSync(DB)) fs.writeFileSync(DB, JSON.stringify({users:[],stores:[],products:demoProducts,orders:[],sessions:[],favorites:[],carts:[],conversations:[],messages:[],reviews:[],notifications:[],disputes:[],wallets:[],walletTransactions:[],deliveries:[],securityEvents:[],reports:[],blockedUsers:[]}, null, 2));
 
 function read(){return JSON.parse(fs.readFileSync(DB,'utf8'));}
 function write(d){fs.writeFileSync(DB,JSON.stringify(d,null,2));}
 function ensureDB(db){
-  for(const k of ['users','stores','products','orders','sessions','favorites','carts','conversations','messages','reviews','notifications','disputes','wallets','walletTransactions','deliveries']) if(!Array.isArray(db[k])) db[k]=[];
+  for(const k of ['users','stores','products','orders','sessions','favorites','carts','conversations','messages','reviews','notifications','disputes','wallets','walletTransactions','deliveries','securityEvents','reports','blockedUsers']) if(!Array.isArray(db[k])) db[k]=[];
   for(const p of db.products){ if(!Array.isArray(p.photos)) p.photos=[]; if(!p.description) p.description='Produto disponível na Kuanza Line.'; }
   return db;
 }
@@ -143,12 +143,20 @@ function settleDeliveredOrder(db,order){
   return true;
 }
 
+const rateBuckets=new Map();
+function rateLimit(req,key,limit=60,windowMs=60000){const now=Date.now();const id=key+'|'+(req.socket.remoteAddress||'unknown');const a=rateBuckets.get(id)||[];const fresh=a.filter(t=>now-t<windowMs);fresh.push(now);rateBuckets.set(id,fresh);return fresh.length<=limit;}
+function audit(db,req,userId,event,meta={}){if(!Array.isArray(db.securityEvents))db.securityEvents=[];db.securityEvents.unshift({id:crypto.randomUUID(),userId:userId||null,event,ip:req.socket.remoteAddress||'unknown',at:new Date().toISOString(),meta});if(db.securityEvents.length>1000)db.securityEvents=db.securityEvents.slice(0,1000);}
+function isBlocked(db,userId){return Array.isArray(db.blockedUsers)&&db.blockedUsers.some(x=>String(x.userId)===String(userId)&&x.active!==false);}
+function adminOnly(user){return !!user&&user.role==='admin';}
 const server=http.createServer(async(req,res)=>{
   const u=url.parse(req.url,true);
   if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type,Authorization','Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS'});return res.end();}
   try{
     let db=ensureDB(read());
-    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.7'});
+    if(!rateLimit(req, u.pathname.startsWith('/api/login')?'login':u.pathname.startsWith('/api/register')?'register':'api', u.pathname.startsWith('/api/login')?12:u.pathname.startsWith('/api/register')?8:120, 60000)) return json(res,429,{error:'Muitas solicitações. Tenta novamente em instantes.'});
+    const currentUser=auth(db,req);
+    if(currentUser && isBlocked(db,currentUser.id)) return json(res,403,{error:'A tua conta está temporariamente bloqueada.'});
+    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.8'});
 
     if(u.pathname==='/api/products'&&req.method==='GET'){
       let list=db.products.map(p=>publicProduct(db,p));
@@ -417,6 +425,13 @@ const server=http.createServer(async(req,res)=>{
       return json(res,201,{...review,buyerName:user.name,sellerScore:seller?calculateScore(db,seller):null});
     }
 
+    // Security & moderation.
+    if(u.pathname==='/api/reports'&&req.method==='GET'){const user=auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});return json(res,200,adminOnly(user)?db.reports.slice(0,200):db.reports.filter(r=>r.reporterId===user.id).slice(0,100));}
+    if(u.pathname==='/api/reports'&&req.method==='POST'){const user=auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const b=await body(req,256*1024);const targetType=String(b.targetType||'user');if(!['user','product','order','conversation'].includes(targetType))return json(res,400,{error:'Tipo de denúncia inválido.'});const targetId=String(b.targetId||'').trim();const reason=String(b.reason||'').trim().slice(0,120);const description=String(b.description||'').trim().slice(0,1000);if(!targetId||!reason)return json(res,400,{error:'Indica o alvo e o motivo da denúncia.'});const r={id:'REP-'+crypto.randomUUID(),reporterId:user.id,targetType,targetId,reason,description,status:'Aberta',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};db.reports.unshift(r);if(targetType==='user'){const t=db.users.find(x=>x.id===targetId);if(t)t.complaints=Number(t.complaints||0)+1;}audit(db,req,user.id,'report_created',{reportId:r.id,targetType,targetId});write(db);return json(res,201,r);}
+    const rr=u.pathname.match(/^\/api\/reports\/([^/]+)$/);if(rr&&req.method==='PATCH'){const user=auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});const r=db.reports.find(x=>x.id===decodeURIComponent(rr[1]));if(!r)return json(res,404,{error:'Denúncia não encontrada.'});const b=await body(req,64*1024);const allowed=['Aberta','Em análise','Resolvida','Rejeitada'];if(!allowed.includes(String(b.status||'')))return json(res,400,{error:'Estado inválido.'});r.status=String(b.status);r.adminNote=String(b.adminNote||'').trim().slice(0,1000);r.updatedAt=new Date().toISOString();audit(db,req,user.id,'report_updated',{reportId:r.id,status:r.status});write(db);return json(res,200,r);}
+    if(u.pathname==='/api/admin/security'&&req.method==='GET'){const user=auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});return json(res,200,{events:db.securityEvents.slice(0,200),reports:db.reports.slice(0,200),blockedUsers:db.blockedUsers.slice(0,200)});}
+    if(u.pathname==='/api/admin/block'&&req.method==='POST'){const user=auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});const b=await body(req,64*1024);const targetId=String(b.userId||'').trim();if(!targetId||targetId===user.id)return json(res,400,{error:'Utilizador inválido.'});if(!db.users.some(x=>x.id===targetId))return json(res,404,{error:'Utilizador não encontrado.'});let bl=db.blockedUsers.find(x=>x.userId===targetId);if(!bl){bl={id:'BLK-'+crypto.randomUUID(),userId:targetId,active:true,reason:String(b.reason||'').trim().slice(0,500),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};db.blockedUsers.push(bl);}else{bl.active=b.active!==false;bl.reason=String(b.reason||bl.reason||'').trim().slice(0,500);bl.updatedAt=new Date().toISOString();}audit(db,req,user.id,bl.active?'user_blocked':'user_unblocked',{userId:targetId,reason:bl.reason});write(db);return json(res,200,bl);}
+
     // Chat: one private conversation between a buyer and seller, linked optionally to a product.
     if(u.pathname==='/api/conversations'&&req.method==='GET'){const user=auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const list=db.conversations.filter(c=>c.participants.includes(user.id)).map(c=>{const otherId=c.participants.find(id=>id!==user.id);const other=db.users.find(x=>x.id===otherId);const last=db.messages.filter(m=>m.conversationId===c.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))[0];const product=c.productId?db.products.find(p=>p.id===c.productId):null;return {...c,other:publicUser(other,db),lastMessage:last||null,product:product?publicProduct(db,product):null};}).sort((a,b)=>new Date(b.lastMessage?.createdAt||b.createdAt)-new Date(a.lastMessage?.createdAt||a.createdAt));return json(res,200,list);}
     if(u.pathname==='/api/conversations'&&req.method==='POST'){const user=auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const b=await body(req);const sellerId=String(b.sellerId||'');if(!sellerId||sellerId===user.id)return json(res,400,{error:'Vendedor inválido.'});const seller=db.users.find(x=>x.id===sellerId);if(!seller)return json(res,404,{error:'Vendedor não encontrado.'});const key=conversationKey(user.id,sellerId);let c=db.conversations.find(x=>x.key===key&&String(x.productId||'')===String(b.productId||''));if(!c){c={id:crypto.randomUUID(),key,participants:[user.id,sellerId],productId:b.productId||null,createdAt:new Date().toISOString()};db.conversations.push(c);write(db);}return json(res,201,c);}
@@ -426,7 +441,7 @@ const server=http.createServer(async(req,res)=>{
 
     const file=path.join(PUBLIC,u.pathname==='/'?'index.html':u.pathname.replace(/^\//,''));
     if(!file.startsWith(PUBLIC)||!fs.existsSync(file)||fs.statSync(file).isDirectory())return json(res,404,{error:'Not found'});
-    const ext=path.extname(file),types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json'};res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','Cache-Control':'no-cache'});fs.createReadStream(file).pipe(res);
+    const ext=path.extname(file),types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json'};res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'strict-origin-when-cross-origin'});fs.createReadStream(file).pipe(res);
   }catch(e){console.error(e);if(!res.headersSent)json(res,500,{error:e.message||'Erro interno'});}
 });
 
