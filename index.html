@@ -2848,9 +2848,9 @@ async function publishProduct(){
       body:JSON.stringify({
         name,
         price,
-        category,
+        cat:category,
         description,
-        images:selectedPhotos.slice(0,10)
+        photos:selectedPhotos.slice(0,10)
       })
     });
 
