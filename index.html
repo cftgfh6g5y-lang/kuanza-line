@@ -1308,14 +1308,8 @@ function renderProducts(list,targetId){
 }
 
 function productCard(p){
-
   const image =
-    (Array.isArray(p.photos) && p.photos.length > 0
-      ? p.photos[0]
-      : null) ||
-    (Array.isArray(p.images) && p.images.length > 0
-      ? p.images[0]
-      : null) ||
+    p.images?.[0] ||
     p.image ||
     'https://placehold.co/600x600?text=Kuanza+Line';
 
@@ -1324,38 +1318,35 @@ function productCard(p){
   return `
     <article class="product-card">
 
-      <button
-        class="card-heart"
+      <button class="card-heart"
         onclick="event.stopPropagation();toggleFavorite('${esc(p.id)}')">
         ${favorite ? '❤️' : '♡'}
       </button>
 
       <img
         class="product-image"
-        src="${esc(image)}"
-        alt="${esc(p.name || 'Produto')}"
-        onerror="this.onerror=null;this.src='https://placehold.co/600x600?text=Kuanza+Line'"
+        src="${image}"
+        alt="${esc(p.name)}"
         onclick="openProduct('${esc(p.id)}')"
       >
 
-      <div
-        class="product-body"
-        onclick="openProduct('${esc(p.id)}')">
+      <div class="product-body" onclick="openProduct('${esc(p.id)}')">
 
-        <div class="product-name">
-          ${esc(p.name || 'Produto')}
-        </div>
+        <div class="product-name">${esc(p.name || 'Produto')}</div>
 
-        <div class="price">
-          ${money(p.price)}
-        </div>
+        <div class="price">${money(p.price)}</div>
 
         <div class="product-meta">
-          ${esc(p.cat || p.category || 'Outros')}
+          ${esc(p.category || 'Outros')}
         </div>
 
-      </div>
+        ${
+          p.seller?.verified || p.verified
+          ? `<div class="mt"><span class="badge">✓ Verificado</span></div>`
+          : ''
+        }
 
+      </div>
     </article>
   `;
 }
@@ -1492,11 +1483,9 @@ async function openProduct(id){
   currentProduct = product;
 
   const images =
-    Array.isArray(product.photos) && product.photos.length
-      ? product.photos
-      : (Array.isArray(product.images) && product.images.length
-          ? product.images
-          : [product.image || 'https://placehold.co/800x800?text=Kuanza+Line']);
+    product.images?.length
+      ? product.images
+      : [product.image || 'https://placehold.co/800x800?text=Kuanza+Line'];
 
   const seller = product.seller || {};
 
@@ -1518,7 +1507,6 @@ async function openProduct(id){
         id="mainProductImage"
         class="detail-image"
         src="${images[0]}"
-        onerror="this.onerror=null;this.src='https://placehold.co/800x800?text=Kuanza+Line'"
         alt="${esc(product.name)}"
       >
 
@@ -2819,84 +2807,7 @@ function renderPhotoPreview(){
   }
 }
 
-  async function publishProduct(){
-
-  // 1. Validar fotos
-  if(selectedPhotos.length < 5){
-    toast('Adiciona pelo menos 5 fotos reais.');
-    return;
-  }
-
-  // 2. Ler campos
-  const name =
-    document.getElementById('productName')?.value.trim();
-
-  const price =
-    Number(document.getElementById('productPrice')?.value);
-
-  const category =
-    document.getElementById('productCategory')?.value;
-
-  const description =
-    document.getElementById('productDescription')?.value.trim();
-
-  // 3. Validar campos
-  if(!name){
-    toast('Indica o nome do produto.');
-    return;
-  }
-
-  if(!price || price <= 0){
-    toast('Indica um preço válido.');
-    return;
-  }
-
-  if(!category){
-    toast('Seleciona uma categoria.');
-    return;
-  }
-
-  if(!description){
-    toast('Adiciona uma descrição.');
-    return;
-  }
-
-  // 4. Enviar exatamente no formato que o servidor espera
-  const payload = {
-    name: name,
-    price: price,
-    cat: category,
-    description: description,
-    photos: selectedPhotos.slice(0,10)
-  };
-
-  try{
-
-    const result = await api('/api/products',{
-      method:'POST',
-      body:JSON.stringify(payload)
-    });
-
-    console.log('Produto publicado:', result);
-
-    toast('Produto publicado com sucesso ✓');
-
-    // Limpar fotos depois da publicação
-    selectedPhotos = [];
-
-    // Voltar para a página inicial
-    await loadHome();
-
-  }catch(e){
-
-    console.error('Erro ao publicar produto:', e);
-
-    toast(
-      e.message ||
-      'Não foi possível publicar o produto.'
-    );
-  }
-}
+async function publishProduct(){
 
   if(selectedPhotos.length < 5){
     toast('Adiciona pelo menos 5 fotos reais.');
@@ -2937,7 +2848,7 @@ function renderPhotoPreview(){
       body:JSON.stringify({
         name,
         price,
-        category,
+        cat:category,
         description,
         photos:selectedPhotos.slice(0,10)
       })
