@@ -74,7 +74,7 @@ const server=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type,Authorization','Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS'});return res.end();}
   try{
     let db=ensureDB(read());
-    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.4'});
+    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.5'});
 
     if(u.pathname==='/api/products'&&req.method==='GET'){
       let list=db.products.map(p=>publicProduct(db,p));
@@ -148,8 +148,18 @@ const server=http.createServer(async(req,res)=>{
         items.push({productId:product.id,productName:product.name,name:product.name,price:Number(product.price||0),quantity,sellerId:product.sellerId,seller:product.seller||'Vendedor',cat:product.cat,photos:Array.isArray(product.photos)?product.photos.slice(0,1):[]});
       }
       if(!items.length)return json(res,400,{error:'Nenhum produto válido no carrinho.'});
+      const paymentMethods=['multicaixa_express','bank_transfer','card'];
+      const deliveryMethods=['delivery','pickup'];
+      const paymentMethod=String(b.paymentMethod||'');
+      const deliveryMethod=String(b.deliveryMethod||'delivery');
+      const deliveryAddress=String(b.deliveryAddress||'').trim().slice(0,500);
+      if(!paymentMethods.includes(paymentMethod))return json(res,400,{error:'Método de pagamento inválido.'});
+      if(!deliveryMethods.includes(deliveryMethod))return json(res,400,{error:'Forma de entrega inválida.'});
+      if(!deliveryAddress)return json(res,400,{error:'Indica a morada ou ponto de entrega.'});
+      const deliveryFee=0;
+      const grandTotal=total+deliveryFee;
       const now=new Date().toISOString();
-      const order={id:'KL-'+Date.now().toString().slice(-7),userId:user.id,items,total,status:'Pendente',statusHistory:[{status:'Pendente',at:now}],createdAt:now};
+      const order={id:'KL-'+Date.now().toString().slice(-7),userId:user.id,items,total:grandTotal,subtotal:total,deliveryFee,payment:{method:paymentMethod,status:'Pendente',reference:null},delivery:{method:deliveryMethod,address:deliveryAddress,fee:deliveryFee},status:'Pendente',statusHistory:[{status:'Pendente',at:now}],createdAt:now};
       db.orders.unshift(order);
       notify(db,user.id,'order','Pedido criado',`O teu pedido #${String(order.id).slice(-8)} foi recebido.`,{orderId:order.id,status:order.status});
       for(const sid of [...new Set(items.map(i=>i.sellerId).filter(Boolean))])notify(db,sid,'sale','Novo pedido',`Recebeste um novo pedido #${String(order.id).slice(-8)}.`,{orderId:order.id});
