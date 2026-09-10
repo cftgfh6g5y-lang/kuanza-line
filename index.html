@@ -1859,96 +1859,60 @@ async function checkout(){
 }
 
 async function loadOrders(){
-  const root = document.getElementById('appContent');
-
+  const root=document.getElementById('appContent');
   if(!token){
-    root.innerHTML = `
-      <div class="page">
-        <div class="empty">
-          <div class="emoji">📦</div>
-          <strong>Inicia sessão para veres os teus pedidos.</strong>
-          <button class="btn btn-primary mt" onclick="go('account')">
-            Entrar
-          </button>
-        </div>
-      </div>
-    `;
+    root.innerHTML=`<div class="page"><div class="empty"><div class="emoji">📦</div><strong>Inicia sessão para veres os teus pedidos.</strong><button class="btn btn-primary mt" onclick="go('account')">Entrar</button></div></div>`;
     return;
   }
-
-  root.innerHTML = `
-    <div class="page">
-
-      <div class="section-title">
-        <h2>📦 Meus pedidos</h2>
-      </div>
-
-      <div id="ordersList">
-        <div class="empty">A carregar...</div>
-      </div>
-
-    </div>
-  `;
-
+  root.innerHTML=`<div class="page"><div class="section-title"><h2>📦 Meus pedidos</h2></div><div id="ordersList"><div class="empty">A carregar...</div></div></div>`;
   try{
-    const data = await api('/api/orders');
-
-    const orders = Array.isArray(data)
-      ? data
-      : (data.orders || []);
-
-    const target = document.getElementById('ordersList');
-
+    const data=await api('/api/orders');
+    const orders=Array.isArray(data)?data:(data.orders||[]);
+    const target=document.getElementById('ordersList');
     if(!orders.length){
-      target.innerHTML = `
-        <div class="empty">
-          <div class="emoji">📦</div>
-          <strong>Ainda não tens pedidos.</strong>
-        </div>
-      `;
+      target.innerHTML=`<div class="empty"><div class="emoji">📦</div><strong>Ainda não tens pedidos.</strong></div>`;
       return;
     }
-
-    target.innerHTML = orders.map(order=>`
-
-      <div class="order">
-
-        <div class="order-head">
-
-          <strong>
-            Pedido #${esc(String(order.id).slice(-8))}
-          </strong>
-
-          <span class="status">
-            ${esc(order.status || 'Pendente')}
-          </span>
-
-        </div>
-
-        <div class="order-items">
-          ${
-            (order.items || []).map(item=>`
-              ${esc(item.productName || item.name || 'Produto')}
-              × ${item.quantity || 1}
-            `).join('<br>')
-          }
-        </div>
-
-        <div class="row mt">
-          <strong>Total</strong>
-          <strong style="color:#087443">
-            ${money(order.total || 0)}
-          </strong>
-        </div>
-
-      </div>
-
-    `).join('');
-
+    target.innerHTML=orders.map(order=>{
+      const status=order.status||'Pendente';
+      const statuses=['Pendente','Confirmado','Em preparação','Enviado','Entregue'];
+      const currentIndex=statuses.indexOf(status);
+      const timeline=statuses.map((s,i)=>{
+        const done=i<=currentIndex && status!=='Cancelado';
+        return `<div style="display:flex;gap:10px;align-items:flex-start;margin:9px 0">
+          <div style="width:18px;height:18px;border-radius:50%;background:${done?'#087443':'#d8dfdb'};border:3px solid ${done?'#d9f2e5':'#eef2ef'};flex:0 0 auto"></div>
+          <div><strong style="font-size:13px">${esc(s)}</strong></div>
+        </div>`;
+      }).join('');
+      return `<div class="order">
+        <div class="order-head"><strong>Pedido #${esc(String(order.id).slice(-8))}</strong><span class="status">${esc(status)}</span></div>
+        <div class="order-items">${(order.items||[]).map(item=>`${esc(item.productName||item.name||'Produto')} × ${item.quantity||1}`).join('<br>')}</div>
+        <div class="card mt" style="padding:12px;background:#f8faf9"><strong style="font-size:13px">Rastreamento</strong>${status==='Cancelado'?`<div class="small mt" style="color:#b42318">Este pedido foi cancelado.</div>`:`<div class="mt">${timeline}</div>`}</div>
+        <div class="row mt"><strong>Total</strong><strong style="color:#087443">${money(order.total||0)}</strong></div>
+        <button class="btn btn-outline mt" onclick="openDispute('${esc(order.id)}')">🛡️ Tenho um problema</button>
+      </div>`;
+    }).join('');
   }catch(e){
-    document.getElementById('ordersList').innerHTML =
-      `<div class="empty">${esc(e.message)}</div>`;
+    const target=document.getElementById('ordersList');
+    if(target)target.innerHTML=`<div class="empty">${esc(e.message)}</div>`;
   }
+}
+
+async function openDispute(orderId){
+  openModal(`<div class="modal-head"><h3>🛡️ Proteção da compra</h3><button class="close" onclick="closeModal()">✕</button></div>
+    <div class="small mt">Conta-nos o que aconteceu. A reclamação ficará associada ao pedido.</div>
+    <div class="form mt">
+      <div><label>Motivo</label><select id="disputeReason"><option>Produto não recebido</option><option>Produto diferente do anunciado</option><option>Problema com vendedor</option><option>Outro</option></select></div>
+      <div><label>Descrição</label><textarea id="disputeDescription" rows="5" placeholder="Explica o problema com detalhes..."></textarea></div>
+      <button class="btn btn-primary" onclick="submitDispute('${esc(orderId)}')">Enviar reclamação</button>
+    </div>`);
+}
+async function submitDispute(orderId){
+  const reason=document.getElementById('disputeReason')?.value||'';
+  const description=document.getElementById('disputeDescription')?.value.trim()||'';
+  if(description.length<10){toast('Explica o problema com pelo menos 10 caracteres.');return;}
+  try{await api('/api/disputes',{method:'POST',body:JSON.stringify({orderId,reason,description})});closeModal();toast('Reclamação enviada ✓');await loadOrders();}
+  catch(e){toast(e.message);}
 }
 
 async function loadAccount(){
@@ -3659,44 +3623,28 @@ async function sendOffer(){
   }
 }
 
-function showNotifications(){
-
-  openModal(`
-    <div class="modal-head">
-
-      <h3>🔔 Notificações</h3>
-
-      <button class="close"
-        onclick="closeModal()">
-        ✕
-      </button>
-
-    </div>
-
-    <div class="notification">
-
-      <strong>Bem-vindo ao Kuanza Line!</strong>
-
-      <div class="small mt">
-        Aqui receberás atualizações sobre pedidos,
-        mensagens, vendas e segurança da tua conta.
-      </div>
-
-    </div>
-
-    <div class="notification">
-
-      <strong>🛡️ Kuanza Score</strong>
-
-      <div class="small mt">
-        Mantém boas avaliações, entrega os pedidos
-        e evita cancelamentos para aumentar a tua confiança.
-      </div>
-
-    </div>
-
-  `);
-
+async function showNotifications(){
+  if(!token){
+    openModal(`<div class="modal-head"><h3>🔔 Notificações</h3><button class="close" onclick="closeModal()">✕</button></div><div class="empty mt">Inicia sessão para receber notificações.</div>`);
+    return;
+  }
+  try{
+    const data=await api('/api/notifications');
+    const items=Array.isArray(data)?data:(data.items||[]);
+    const content=items.length?items.map(n=>`<div class="notification" style="margin-bottom:10px;padding:12px;border-radius:14px;background:${n.read?'#f7f9f8':'#eaf7f0'};border:1px solid #e1e9e4" onclick="markNotificationRead('${esc(n.id)}')">
+      <strong>${esc(n.title||'Notificação')}</strong><div class="small mt">${esc(n.message||'')}</div><div class="small mt" style="opacity:.65">${esc(new Date(n.createdAt).toLocaleString('pt-PT'))}</div>
+    </div>`).join(''):`<div class="empty mt"><div class="emoji">🔔</div><strong>Nenhuma notificação.</strong></div>`;
+    openModal(`<div class="modal-head"><h3>🔔 Notificações ${data.unread?`(${data.unread})`:''}</h3><button class="close" onclick="closeModal()">✕</button></div>
+      ${items.length?`<button class="btn btn-outline mt" onclick="markAllNotificationsRead()">Marcar todas como lidas</button>`:''}<div class="mt">${content}</div>`);
+  }catch(e){toast(e.message);}
+}
+async function markNotificationRead(id){
+  try{await api('/api/notifications/'+encodeURIComponent(id)+'/read',{method:'PATCH'});showNotifications();}
+  catch(e){toast(e.message);}
+}
+async function markAllNotificationsRead(){
+  try{await api('/api/notifications/read-all',{method:'PATCH'});showNotifications();}
+  catch(e){toast(e.message);}
 }
 
 function openModal(content){
