@@ -1,8 +1,14 @@
 {
   "name": "kuanza-line",
-  "version": "0.7.0",
+  "version": "1.9.1",
   "private": true,
-  "description": "Kuanza Line — Compra. Vende. Confia.",
-  "scripts": {"start": "node server.js"},
-  "engines": {"node": ">=18"}
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.0"
+  }
 }
