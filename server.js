@@ -15,12 +15,12 @@ const demoProducts = [
   {id:'p3',name:'Conjunto Streetwear',price:45000,cat:'Moda',emoji:'👕',seller:'Style AO',sellerId:'demo3',verified:true,rating:4.7,description:'Conjunto streetwear moderno.',photos:[]}
 ];
 
-if (!fs.existsSync(DB)) fs.writeFileSync(DB, JSON.stringify({users:[],stores:[],products:demoProducts,orders:[],sessions:[],favorites:[],carts:[],conversations:[],messages:[],reviews:[],notifications:[],disputes:[]}, null, 2));
+if (!fs.existsSync(DB)) fs.writeFileSync(DB, JSON.stringify({users:[],stores:[],products:demoProducts,orders:[],sessions:[],favorites:[],carts:[],conversations:[],messages:[],reviews:[],notifications:[],disputes:[],wallets:[],walletTransactions:[]}, null, 2));
 
 function read(){return JSON.parse(fs.readFileSync(DB,'utf8'));}
 function write(d){fs.writeFileSync(DB,JSON.stringify(d,null,2));}
 function ensureDB(db){
-  for(const k of ['users','stores','products','orders','sessions','favorites','carts','conversations','messages','reviews','notifications','disputes']) if(!Array.isArray(db[k])) db[k]=[];
+  for(const k of ['users','stores','products','orders','sessions','favorites','carts','conversations','messages','reviews','notifications','disputes','wallets','walletTransactions']) if(!Array.isArray(db[k])) db[k]=[];
   for(const p of db.products){ if(!Array.isArray(p.photos)) p.photos=[]; if(!p.description) p.description='Produto disponível na Kuanza Line.'; }
   return db;
 }
@@ -69,12 +69,49 @@ function orderTimeline(order){
   });
 }
 
+const PLATFORM_COMMISSION_RATE=0.10;
+function ensureWallet(db,userId){
+  let w=db.wallets.find(x=>x.userId===userId);
+  if(!w){w={id:'WAL-'+crypto.randomUUID(),userId,available:0,pending:0,totalEarned:0,totalWithdrawn:0,createdAt:new Date().toISOString()};db.wallets.push(w);}
+  return w;
+}
+function walletSummary(db,userId){
+  const w=ensureWallet(db,userId);
+  const tx=db.walletTransactions.filter(x=>x.userId===userId).slice(0,50);
+  return {...w,available:Number(w.available||0),pending:Number(w.pending||0),totalEarned:Number(w.totalEarned||0),totalWithdrawn:Number(w.totalWithdrawn||0),transactions:tx};
+}
+function addWalletTx(db,userId,type,amount,description,meta={}){
+  const tx={id:'TX-'+Date.now().toString(36)+'-'+crypto.randomBytes(3).toString('hex'),userId,type,amount:Number(amount||0),description,meta,createdAt:new Date().toISOString()};
+  db.walletTransactions.unshift(tx);return tx;
+}
+function calculateSellerShare(order,sellerId){
+  const items=(Array.isArray(order.items)?order.items:[]).filter(i=>String(i.sellerId||'')===String(sellerId));
+  const gross=items.reduce((sum,i)=>sum+Number(i.price||0)*Math.max(1,Number(i.quantity||1)),0);
+  const commission=Math.round(gross*PLATFORM_COMMISSION_RATE);
+  return {gross,commission,net:gross-commission};
+}
+function settleDeliveredOrder(db,order){
+  if(!order||order.status!=='Entregue'||order.financials?.settled)return false;
+  const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
+  order.financials={...(order.financials||{}),settled:true,settledAt:new Date().toISOString(),sellers:{}};
+  for(const sellerId of sellerIds){
+    const share=calculateSellerShare(order,sellerId); const wallet=ensureWallet(db,sellerId);
+    wallet.pending=Math.max(0,Number(wallet.pending||0)-share.net);
+    wallet.available=Number(wallet.available||0)+share.net;
+    wallet.totalEarned=Number(wallet.totalEarned||0)+share.net;
+    order.financials.sellers[sellerId]=share;
+    addWalletTx(db,sellerId,'sale_released',share.net,`Venda #${String(order.id).slice(-8)} libertada após entrega`,{orderId:order.id,gross:share.gross,commission:share.commission});
+    notify(db,sellerId,'wallet','Valor libertado',`Kz ${share.net.toLocaleString('pt-AO')} foram adicionados ao teu saldo disponível.`,{orderId:order.id,amount:share.net});
+  }
+  return true;
+}
+
 const server=http.createServer(async(req,res)=>{
   const u=url.parse(req.url,true);
   if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type,Authorization','Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS'});return res.end();}
   try{
     let db=ensureDB(read());
-    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.5'});
+    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.6'});
 
     if(u.pathname==='/api/products'&&req.method==='GET'){
       let list=db.products.map(p=>publicProduct(db,p));
@@ -161,8 +198,13 @@ const server=http.createServer(async(req,res)=>{
       const now=new Date().toISOString();
       const order={id:'KL-'+Date.now().toString().slice(-7),userId:user.id,items,total:grandTotal,subtotal:total,deliveryFee,payment:{method:paymentMethod,status:'Pendente',reference:null},delivery:{method:deliveryMethod,address:deliveryAddress,fee:deliveryFee},status:'Pendente',statusHistory:[{status:'Pendente',at:now}],createdAt:now};
       db.orders.unshift(order);
-      notify(db,user.id,'order','Pedido criado',`O teu pedido #${String(order.id).slice(-8)} foi recebido.`,{orderId:order.id,status:order.status});
-      for(const sid of [...new Set(items.map(i=>i.sellerId).filter(Boolean))])notify(db,sid,'sale','Novo pedido',`Recebeste um novo pedido #${String(order.id).slice(-8)}.`,{orderId:order.id});
+      const sellerIds=[...new Set(items.map(i=>i.sellerId).filter(Boolean))];
+      for(const sid of sellerIds){
+        const share=calculateSellerShare(order,sid); const wallet=ensureWallet(db,sid);
+        wallet.pending=Number(wallet.pending||0)+share.net;
+        addWalletTx(db,sid,'sale_pending',share.net,`Venda #${String(order.id).slice(-8)} pendente de entrega`,{orderId:order.id,gross:share.gross,commission:share.commission});
+        notify(db,sid,'sale','Novo pedido',`Recebeste um novo pedido #${String(order.id).slice(-8)}.`,{orderId:order.id});
+      }
       write(db);return json(res,201,order);
     }
     if(u.pathname==='/api/orders'&&req.method==='GET'){const user=auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão para ver pedidos.'});return json(res,200,db.orders.filter(x=>x.userId===user.id));}
@@ -183,6 +225,26 @@ const server=http.createServer(async(req,res)=>{
     if(u.pathname==='/api/notifications/read-all'&&req.method==='PATCH'){
       const user=auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       db.notifications.filter(n=>n.userId===user.id).forEach(n=>n.read=true);write(db);return json(res,200,{ok:true});
+    }
+    if(u.pathname==='/api/wallet'&&req.method==='GET'){
+      const user=auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const summary=walletSummary(db,user.id);write(db);return json(res,200,summary);
+    }
+    if(u.pathname==='/api/wallet/transactions'&&req.method==='GET'){
+      const user=auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      return json(res,200,db.walletTransactions.filter(x=>x.userId===user.id).slice(0,100));
+    }
+    if(u.pathname==='/api/wallet/withdraw'&&req.method==='POST'){
+      const user=auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const b=await body(req);const amount=Math.floor(Number(b.amount||0));
+      if(amount<=0)return json(res,400,{error:'Valor de levantamento inválido.'});
+      const wallet=ensureWallet(db,user.id);
+      if(amount>wallet.available)return json(res,400,{error:'Saldo disponível insuficiente.'});
+      if(amount<1000)return json(res,400,{error:'O levantamento mínimo é Kz 1.000.'});
+      wallet.available-=amount;wallet.totalWithdrawn=Number(wallet.totalWithdrawn||0)+amount;
+      const tx=addWalletTx(db,user.id,'withdrawal_request',-amount,'Pedido de levantamento criado',{amount,status:'Pendente'});
+      notify(db,user.id,'wallet','Levantamento solicitado',`Pedido de levantamento de Kz ${amount.toLocaleString('pt-AO')} criado.`,{transactionId:tx.id,amount});
+      write(db);return json(res,201,{ok:true,status:'Pendente',amount,transaction:tx,wallet:walletSummary(db,user.id)});
     }
     if(u.pathname==='/api/disputes'&&req.method==='GET'){
       const user=auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
@@ -253,7 +315,19 @@ const server=http.createServer(async(req,res)=>{
       order.status=next;order.updatedAt=new Date().toISOString();
       if(!Array.isArray(order.statusHistory))order.statusHistory=[];
       if(previous!==next)order.statusHistory.push({status:next,at:order.updatedAt});
-      if(previous!==next)notify(db,order.userId,'order','Pedido atualizado',`O pedido #${String(order.id).slice(-8)} está agora: ${next}.`,{orderId:order.id,status:next});
+      if(previous!==next){
+        if(next==='Entregue') settleDeliveredOrder(db,order);
+        if(next==='Cancelado' && !order.financials?.cancelled){
+          const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
+          order.financials={...(order.financials||{}),cancelled:true,cancelledAt:new Date().toISOString()};
+          for(const sid of sellerIds){
+            const share=calculateSellerShare(order,sid);const wallet=ensureWallet(db,sid);
+            wallet.pending=Math.max(0,Number(wallet.pending||0)-share.net);
+            addWalletTx(db,sid,'sale_cancelled',-share.net,`Venda #${String(order.id).slice(-8)} cancelada`,{orderId:order.id,amount:share.net});
+          }
+        }
+        notify(db,order.userId,'order','Pedido atualizado',`O pedido #${String(order.id).slice(-8)} está agora: ${next}.`,{orderId:order.id,status:next});
+      }
       write(db);return json(res,200,order);
     }
 
