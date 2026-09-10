@@ -1309,7 +1309,8 @@ function renderProducts(list,targetId){
 
 function productCard(p){
   const image =
-    p.images?.[0] ||
+    (Array.isArray(p.photos) && p.photos[0]) ||
+    (Array.isArray(p.images) && p.images[0]) ||
     p.image ||
     'https://placehold.co/600x600?text=Kuanza+Line';
 
@@ -1326,6 +1327,7 @@ function productCard(p){
       <img
         class="product-image"
         src="${image}"
+        onerror="this.src='https://placehold.co/600x600?text=Kuanza+Line'"
         alt="${esc(p.name)}"
         onclick="openProduct('${esc(p.id)}')"
       >
@@ -1337,7 +1339,7 @@ function productCard(p){
         <div class="price">${money(p.price)}</div>
 
         <div class="product-meta">
-          ${esc(p.category || 'Outros')}
+          ${esc(p.cat || p.category || 'Outros')}
         </div>
 
         ${
@@ -1483,9 +1485,11 @@ async function openProduct(id){
   currentProduct = product;
 
   const images =
-    product.images?.length
-      ? product.images
-      : [product.image || 'https://placehold.co/800x800?text=Kuanza+Line'];
+    (Array.isArray(product.photos) && product.photos.length)
+      ? product.photos
+      : (Array.isArray(product.images) && product.images.length)
+        ? product.images
+        : [product.image || 'https://placehold.co/800x800?text=Kuanza+Line'];
 
   const seller = product.seller || {};
 
@@ -1507,6 +1511,7 @@ async function openProduct(id){
         id="mainProductImage"
         class="detail-image"
         src="${images[0]}"
+        onerror="this.src='https://placehold.co/800x800?text=Kuanza+Line'"
         alt="${esc(product.name)}"
       >
 
@@ -1514,6 +1519,7 @@ async function openProduct(id){
         ${images.slice(0,5).map((img,i)=>`
           <img
             src="${img}"
+            onerror="this.style.display='none'"
             class="${i===0?'active':''}"
             onclick="changeMainImage('${img}',this)"
           >
@@ -1525,7 +1531,7 @@ async function openProduct(id){
       <div class="detail-price">${money(product.price)}</div>
 
       <div class="wrap mt">
-        <span class="badge">${esc(product.category || 'Outros')}</span>
+        <span class="badge">${esc(product.cat || product.category || 'Outros')}</span>
 
         ${
           product.verified
@@ -1676,7 +1682,7 @@ function addToCart(id){
       id:product.id,
       name:product.name,
       price:Number(product.price||0),
-      image:product.images?.[0] || product.image || '',
+      image:(Array.isArray(product.photos) && product.photos[0]) || (Array.isArray(product.images) && product.images[0]) || product.image || '',
       sellerId:product.sellerId || product.seller?.id || null,
       quantity:1
     });
@@ -3376,7 +3382,7 @@ async function loadDeliveries(){
   if(!token){toast('Inicia sessão.');return;}
   try{
     const data=await api('/api/deliveries'); const list=Array.isArray(data)?data:[];
-    openModal(`<div class="modal-head"><h3>🚚 Entregas</h3><button class="close" onclick="closeModal()">✕</button></div><div class="mt">${list.length?list.map(d=>`<div class="card mb" style="padding:12px"><strong>Pedido #${esc(String(d.orderId).slice(-8))}</strong><div class="small mt">${esc(d.recipient||'—')} · ${esc(d.address||'—')}</div><div class="small mt">Estado: <strong>${esc(d.status||'A preparar')}</strong></div>${user?.role==='seller'?`<select class="mt" onchange="updateDelivery('${esc(d.id)}',this.value)"><option ${d.status==='A preparar'?'selected':''}>A preparar</option><option ${d.status==='Recolhida'?'selected':''}>Recolhida</option><option ${d.status==='Em trânsito'?'selected':''}>Em trânsito</option><option ${d.status==='Chegou à zona'?'selected':''}>Chegou à zona</option><option ${d.status==='Entregue'?'selected':''}>Entregue</option><option ${d.status==='Cancelada'?'selected':''}>Cancelada</option></select>`:''}</div>`).join(''):`<div class="empty">Nenhuma entrega encontrada.</div>`}</div>`);
+    openModal(`<div class="modal-head"><h3>🚚 Entregas</h3><button class="close" onclick="closeModal()">✕</button></div><div class="mt">${list.length?list.map(d=>`<div class="card mb" style="padding:12px"><strong>Pedido #${esc(String(d.orderId).slice(-8))}</strong><div class="small mt">${esc(d.recipient||'—')} · ${esc(d.address||'—')}</div><div class="small mt">Estado: <strong>${esc(d.status||'A preparar')}</strong></div>${me?.role==='seller'?`<select class="mt" onchange="updateDelivery('${esc(d.id)}',this.value)"><option ${d.status==='A preparar'?'selected':''}>A preparar</option><option ${d.status==='Recolhida'?'selected':''}>Recolhida</option><option ${d.status==='Em trânsito'?'selected':''}>Em trânsito</option><option ${d.status==='Chegou à zona'?'selected':''}>Chegou à zona</option><option ${d.status==='Entregue'?'selected':''}>Entregue</option><option ${d.status==='Cancelada'?'selected':''}>Cancelada</option></select>`:''}</div>`).join(''):`<div class="empty">Nenhuma entrega encontrada.</div>`}</div>`);
   }catch(e){toast(e.message);}
 }
 async function updateDelivery(id,status){try{await api('/api/deliveries/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({status})});toast('Entrega atualizada ✓');await loadDeliveries();}catch(e){toast(e.message);}}
