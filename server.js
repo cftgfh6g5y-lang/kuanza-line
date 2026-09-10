@@ -365,7 +365,72 @@ const server=http.createServer(async(req,res)=>{
       const pu=publicUser(user,db);return json(res,200,{...pu,user:pu,ok:true});
     }
 
-    if(u.pathname==='/api/stores'&&req.method==='GET'){const ownerId=String(u.query.ownerId||'');const st=db.stores.find(x=>x.ownerId===ownerId);if(!st)return json(res,200,null);const products=db.products.filter(p=>p.sellerId===ownerId).map(p=>publicProduct(db,p));const owner=db.users.find(x=>x.id===ownerId);return json(res,200,{...st,owner:publicUser(owner,db),products});}
+    if(u.pathname==='/api/stores'&&req.method==='GET'){
+      const ownerId=String(u.query.ownerId||'');
+      if(!ownerId)return json(res,400,{error:'Vendedor inválido.'});
+      const st=db.stores.find(x=>x.ownerId===ownerId)||null;
+      const products=db.products.filter(p=>p.sellerId===ownerId).map(p=>publicProduct(db,p));
+      const owner=db.users.find(x=>x.id===ownerId)||null;
+      return json(res,200,{
+        store:st,
+        stores:st?[st]:[],
+        owner:owner?publicUser(owner,db):null,
+        products
+      });
+    }
+
+    if(u.pathname==='/api/stores'&&(req.method==='POST'||req.method==='PATCH')){
+      const user=await auth(db,req);
+      if(!user)return json(res,401,{error:'Inicia sessão.'});
+      if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
+
+      const b=await body(req,6*1024*1024);
+
+      let st=db.stores.find(x=>x.ownerId===user.id);
+
+      if(!st){
+        st={
+          id:crypto.randomUUID(),
+          ownerId:user.id,
+          name:(user.name||'Minha')+' Store',
+          logo:'',
+          description:'',
+          rating:5,
+          createdAt:new Date().toISOString(),
+          updatedAt:new Date().toISOString()
+        };
+        db.stores.push(st);
+      }
+
+      if(b.name!==undefined){
+        const name=String(b.name).trim();
+        if(name.length<2)return json(res,400,{error:'O nome da loja deve ter pelo menos 2 caracteres.'});
+        if(name.length>100)return json(res,400,{error:'O nome da loja é demasiado longo.'});
+        st.name=name;
+      }
+
+      if(b.description!==undefined){
+        const description=String(b.description).trim();
+        if(description.length>500)return json(res,400,{error:'A descrição deve ter no máximo 500 caracteres.'});
+        st.description=description;
+      }
+
+      if(b.logo!==undefined){
+        const logo=String(b.logo||'');
+        if(logo && !logo.startsWith('data:image/'))return json(res,400,{error:'O logotipo deve ser uma imagem válida.'});
+        if(logo.length>5500000)return json(res,400,{error:'A imagem da loja é demasiado grande.'});
+        st.logo=logo;
+      }
+
+      st.updatedAt=new Date().toISOString();
+      write(db);
+
+      return json(res,200,{
+        ...st,
+        store:st,
+        ok:true
+      });
+    }
     if(u.pathname==='/api/stores'&&req.method==='PATCH'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const b=await body(req);let st=db.stores.find(x=>x.ownerId===user.id);if(!st){st={id:crypto.randomUUID(),ownerId:user.id,name:user.name+' Store',logo:'',description:'',rating:5};db.stores.push(st);}if(b.name!==undefined)st.name=String(b.name).trim();if(b.logo!==undefined)st.logo=String(b.logo);if(b.description!==undefined)st.description=String(b.description);write(db);return json(res,200,st);}
 
     if(u.pathname==='/api/products'&&req.method==='POST'){
