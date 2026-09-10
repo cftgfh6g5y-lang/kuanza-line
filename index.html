@@ -2145,6 +2145,14 @@ async function loadAccount(){
 
       </div>
 
+      <div class="card" id="walletCard">
+        <div class="section-title" style="margin-bottom:8px">
+          <h3>💰 Kuanza Pay</h3>
+          <button class="btn btn-secondary" style="width:auto;padding:8px 12px" onclick="loadWallet()">Atualizar</button>
+        </div>
+        <div id="walletContent"><div class="small">A carregar carteira...</div></div>
+      </div>
+
       <div class="card">
 
         <h3>Tipo de conta</h3>
@@ -2234,6 +2242,38 @@ async function loadAccount(){
 
     </div>
   `;
+}
+
+async function loadWallet(){
+  const box=document.getElementById('walletContent');
+  if(!box||!token)return;
+  try{
+    const wallet=await api('/api/wallet');
+    const available=Number(wallet.available||0);
+    const pending=Number(wallet.pending||0);
+    const earned=Number(wallet.totalEarned||0);
+    const tx=Array.isArray(wallet.transactions)?wallet.transactions.slice(0,6):[];
+    box.innerHTML=`
+      <div class="stats">
+        <div class="stat"><strong>${money(available)}</strong><small>Disponível</small></div>
+        <div class="stat"><strong>${money(pending)}</strong><small>Pendente</small></div>
+        <div class="stat"><strong>${money(earned)}</strong><small>Total ganho</small></div>
+      </div>
+      ${me?.role==='seller' && available>=1000 ? `<button class="btn btn-primary btn-full mt" onclick="requestWithdrawal()">💸 Solicitar levantamento</button>` : ''}
+      <div class="small mt">Carteira interna V1.6. Pagamentos reais serão ligados a um provedor autorizado numa etapa de integração.</div>
+      ${tx.length?`<div class="mt"><strong>Últimas transações</strong>${tx.map(t=>`<div class="notification mt"><div><b>${esc(t.description||'Transação')}</b></div><div class="small mt">${Number(t.amount||0)>=0?'+':''}${money(Number(t.amount||0))} · ${new Date(t.createdAt).toLocaleString('pt-PT')}</div></div>`).join('')}</div>`:'<div class="small mt">Ainda não existem transações.</div>'}
+    `;
+  }catch(e){box.innerHTML='<div class="small">Não foi possível carregar a carteira.</div>';}
+}
+
+async function requestWithdrawal(){
+  const amount=Number(prompt('Quanto desejas levantar? (mínimo Kz 1.000)','1000')||0);
+  if(!amount)return;
+  try{
+    await api('/api/wallet/withdraw',{method:'POST',body:JSON.stringify({amount})});
+    toast('Pedido de levantamento criado ✓');
+    loadWallet();
+  }catch(e){toast(e.message||'Não foi possível solicitar o levantamento.');}
 }
 
 async function loadReviews(productId,sellerId){
