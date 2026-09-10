@@ -1831,28 +1831,92 @@ async function checkout(){
     return;
   }
 
+  const total = cartTotal();
   const items = cart.map(item=>({
     productId:item.id,
-    quantity:item.quantity
+    quantity:Math.max(1,Number(item.quantity||1))
+  }));
+
+  openModal(`
+    <div class="modal-head">
+      <h3>🧾 Finalizar compra</h3>
+      <button class="close" onclick="closeModal()">✕</button>
+    </div>
+
+    <div class="card" style="padding:14px;background:#f7faf8">
+      <div class="row"><span>Subtotal</span><strong>${money(total)}</strong></div>
+      <div class="row mt"><span>Entrega</span><strong>A calcular</strong></div>
+      <div class="row mt" style="font-size:17px"><strong>Total provisório</strong><strong style="color:#087443">${money(total)}</strong></div>
+    </div>
+
+    <div class="form mt">
+      <div>
+        <label>Forma de entrega</label>
+        <select id="checkoutDelivery">
+          <option value="delivery">Entrega</option>
+          <option value="pickup">Retirada</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Morada / ponto de entrega</label>
+        <textarea id="checkoutAddress" rows="3" placeholder="Indica bairro, rua, referência ou ponto de encontro"></textarea>
+      </div>
+
+      <div>
+        <label>Método de pagamento</label>
+        <select id="checkoutPayment">
+          <option value="multicaixa_express">Multicaixa Express</option>
+          <option value="bank_transfer">Transferência bancária</option>
+          <option value="card">Cartão</option>
+        </select>
+        <div class="small mt">O pagamento real será ligado ao provedor autorizado na etapa de integração. Nesta versão, o pedido fica com pagamento pendente.</div>
+      </div>
+
+      <button class="btn btn-primary btn-full" onclick="submitCheckout()">Confirmar encomenda</button>
+    </div>
+  `);
+}
+
+async function submitCheckout(){
+  const deliveryMethod=document.getElementById('checkoutDelivery')?.value||'delivery';
+  const address=document.getElementById('checkoutAddress')?.value.trim()||'';
+  const paymentMethod=document.getElementById('checkoutPayment')?.value||'';
+
+  if(!address){
+    toast('Indica a morada ou ponto de entrega.');
+    return;
+  }
+
+  if(!paymentMethod){
+    toast('Seleciona um método de pagamento.');
+    return;
+  }
+
+  const items=cart.map(item=>({
+    productId:item.id,
+    quantity:Math.max(1,Number(item.quantity||1))
   }));
 
   try{
-    const result = await api('/api/orders',{
+    const result=await api('/api/orders',{
       method:'POST',
       body:JSON.stringify({
-        items
+        items,
+        paymentMethod,
+        deliveryMethod,
+        deliveryAddress:address
       })
     });
 
-    cart = [];
+    cart=[];
     saveCart();
+    closeModal();
 
-    toast('Pedido criado com sucesso ✓');
+    const orderId=result?.id||result?.order?.id||'';
+    toast(orderId?`Encomenda #${String(orderId).slice(-8)} criada ✓`:'Encomenda criada ✓');
 
-    setTimeout(()=>{
-      go('orders');
-    },700);
-
+    setTimeout(()=>go('orders'),700);
   }catch(e){
     toast(e.message);
   }
