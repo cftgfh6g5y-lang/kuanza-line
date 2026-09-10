@@ -1858,6 +1858,8 @@ async function checkout(){
         </select>
       </div>
 
+      <div><label>Nome do destinatário</label><input id="checkoutRecipient" placeholder="Nome de quem vai receber"></div>
+      <div><label>Telefone do destinatário</label><input id="checkoutPhone" placeholder="9xx xxx xxx" inputmode="tel"></div>
       <div>
         <label>Morada / ponto de entrega</label>
         <textarea id="checkoutAddress" rows="3" placeholder="Indica bairro, rua, referência ou ponto de encontro"></textarea>
@@ -1881,7 +1883,14 @@ async function checkout(){
 async function submitCheckout(){
   const deliveryMethod=document.getElementById('checkoutDelivery')?.value||'delivery';
   const address=document.getElementById('checkoutAddress')?.value.trim()||'';
+  const recipient=document.getElementById('checkoutRecipient')?.value.trim()||'';
+  const phone=document.getElementById('checkoutPhone')?.value.trim()||'';
   const paymentMethod=document.getElementById('checkoutPayment')?.value||'';
+
+  if(!recipient){
+    toast('Indica o nome de quem vai receber.');
+    return;
+  }
 
   if(!address){
     toast('Indica a morada ou ponto de entrega.');
@@ -1905,7 +1914,9 @@ async function submitCheckout(){
         items,
         paymentMethod,
         deliveryMethod,
-        deliveryAddress:address
+        deliveryAddress:address,
+        recipient,
+        phone
       })
     });
 
@@ -1932,6 +1943,7 @@ async function loadOrders(){
   try{
     const data=await api('/api/orders');
     const orders=Array.isArray(data)?data:(data.orders||[]);
+    let deliveries=[]; try{ const dd=await api('/api/deliveries'); deliveries=Array.isArray(dd)?dd:[]; }catch(_){}
     const target=document.getElementById('ordersList');
     if(!orders.length){
       target.innerHTML=`<div class="empty"><div class="emoji">📦</div><strong>Ainda não tens pedidos.</strong></div>`;
@@ -1939,6 +1951,10 @@ async function loadOrders(){
     }
     target.innerHTML=orders.map(order=>{
       const status=order.status||'Pendente';
+      const delivery=deliveries.find(d=>d.orderId===order.id);
+      const deliveryStatus=delivery?.status||'A preparar';
+      const deliveryStatuses=['A preparar','Recolhida','Em trânsito','Chegou à zona','Entregue'];
+      const deliveryIndex=deliveryStatuses.indexOf(deliveryStatus);
       const statuses=['Pendente','Confirmado','Em preparação','Enviado','Entregue'];
       const currentIndex=statuses.indexOf(status);
       const timeline=statuses.map((s,i)=>{
@@ -1951,7 +1967,7 @@ async function loadOrders(){
       return `<div class="order">
         <div class="order-head"><strong>Pedido #${esc(String(order.id).slice(-8))}</strong><span class="status">${esc(status)}</span></div>
         <div class="order-items">${(order.items||[]).map(item=>`${esc(item.productName||item.name||'Produto')} × ${item.quantity||1}`).join('<br>')}</div>
-        <div class="card mt" style="padding:12px;background:#f8faf9"><strong style="font-size:13px">Rastreamento</strong>${status==='Cancelado'?`<div class="small mt" style="color:#b42318">Este pedido foi cancelado.</div>`:`<div class="mt">${timeline}</div>`}</div>
+        <div class="card mt" style="padding:12px;background:#f8faf9"><strong style="font-size:13px">Rastreamento do pedido</strong>${status==='Cancelado'?`<div class="small mt" style="color:#b42318">Este pedido foi cancelado.</div>`:`<div class="mt">${timeline}</div>`}<div class="mt" style="border-top:1px solid #e1e8e4;padding-top:10px"><strong style="font-size:13px">🚚 Entrega: ${esc(deliveryStatus)}</strong><div class="small mt">${delivery?`Destinatário: ${esc(delivery.recipient||'—')} · ${esc(delivery.address||'—')}`:'Entrega em preparação'}</div><div class="mt">${deliveryStatuses.map((s,i)=>`<div style="display:flex;gap:10px;align-items:center;margin:7px 0"><div style="width:15px;height:15px;border-radius:50%;background:${i<=deliveryIndex?'#087443':'#d8dfdb'}"></div><span style="font-size:12px">${esc(s)}</span></div>`).join('')}</div>${delivery?.status==='Entregue'?`<div class="small mt" style="color:#087443">Entrega confirmada.</div>`:''}</div></div>
         <div class="row mt"><strong>Total</strong><strong style="color:#087443">${money(order.total||0)}</strong></div>
         <button class="btn btn-outline mt" onclick="openDispute('${esc(order.id)}')">🛡️ Tenho um problema</button>
       </div>`;
@@ -2200,6 +2216,8 @@ async function loadAccount(){
                 Minha loja
                 <small>Gerir loja</small>
               </button>
+
+              <button class="quick" onclick="loadDeliveries()"><span class="emoji">🚚</span>Entregas<small>Gerir entregas</small></button>
 
               <button class="quick" onclick="loadSellerOrders()">
                 <span class="emoji">📦</span>
@@ -3353,6 +3371,15 @@ async function loadDashboardData(){
     `;
   }
 }
+
+async function loadDeliveries(){
+  if(!token){toast('Inicia sessão.');return;}
+  try{
+    const data=await api('/api/deliveries'); const list=Array.isArray(data)?data:[];
+    openModal(`<div class="modal-head"><h3>🚚 Entregas</h3><button class="close" onclick="closeModal()">✕</button></div><div class="mt">${list.length?list.map(d=>`<div class="card mb" style="padding:12px"><strong>Pedido #${esc(String(d.orderId).slice(-8))}</strong><div class="small mt">${esc(d.recipient||'—')} · ${esc(d.address||'—')}</div><div class="small mt">Estado: <strong>${esc(d.status||'A preparar')}</strong></div>${user?.role==='seller'?`<select class="mt" onchange="updateDelivery('${esc(d.id)}',this.value)"><option ${d.status==='A preparar'?'selected':''}>A preparar</option><option ${d.status==='Recolhida'?'selected':''}>Recolhida</option><option ${d.status==='Em trânsito'?'selected':''}>Em trânsito</option><option ${d.status==='Chegou à zona'?'selected':''}>Chegou à zona</option><option ${d.status==='Entregue'?'selected':''}>Entregue</option><option ${d.status==='Cancelada'?'selected':''}>Cancelada</option></select>`:''}</div>`).join(''):`<div class="empty">Nenhuma entrega encontrada.</div>`}</div>`);
+  }catch(e){toast(e.message);}
+}
+async function updateDelivery(id,status){try{await api('/api/deliveries/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({status})});toast('Entrega atualizada ✓');await loadDeliveries();}catch(e){toast(e.message);}}
 
 async function loadSellerOrders(){
   if(!token){
