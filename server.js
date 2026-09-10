@@ -317,14 +317,41 @@ const server=http.createServer(async(req,res)=>{
     }
     if(u.pathname==='/api/me/role'&&req.method==='PATCH'){
       const user=await auth(db,req);if(!user)return json(res,401,{error:'Não autenticado.'});
-      if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
+      if(!supabaseAuth)return json(res,503,{error:'Supabase não está configurado no servidor.'});
       const b=await body(req);
       if(!['buyer','seller'].includes(b.role))return json(res,400,{error:'Tipo de conta inválido.'});
-      const { error }=await supabaseAdmin.from('profiles').update({role:b.role}).eq('id',user.id);
-      if(error)return json(res,400,{error:error.message||'Não foi possível mudar o tipo de conta.'});
-      user.role=b.role;
-      const i=db.users.findIndex(x=>x.id===user.id);if(i>=0)db.users[i]={...db.users[i],role:b.role};else db.users.push(user);
-      audit(db,req,user.id,'role_changed',{role:b.role});write(db);
+
+      // A alteração do próprio perfil é feita com o token do utilizador.
+      // Assim a política RLS profiles_update_own aplica-se corretamente:
+      // auth.uid() = id.
+      const accessToken=(req.headers.authorization||'').replace('Bearer ','').trim();
+      if(!accessToken)return json(res,401,{error:'Sessão inválida.'});
+
+      const supabaseUser=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
+        global:{headers:{Authorization:`Bearer ${accessToken}`}},
+        auth:{persistSession:false,autoRefreshToken:false}
+      });
+
+      const { data: updatedProfile, error }=await supabaseUser
+        .from('profiles')
+        .update({role:b.role})
+        .eq('id',user.id)
+        .select('id,full_name,phone,avatar_url,role,verified,score,created_at,updated_at')
+        .maybeSingle();
+
+      if(error)return json(res,403,{error:error.message||'Não foi possível mudar o tipo de conta.'});
+      if(!updatedProfile)return json(res,403,{error:'O teu perfil não foi atualizado. Verifica as permissões da tua conta.'});
+
+      user.role=String(updatedProfile.role||b.role);
+      user.name=String(updatedProfile.full_name||user.name||'Utilizador');
+      user.phone=String(updatedProfile.phone||user.phone||'');
+      user.avatar=String(updatedProfile.avatar_url||user.avatar||'');
+      user.verified=!!updatedProfile.verified;
+      user.score=Number(updatedProfile.score||user.score||50);
+
+      const i=db.users.findIndex(x=>x.id===user.id);
+      if(i>=0)db.users[i]={...db.users[i],...user};else db.users.push(user);
+      audit(db,req,user.id,'role_changed',{role:user.role});write(db);
       const pu=publicUser(user,db);return json(res,200,{...pu,user:pu,ok:true});
     }
 
