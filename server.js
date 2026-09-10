@@ -241,11 +241,14 @@ const server=http.createServer(async(req,res)=>{
       if(!name||!email||!password)return json(res,400,{error:'Preenche nome, email e palavra-passe.'});
       if(password.length<6)return json(res,400,{error:'A palavra-passe deve ter pelo menos 6 caracteres.'});
 
-      const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      // REGISTRATION uses the public Auth API, not auth.admin.
+      // This is the correct browser/server flow with Supabase publishable keys.
+      const { data: created, error: createError } = await supabaseAuth.auth.signUp({
         email,
         password,
-        email_confirm:true,
-        user_metadata:{full_name:name,name,role}
+        options:{
+          data:{full_name:name,name,role}
+        }
       });
       if(createError){
         const msg=String(createError.message||'');
@@ -253,17 +256,29 @@ const server=http.createServer(async(req,res)=>{
         return json(res,400,{error:msg||'Não foi possível criar a conta.'});
       }
 
-      const uid=created.user.id;
-      await supabaseAdmin.from('profiles').upsert({
-        id:uid,
-        full_name:name,
-        role,
-        verified:false,
-        score:50
-      },{onConflict:'id'});
+      const uid=created?.user?.id;
+      if(!uid) return json(res,400,{error:'O Supabase não devolveu o utilizador criado.'});
 
-      const { data: signed, error: signError } = await supabaseAuth.auth.signInWithPassword({email,password});
-      if(signError || !signed?.session) return json(res,201,{ok:true,user:{id:uid,name,email,role,score:50,verified:false},message:'Conta criada. Inicia sessão para continuar.'});
+      // The database trigger creates profiles automatically. If the server secret
+      // is available, we also synchronize the selected role without making signup
+      // depend on the privileged key.
+      if(supabaseAdmin){
+        const { error: profileError } = await supabaseAdmin.from('profiles').upsert({
+          id:uid,
+          full_name:name,
+          role,
+          verified:false,
+          score:50
+        },{onConflict:'id'});
+        if(profileError) console.warn('Profile sync after signup:',profileError.message);
+      }
+
+      const session=created.session;
+      if(!session){
+        audit(db,req,uid,'supabase_register_pending',{role});
+        write(db);
+        return json(res,201,{ok:true,user:{id:uid,name,email,role,score:50,verified:false},token:null,requiresEmailConfirmation:true,message:'Conta criada. Confirma o teu email para iniciar sessão.'});
+      }
 
       const user={id:uid,name,email,role,score:50,verified:false,avatar:'',createdAt:new Date().toISOString()};
       const i=db.users.findIndex(x=>x.id===uid);
@@ -271,7 +286,7 @@ const server=http.createServer(async(req,res)=>{
       write(db);
       audit(db,req,uid,'supabase_register',{role});
       write(db);
-      return json(res,201,{token:signed.session.access_token,user:publicUser(user,db)});
+      return json(res,201,{token:session.access_token,user:publicUser(user,db)});
     }
 
     if(u.pathname==='/api/login'&&req.method==='POST'){
