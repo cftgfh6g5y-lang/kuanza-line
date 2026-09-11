@@ -141,13 +141,18 @@ function orderTimeline(order){
 }
 
 const PLATFORM_COMMISSION_RATE=0.10;
-
-// ============================================================
-// DELIVERY / ORDER STATE MACHINE — STABILIZED V1.9.4
-// ============================================================
+function ensureWallet(db,userId){
+  let w=db.wallets.find(x=>x.userId===userId);
+  if(!w){w={id:'WAL-'+crypto.randomUUID(),userId,available:0,pending:0,totalEarned:0,totalWithdrawn:0,createdAt:new Date().toISOString()};db.wallets.push(w);}
+  return w;
+}
+function walletSummary(db,userId){
+  const w=ensureWallet(db,userId);
+  const tx=db.walletTransactions.filter(x=>x.userId===userId).slice(0,50);
+  return {...w,available:Number(w.available||0),pending:Number(w.pending||0),totalEarned:Number(w.totalEarned||0),totalWithdrawn:Number(w.totalWithdrawn||0),transactions:tx};
+}
 const ORDER_STATUSES=['Pendente','Confirmado','Em preparação','Enviado','Entregue','Cancelado'];
-
-const SELLER_ORDER_TRANSITIONS={
+const ORDER_TRANSITIONS={
   'Pendente':['Confirmado','Cancelado'],
   'Confirmado':['Em preparação','Cancelado'],
   'Em preparação':['Enviado','Cancelado'],
@@ -157,41 +162,20 @@ const SELLER_ORDER_TRANSITIONS={
 };
 
 const DELIVERY_STATUSES=['A preparar','Recolhida','Em trânsito','Chegou à zona','Entregue','Cancelada'];
-
-const SELLER_DELIVERY_TRANSITIONS={
+const DELIVERY_TRANSITIONS={
   'A preparar':['Recolhida','Cancelada'],
   'Recolhida':['Em trânsito','Cancelada'],
   'Em trânsito':['Chegou à zona','Cancelada'],
-  'Chegou à zona':[],
+  'Chegou à zona':['Entregue'],
   'Entregue':[],
   'Cancelada':[]
 };
 
-const DELIVERY_RANK={
-  'A preparar':0,
-  'Recolhida':1,
-  'Em trânsito':2,
-  'Chegou à zona':3,
-  'Entregue':4,
-  'Cancelada':-1
-};
-
 function canTransition(map,from,to){
-  if(from===to)return true;
-  return Array.isArray(map[from])&&map[from].includes(to);
+  return from===to || (Array.isArray(map[from])&&map[from].includes(to));
 }
-
-function addStatusHistory(target,status,at=new Date().toISOString()){
-  if(!Array.isArray(target.statusHistory))target.statusHistory=[];
-  const last=target.statusHistory[target.statusHistory.length-1];
-  if(last?.status===status)return false;
-  target.statusHistory.push({status,at});
-  return true;
-}
-
-function generateConfirmationCode(){
-  return String(crypto.randomInt(100000,1000000));
-}
+function deliveryRank(status){return {'A preparar':0,'Recolhida':1,'Em trânsito':2,'Chegou à zona':3,'Entregue':4,'Cancelada':99}[status]??-1;}
+function orderRank(status){return {'Pendente':0,'Confirmado':1,'Em preparação':2,'Enviado':3,'Entregue':4,'Cancelado':99}[status]??-1;}
 
 function deliveryStatusFromOrderStatus(status){
   const map={
@@ -205,41 +189,10 @@ function deliveryStatusFromOrderStatus(status){
   return map[status]||'A preparar';
 }
 
-function syncDeliveryForwardWithOrder(db,order){
-  if(!order)return null;
-  const d=ensureDeliveryForOrder(db,order);
-  const target=deliveryStatusFromOrderStatus(order.status);
-  const current=d.status||'A preparar';
-
-  if(current==='Entregue'||current==='Cancelada')return d;
-  if(target==='Cancelada'){
-    if(current!=='Cancelada'){
-      d.status='Cancelada';
-      d.updatedAt=new Date().toISOString();
-      addStatusHistory(d,'Cancelada',d.updatedAt);
-    }
-    return d;
-  }
-
-  const currentRank=Number(DELIVERY_RANK[current]??0);
-  const targetRank=Number(DELIVERY_RANK[target]??0);
-
-  // Never move an existing delivery backwards.
-  if(targetRank>currentRank){
-    d.status=target;
-    d.updatedAt=new Date().toISOString();
-    addStatusHistory(d,target,d.updatedAt);
-  }
-
-  return d;
-}
-
 function ensureDeliveryForOrder(db,order){
   if(!Array.isArray(db.deliveries))db.deliveries=[];
-
   const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
-  let d=db.deliveries.find(x=>String(x.orderId)===String(order.id));
-
+  let d=db.deliveries.find(x=>x.orderId===order.id);
   if(!d){
     const now=new Date().toISOString();
     const initialStatus=deliveryStatusFromOrderStatus(order.status);
@@ -255,7 +208,7 @@ function ensureDeliveryForOrder(db,order){
       fee:Number(order.delivery?.fee||0),
       status:initialStatus,
       statusHistory:[{status:initialStatus,at:order.createdAt||now}],
-      confirmationCode:generateConfirmationCode(),
+      confirmationCode:String(crypto.randomInt(100000,1000000)),
       createdAt:order.createdAt||now,
       updatedAt:now
     };
@@ -263,151 +216,78 @@ function ensureDeliveryForOrder(db,order){
   }else{
     d.buyerId=order.userId;
     d.sellerIds=[...new Set([...(Array.isArray(d.sellerIds)?d.sellerIds:[]),...sellerIds])];
-    if(!d.status||!DELIVERY_STATUSES.includes(d.status))d.status=deliveryStatusFromOrderStatus(order.status);
-    if(!Array.isArray(d.statusHistory)||!d.statusHistory.length){
-      d.statusHistory=[{status:d.status,at:d.createdAt||new Date().toISOString()}];
-    }
-    if(!d.confirmationCode)d.confirmationCode=generateConfirmationCode();
-    if(d.recipient===undefined)d.recipient=order.delivery?.recipient||'';
-    if(d.phone===undefined)d.phone=order.delivery?.phone||'';
-    if(d.address===undefined)d.address=order.delivery?.address||'';
-    if(d.method===undefined)d.method=order.delivery?.method||'delivery';
-    if(d.fee===undefined)d.fee=Number(order.delivery?.fee||0);
+    if(!d.status)d.status=deliveryStatusFromOrderStatus(order.status);
+    if(!Array.isArray(d.statusHistory))d.statusHistory=[];
+    if(!d.confirmationCode)d.confirmationCode=String(crypto.randomInt(100000,1000000));
   }
-
   return d;
 }
 
-function deliverySellerIds(db,d,order){
-  const ids=new Set(Array.isArray(d?.sellerIds)?d.sellerIds:[]);
-  if(order&&Array.isArray(order.items)){
-    for(const item of order.items){
-      if(item?.sellerId)ids.add(String(item.sellerId));
+function syncDeliveryWithOrder(db,order){
+  const d=ensureDeliveryForOrder(db,order);
+  const target=deliveryStatusFromOrderStatus(order.status);
+  if(target==='Cancelada'){
+    if(d.status!=='Entregue'&&d.status!=='Cancelada'){
+      d.status='Cancelada';
+      d.updatedAt=new Date().toISOString();
+      d.statusHistory.push({status:'Cancelada',at:d.updatedAt});
     }
+  }else if(d.status!=='Entregue'&&d.status!=='Cancelada'&&deliveryRank(target)>deliveryRank(d.status)){
+    d.status=target;
+    d.updatedAt=new Date().toISOString();
+    d.statusHistory.push({status:target,at:d.updatedAt});
   }
-  return [...ids];
+  return d;
 }
 
-function publicDelivery(db,d,user){
+function deliveryView(db,d,user){
   const order=db.orders.find(o=>String(o.id)===String(d.orderId));
-  const sellerIds=deliverySellerIds(db,d,order);
-  const result={
-    ...d,
-    sellerIds
-  };
-
-  // The confirmation code belongs to the buyer.
-  // Sellers can see the delivery state but never the buyer's code.
-  if(!user || String(d.buyerId)!==String(user.id)){
-    delete result.confirmationCode;
-  }
-
-  return result;
-}
-
-function setOrderStatus(order,next,at=new Date().toISOString()){
-  const previous=String(order.status||'Pendente');
-  if(previous===next)return {changed:false,previous,next};
-  order.status=next;
-  order.updatedAt=at;
-  addStatusHistory(order,next,at);
-  return {changed:true,previous,next};
-}
-
-function cancelOrderFinancials(db,order){
-  if(!order||order.financials?.cancelled)return false;
-
-  const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
-  order.financials={
-    ...(order.financials||{}),
-    cancelled:true,
-    cancelledAt:new Date().toISOString()
-  };
-
-  for(const sid of sellerIds){
-    const share=calculateSellerShare(order,sid);
-    const wallet=ensureWallet(db,sid);
-    const pendingBefore=Number(wallet.pending||0);
-    const releaseAmount=Math.min(Math.max(0,pendingBefore),Math.max(0,share.net));
-    wallet.pending=Math.max(0,pendingBefore-releaseAmount);
-
-    if(releaseAmount>0){
-      addWalletTx(
-        db,
-        sid,
-        'sale_cancelled',
-        -releaseAmount,
-        `Venda #${String(order.id).slice(-8)} cancelada`,
-        {orderId:order.id,amount:releaseAmount}
-      );
-    }
-  }
-
-  return true;
-}
-
-function calculateSellerShare(order,sellerId){
-  const items=(Array.isArray(order.items)?order.items:[]).filter(i=>String(i.sellerId||'')===String(sellerId));
-  const gross=items.reduce((sum,i)=>sum+Number(i.price||0)*Math.max(1,Number(i.quantity||1)),0);
-  const commission=Math.round(gross*PLATFORM_COMMISSION_RATE);
-  return {gross,commission,net:gross-commission};
-}
-
-function ensureWallet(db,userId){
-  let w=db.wallets.find(x=>x.userId===userId);
-  if(!w){w={id:'WAL-'+crypto.randomUUID(),userId,available:0,pending:0,totalEarned:0,totalWithdrawn:0,createdAt:new Date().toISOString()};db.wallets.push(w);}
-  return w;
-}
-
-function walletSummary(db,userId){
-  const w=ensureWallet(db,userId);
-  const tx=db.walletTransactions.filter(x=>x.userId===userId).slice(0,50);
-  return {...w,available:Number(w.available||0),pending:Number(w.pending||0),totalEarned:Number(w.totalEarned||0),totalWithdrawn:Number(w.totalWithdrawn||0),transactions:tx};
+  const sellerIds=[...new Set([...(Array.isArray(d.sellerIds)?d.sellerIds:[]),...((order?.items||[]).map(i=>i.sellerId).filter(Boolean))])];
+  const out={...d,sellerIds};
+  if(!user||String(user.id)!==String(d.buyerId))delete out.confirmationCode;
+  return out;
 }
 
 function addWalletTx(db,userId,type,amount,description,meta={}){
   const tx={id:'TX-'+Date.now().toString(36)+'-'+crypto.randomBytes(3).toString('hex'),userId,type,amount:Number(amount||0),description,meta,createdAt:new Date().toISOString()};
   db.walletTransactions.unshift(tx);return tx;
 }
-
+function calculateSellerShare(order,sellerId){
+  const items=(Array.isArray(order.items)?order.items:[]).filter(i=>String(i.sellerId||'')===String(sellerId));
+  const gross=items.reduce((sum,i)=>sum+Number(i.price||0)*Math.max(1,Number(i.quantity||1)),0);
+  const commission=Math.round(gross*PLATFORM_COMMISSION_RATE);
+  return {gross,commission,net:gross-commission};
+}
 function settleDeliveredOrder(db,order){
-  if(!order||order.status!=='Entregue'||order.financials?.settled)return false;
-
+  if(!order||order.status!=='Entregue'||order.financials?.settled||order.financials?.cancelled)return false;
   const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
-  order.financials={
-    ...(order.financials||{}),
-    settled:true,
-    settledAt:new Date().toISOString(),
-    sellers:{}
-  };
+  order.financials={...(order.financials||{}),settled:true,settledAt:new Date().toISOString(),sellers:{}};
+  for(const sellerId of sellerIds){
+    const share=calculateSellerShare(order,sellerId); const wallet=ensureWallet(db,sellerId);
+    const pendingBefore=Number(wallet.pending||0);
+    const release=Math.min(pendingBefore,share.net);
+    wallet.pending=Math.max(0,pendingBefore-release);
+    wallet.available=Number(wallet.available||0)+share.net;
+    wallet.totalEarned=Number(wallet.totalEarned||0)+share.net;
+    order.financials.sellers[sellerId]={...share,released:release};
+    addWalletTx(db,sellerId,'sale_released',share.net,`Venda #${String(order.id).slice(-8)} libertada após entrega`,{orderId:order.id,gross:share.gross,commission:share.commission});
+    notify(db,sellerId,'wallet','Valor libertado',`Kz ${share.net.toLocaleString('pt-AO')} foram adicionados ao teu saldo disponível.`,{orderId:order.id,amount:share.net});
+  }
+  return true;
+}
 
+function cancelOrderFinancials(db,order){
+  if(!order||order.financials?.cancelled)return false;
+  const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
+  order.financials={...(order.financials||{}),cancelled:true,cancelledAt:new Date().toISOString()};
   for(const sellerId of sellerIds){
     const share=calculateSellerShare(order,sellerId);
     const wallet=ensureWallet(db,sellerId);
-    wallet.pending=Math.max(0,Number(wallet.pending||0)-share.net);
-    wallet.available=Number(wallet.available||0)+share.net;
-    wallet.totalEarned=Number(wallet.totalEarned||0)+share.net;
-    order.financials.sellers[sellerId]=share;
-
-    addWalletTx(
-      db,
-      sellerId,
-      'sale_released',
-      share.net,
-      `Venda #${String(order.id).slice(-8)} libertada após confirmação da entrega`,
-      {orderId:order.id,gross:share.gross,commission:share.commission}
-    );
-
-    notify(
-      db,
-      sellerId,
-      'wallet',
-      'Valor libertado',
-      `Kz ${share.net.toLocaleString('pt-AO')} foram adicionados ao teu saldo disponível.`,
-      {orderId:order.id,amount:share.net}
-    );
+    const pendingBefore=Number(wallet.pending||0);
+    const release=Math.min(pendingBefore,share.net);
+    wallet.pending=Math.max(0,pendingBefore-release);
+    if(release>0)addWalletTx(db,sellerId,'sale_cancelled',-release,`Venda #${String(order.id).slice(-8)} cancelada`,{orderId:order.id,amount:release});
   }
-
   return true;
 }
 
@@ -416,21 +296,16 @@ function rateLimit(req,key,limit=60,windowMs=60000){const now=Date.now();const i
 function audit(db,req,userId,event,meta={}){if(!Array.isArray(db.securityEvents))db.securityEvents=[];db.securityEvents.unshift({id:crypto.randomUUID(),userId:userId||null,event,ip:req.socket.remoteAddress||'unknown',at:new Date().toISOString(),meta});if(db.securityEvents.length>1000)db.securityEvents=db.securityEvents.slice(0,1000);}
 function isBlocked(db,userId){return Array.isArray(db.blockedUsers)&&db.blockedUsers.some(x=>String(x.userId)===String(userId)&&x.active!==false);}
 function adminOnly(user){return !!user&&user.role==='admin';}
-
 const server=http.createServer(async(req,res)=>{
   const u=url.parse(req.url,true);
   if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type,Authorization','Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS'});return res.end();}
-
   try{
     let db=ensureDB(read());
-
     if(!rateLimit(req, u.pathname.startsWith('/api/login')?'login':u.pathname.startsWith('/api/register')?'register':'api', u.pathname.startsWith('/api/login')?12:u.pathname.startsWith('/api/register')?8:120, 60000)) return json(res,429,{error:'Muitas solicitações. Tenta novamente em instantes.'});
-
     const currentUser=await auth(db,req);
     if(currentUser && isBlocked(db,currentUser.id)) return json(res,403,{error:'A tua conta está temporariamente bloqueada.'});
-
-    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.9.4',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
-    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'1.9.4',supabase:!!(supabaseAuth&&supabaseAdmin)});
+    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.9.3',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
+    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'1.9.3',supabase:!!(supabaseAuth&&supabaseAdmin)});
 
     if(u.pathname==='/api/products'&&req.method==='GET'){
       let list=db.products.map(p=>publicProduct(db,p));
@@ -440,13 +315,8 @@ const server=http.createServer(async(req,res)=>{
       if(sort==='low') list.sort((a,b)=>a.price-b.price); if(sort==='high') list.sort((a,b)=>b.price-a.price);
       return json(res,200,list);
     }
-
     const pm=u.pathname.match(/^\/api\/products\/([^/]+)$/);
-    if(pm&&req.method==='GET'){
-      const p=db.products.find(x=>x.id===pm[1]);
-      if(!p)return json(res,404,{error:'Produto não encontrado.'});
-      return json(res,200,publicProduct(db,p));
-    }
+    if(pm&&req.method==='GET'){const p=db.products.find(x=>x.id===pm[1]);if(!p)return json(res,404,{error:'Produto não encontrado.'});return json(res,200,publicProduct(db,p));}
 
     if(u.pathname==='/api/register'&&req.method==='POST'){
       if(!supabaseAdmin || !supabaseAuth) return json(res,503,{error:'Supabase não está configurado no servidor.'});
@@ -455,10 +325,11 @@ const server=http.createServer(async(req,res)=>{
       const email=String(b.email||'').trim().toLowerCase();
       const password=String(b.password||'');
       const role=b.role==='seller'?'seller':'buyer';
-
       if(!name||!email||!password)return json(res,400,{error:'Preenche nome, email e palavra-passe.'});
       if(password.length<6)return json(res,400,{error:'A palavra-passe deve ter pelo menos 6 caracteres.'});
 
+      // REGISTRATION uses the public Auth API, not auth.admin.
+      // This is the correct browser/server flow with Supabase publishable keys.
       const { data: created, error: createError } = await supabaseAuth.auth.signUp({
         email,
         password,
@@ -466,7 +337,6 @@ const server=http.createServer(async(req,res)=>{
           data:{full_name:name,name,role}
         }
       });
-
       if(createError){
         const msg=String(createError.message||'');
         if(/already|registered|exists|duplicate/i.test(msg)) return json(res,409,{error:'Este email já está registado.'});
@@ -476,6 +346,9 @@ const server=http.createServer(async(req,res)=>{
       const uid=created?.user?.id;
       if(!uid) return json(res,400,{error:'O Supabase não devolveu o utilizador criado.'});
 
+      // The database trigger creates profiles automatically. If the server secret
+      // is available, we also synchronize the selected role without making signup
+      // depend on the privileged key.
       if(supabaseAdmin){
         const { error: profileError } = await supabaseAdmin.from('profiles').upsert({
           id:uid,
@@ -488,7 +361,6 @@ const server=http.createServer(async(req,res)=>{
       }
 
       const session=created.session;
-
       if(!session){
         audit(db,req,uid,'supabase_register_pending',{role});
         write(db);
@@ -510,58 +382,35 @@ const server=http.createServer(async(req,res)=>{
       const email=String(b.email||'').trim().toLowerCase();
       const password=String(b.password||'');
       if(!email||!password)return json(res,400,{error:'Preenche email e palavra-passe.'});
-
       const { data, error } = await supabaseAuth.auth.signInWithPassword({email,password});
       if(error || !data?.session) return json(res,401,{error:'Email ou palavra-passe incorretos.'});
-
       const user=await auth(db,{headers:{authorization:`Bearer ${data.session.access_token}`}});
       if(!user)return json(res,401,{error:'Não foi possível carregar o teu perfil.'});
-
       audit(db,req,user.id,'supabase_login');
       write(db);
       return json(res,200,{token:data.session.access_token,user:publicUser(user,db)});
     }
-
-    if(u.pathname==='/api/me'&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Não autenticado.'});
-      const pu=publicUser(user,db);
-      return json(res,200,{...pu,user:pu});
-    }
-
+    if(u.pathname==='/api/me'&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Não autenticado.'});const pu=publicUser(user,db);return json(res,200,{...pu,user:pu});}
     if(u.pathname==='/api/me/score'&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Não autenticado.'});
-
+      const user=await auth(db,req); if(!user)return json(res,401,{error:'Não autenticado.'});
       const completed=db.orders.filter(o=>o.status==='Concluído'&&Array.isArray(o.items)&&o.items.some(i=>i.sellerId===user.id||i.seller===user.name)).length;
       const reviews=db.reviews.filter(r=>r.sellerId===user.id);
       const avg=reviews.length?reviews.reduce((a,r)=>a+Number(r.rating||0),0)/reviews.length:0;
       const cancellations=db.orders.filter(o=>o.sellerId===user.id&&o.status==='Cancelado').length;
-      const complaints=Number(user.complaints||0);
-      const response=Number(user.responseTimeMinutes||0);
-
-      const factors={
-        base:50,
-        completedOrders:Math.min(25,completed*3),
-        reviews:reviews.length?Math.round((avg/5)*20):0,
-        cancellations:-Math.min(15,cancellations*4),
-        complaints:-Math.min(20,complaints*8),
-        responseTime:response>0&&response<=30?5:(response>30&&response<=120?3:(response>720?-5:0)),
-        verified:user.verified?5:0
-      };
-
+      const complaints=Number(user.complaints||0); const response=Number(user.responseTimeMinutes||0);
+      const factors={base:50,completedOrders:Math.min(25,completed*3),reviews:reviews.length?Math.round((avg/5)*20):0,cancellations:-Math.min(15,cancellations*4),complaints:-Math.min(20,complaints*8),responseTime:response>0&&response<=30?5:(response>30&&response<=120?3:(response>720?-5:0)),verified:user.verified?5:0};
       const score=calculateScore(db,user);
       return json(res,200,{score,scoreLabel:scoreLabel(score),reviewCount:reviews.length,averageRating:Number(avg.toFixed(2)),factors});
     }
-
     if(u.pathname==='/api/me/role'&&req.method==='PATCH'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Não autenticado.'});
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Não autenticado.'});
       if(!supabaseAuth)return json(res,503,{error:'Supabase não está configurado no servidor.'});
-
       const b=await body(req);
       if(!['buyer','seller'].includes(b.role))return json(res,400,{error:'Tipo de conta inválido.'});
 
+      // A alteração do próprio perfil é feita com o token do utilizador.
+      // Assim a política RLS profiles_update_own aplica-se corretamente:
+      // auth.uid() = id.
       const accessToken=(req.headers.authorization||'').replace('Bearer ','').trim();
       if(!accessToken)return json(res,401,{error:'Sessão inválida.'});
 
@@ -589,204 +438,46 @@ const server=http.createServer(async(req,res)=>{
 
       const i=db.users.findIndex(x=>x.id===user.id);
       if(i>=0)db.users[i]={...db.users[i],...user};else db.users.push(user);
-      audit(db,req,user.id,'role_changed',{role:user.role});
-      write(db);
-
-      const pu=publicUser(user,db);
-      return json(res,200,{...pu,user:pu,ok:true});
+      audit(db,req,user.id,'role_changed',{role:user.role});write(db);
+      const pu=publicUser(user,db);return json(res,200,{...pu,user:pu,ok:true});
     }
 
-    if(u.pathname==='/api/stores'&&req.method==='GET'){
-      const ownerId=String(u.query.ownerId||'');
-      if(!ownerId)return json(res,400,{error:'Vendedor inválido.'});
-      const st=db.stores.find(x=>x.ownerId===ownerId)||null;
-      const products=db.products.filter(p=>p.sellerId===ownerId).map(p=>publicProduct(db,p));
-      const owner=db.users.find(x=>x.id===ownerId)||null;
-      return json(res,200,{store:st,stores:st?[st]:[],owner:owner?publicUser(owner,db):null,products});
-    }
-
-    if(u.pathname==='/api/stores'&&(req.method==='POST'||req.method==='PATCH')){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-      if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
-
-      const b=await body(req,6*1024*1024);
-      let st=db.stores.find(x=>x.ownerId===user.id);
-
-      if(!st){
-        st={
-          id:crypto.randomUUID(),
-          ownerId:user.id,
-          name:(user.name||'Minha')+' Store',
-          logo:'',
-          description:'',
-          rating:5,
-          createdAt:new Date().toISOString(),
-          updatedAt:new Date().toISOString()
-        };
-        db.stores.push(st);
-      }
-
-      if(b.name!==undefined){
-        const name=String(b.name).trim();
-        if(name.length<2)return json(res,400,{error:'O nome da loja deve ter pelo menos 2 caracteres.'});
-        if(name.length>100)return json(res,400,{error:'O nome da loja é demasiado longo.'});
-        st.name=name;
-      }
-
-      if(b.description!==undefined){
-        const description=String(b.description).trim();
-        if(description.length>500)return json(res,400,{error:'A descrição deve ter no máximo 500 caracteres.'});
-        st.description=description;
-      }
-
-      if(b.logo!==undefined){
-        const logo=String(b.logo||'');
-        if(logo && !logo.startsWith('data:image/'))return json(res,400,{error:'O logotipo deve ser uma imagem válida.'});
-        if(logo.length>5500000)return json(res,400,{error:'A imagem da loja é demasiado grande.'});
-        st.logo=logo;
-      }
-
-      st.updatedAt=new Date().toISOString();
-      write(db);
-      return json(res,200,{...st,store:st,ok:true});
-    }
-
-    if(u.pathname==='/api/stores'&&req.method==='PATCH'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-      const b=await body(req);
-      let st=db.stores.find(x=>x.ownerId===user.id);
-      if(!st){st={id:crypto.randomUUID(),ownerId:user.id,name:user.name+' Store',logo:'',description:'',rating:5};db.stores.push(st);}
-      if(b.name!==undefined)st.name=String(b.name).trim();
-      if(b.logo!==undefined)st.logo=String(b.logo);
-      if(b.description!==undefined)st.description=String(b.description);
-      write(db);
-      return json(res,200,st);
-    }
+    if(u.pathname==='/api/stores'&&req.method==='GET'){const ownerId=String(u.query.ownerId||'');const st=db.stores.find(x=>x.ownerId===ownerId);if(!st)return json(res,200,null);const products=db.products.filter(p=>p.sellerId===ownerId).map(p=>publicProduct(db,p));const owner=db.users.find(x=>x.id===ownerId);return json(res,200,{...st,owner:publicUser(owner,db),products});}
+    if(u.pathname==='/api/stores'&&req.method==='PATCH'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const b=await body(req);let st=db.stores.find(x=>x.ownerId===user.id);if(!st){st={id:crypto.randomUUID(),ownerId:user.id,name:user.name+' Store',logo:'',description:'',rating:5};db.stores.push(st);}if(b.name!==undefined)st.name=String(b.name).trim();if(b.logo!==undefined)st.logo=String(b.logo);if(b.description!==undefined)st.description=String(b.description);write(db);return json(res,200,st);}
 
     if(u.pathname==='/api/products'&&req.method==='POST'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão para publicar.'});
-      if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor antes de publicar.'});
-
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão para publicar.'});if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor antes de publicar.'});
       const b=await body(req,10*1024*1024);
       if(!b.name||!Number(b.price)||!b.cat)return json(res,400,{error:'Preenche nome, preço e categoria.'});
       if(!validPhotos(b.photos))return json(res,400,{error:'O produto precisa de pelo menos 5 fotos reais. Podes adicionar até 10.'});
       if(!b.description||String(b.description).trim().length<15)return json(res,400,{error:'A descrição é obrigatória e deve ter pelo menos 15 caracteres.'});
-
-      const p={
-        id:crypto.randomUUID(),
-        name:String(b.name).trim(),
-        price:Number(b.price),
-        cat:String(b.cat),
-        emoji:b.emoji||'📦',
-        sellerId:user.id,
-        seller:user.name,
-        verified:!!user.verified,
-        rating:5,
-        score:Number(user.score||100),
-        description:String(b.description).trim(),
-        condition:b.condition||'Usado',
-        location:b.location||'',
-        photos:b.photos.slice(0,10),
-        createdAt:new Date().toISOString()
-      };
-
-      db.products.unshift(p);
-      write(db);
-      return json(res,201,publicProduct(db,p));
+      const p={id:crypto.randomUUID(),name:String(b.name).trim(),price:Number(b.price),cat:String(b.cat),emoji:b.emoji||'📦',sellerId:user.id,seller:user.name,verified:!!user.verified,rating:5,score:Number(user.score||100),description:String(b.description).trim(),condition:b.condition||'Usado',location:b.location||'',photos:b.photos.slice(0,10),createdAt:new Date().toISOString()};
+      db.products.unshift(p);write(db);return json(res,201,publicProduct(db,p));
     }
 
     const fav=u.pathname.match(/^\/api\/favorites\/([^/]+)$/);
-    if(u.pathname==='/api/favorites'&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-      return json(res,200,db.favorites.filter(x=>x.userId===user.id).map(x=>db.products.find(p=>p.id===x.productId)).filter(Boolean).map(p=>publicProduct(db,p)));
-    }
-
-    if(fav&&req.method==='POST'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-      if(!db.products.some(p=>p.id===fav[1]))return json(res,404,{error:'Produto não encontrado.'});
-      if(!db.favorites.some(x=>x.userId===user.id&&x.productId===fav[1]))db.favorites.push({userId:user.id,productId:fav[1]});
-      write(db);
-      return json(res,201,{ok:true});
-    }
-
-    if(fav&&req.method==='DELETE'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-      db.favorites=db.favorites.filter(x=>!(x.userId===user.id&&x.productId===fav[1]));
-      write(db);
-      return json(res,200,{ok:true});
-    }
+    if(u.pathname==='/api/favorites'&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});return json(res,200,db.favorites.filter(x=>x.userId===user.id).map(x=>db.products.find(p=>p.id===x.productId)).filter(Boolean).map(p=>publicProduct(db,p)));}
+    if(fav&&req.method==='POST'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!db.products.some(p=>p.id===fav[1]))return json(res,404,{error:'Produto não encontrado.'});if(!db.favorites.some(x=>x.userId===user.id&&x.productId===fav[1]))db.favorites.push({userId:user.id,productId:fav[1]});write(db);return json(res,201,{ok:true});}
+    if(fav&&req.method==='DELETE'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});db.favorites=db.favorites.filter(x=>!(x.userId===user.id&&x.productId===fav[1]));write(db);return json(res,200,{ok:true});}
 
     const cartItem=u.pathname.match(/^\/api\/cart\/([^/]+)$/);
-    if(u.pathname==='/api/cart'&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-      const items=db.carts.filter(x=>x.userId===user.id).map(x=>{
-        const p=db.products.find(p=>p.id===x.productId);
-        return p?{...x,product:publicProduct(db,p)}:null;
-      }).filter(Boolean);
-      return json(res,200,items);
-    }
-
-    if(u.pathname==='/api/cart'&&req.method==='POST'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-      const b=await body(req);
-      const p=db.products.find(x=>x.id===b.productId);
-      if(!p)return json(res,404,{error:'Produto não encontrado.'});
-      let x=db.carts.find(x=>x.userId===user.id&&x.productId===p.id);
-      if(x)x.qty=Math.min(99,x.qty+Math.max(1,Number(b.qty||1)));
-      else db.carts.push({userId:user.id,productId:p.id,qty:Math.max(1,Number(b.qty||1))});
-      write(db);
-      return json(res,201,{ok:true});
-    }
-
-    if(cartItem&&req.method==='DELETE'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-      db.carts=db.carts.filter(x=>!(x.userId===user.id&&x.productId===cartItem[1]));
-      write(db);
-      return json(res,200,{ok:true});
-    }
+    if(u.pathname==='/api/cart'&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const items=db.carts.filter(x=>x.userId===user.id).map(x=>{const p=db.products.find(p=>p.id===x.productId);return p?{...x,product:publicProduct(db,p)}:null}).filter(Boolean);return json(res,200,items);}
+    if(u.pathname==='/api/cart'&&req.method==='POST'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const b=await body(req);const p=db.products.find(x=>x.id===b.productId);if(!p)return json(res,404,{error:'Produto não encontrado.'});let x=db.carts.find(x=>x.userId===user.id&&x.productId===p.id);if(x)x.qty=Math.min(99,x.qty+Math.max(1,Number(b.qty||1)));else db.carts.push({userId:user.id,productId:p.id,qty:Math.max(1,Number(b.qty||1))});write(db);return json(res,201,{ok:true});}
+    if(cartItem&&req.method==='DELETE'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});db.carts=db.carts.filter(x=>!(x.userId===user.id&&x.productId===cartItem[1]));write(db);return json(res,200,{ok:true});}
 
     if(u.pathname==='/api/orders'&&req.method==='POST'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão para comprar.'});
-
-      const b=await body(req);
-      const rawItems=Array.isArray(b.items)?b.items:[];
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão para comprar.'});
+      const b=await body(req); const rawItems=Array.isArray(b.items)?b.items:[];
       if(!rawItems.length)return json(res,400,{error:'O carrinho está vazio.'});
-
-      const items=[];
-      let total=0;
-
+      const items=[]; let total=0;
       for(const raw of rawItems){
         const product=db.products.find(p=>p.id===String(raw.productId||raw.id||''));
         const quantity=Math.max(1,Math.min(99,Number(raw.quantity||1)));
         if(!product)continue;
-
         total+=Number(product.price||0)*quantity;
-
-        items.push({
-          productId:product.id,
-          productName:product.name,
-          name:product.name,
-          price:Number(product.price||0),
-          quantity,
-          sellerId:product.sellerId,
-          seller:product.seller||'Vendedor',
-          cat:product.cat,
-          photos:Array.isArray(product.photos)?product.photos.slice(0,1):[]
-        });
+        items.push({productId:product.id,productName:product.name,name:product.name,price:Number(product.price||0),quantity,sellerId:product.sellerId,seller:product.seller||'Vendedor',cat:product.cat,photos:Array.isArray(product.photos)?product.photos.slice(0,1):[]});
       }
-
       if(!items.length)return json(res,400,{error:'Nenhum produto válido no carrinho.'});
-
       const paymentMethods=['multicaixa_express','bank_transfer','card'];
       const deliveryMethods=['delivery','pickup'];
       const paymentMethod=String(b.paymentMethod||'');
@@ -794,969 +485,260 @@ const server=http.createServer(async(req,res)=>{
       const deliveryAddress=String(b.deliveryAddress||'').trim().slice(0,500);
       const recipient=String(b.recipient||user.name||'').trim().slice(0,120);
       const phone=String(b.phone||'').trim().slice(0,40);
-
       if(!paymentMethods.includes(paymentMethod))return json(res,400,{error:'Método de pagamento inválido.'});
       if(!deliveryMethods.includes(deliveryMethod))return json(res,400,{error:'Forma de entrega inválida.'});
       if(!deliveryAddress)return json(res,400,{error:'Indica a morada ou ponto de entrega.'});
-
       const deliveryFee=deliveryMethod==='delivery'?1500:0;
       const grandTotal=total+deliveryFee;
       const now=new Date().toISOString();
-
-      const order={
-        id:'KL-'+Date.now().toString().slice(-7),
-        userId:user.id,
-        items,
-        total:grandTotal,
-        subtotal:total,
-        deliveryFee,
-        payment:{method:paymentMethod,status:'Pendente',reference:null},
-        delivery:{method:deliveryMethod,address:deliveryAddress,fee:deliveryFee,recipient,phone},
-        status:'Pendente',
-        statusHistory:[{status:'Pendente',at:now}],
-        createdAt:now
-      };
-
+      const order={id:'KL-'+Date.now().toString().slice(-7),userId:user.id,items,total:grandTotal,subtotal:total,deliveryFee,payment:{method:paymentMethod,status:'Pendente',reference:null},delivery:{method:deliveryMethod,address:deliveryAddress,fee:deliveryFee,recipient,phone},status:'Pendente',statusHistory:[{status:'Pendente',at:now}],createdAt:now};
       db.orders.unshift(order);
-
       const sellerIds=[...new Set(items.map(i=>i.sellerId).filter(Boolean))];
       ensureDeliveryForOrder(db,order);
-
-      for(const sid of sellerIds){
-        const share=calculateSellerShare(order,sid);
-        const wallet=ensureWallet(db,sid);
+        for(const sid of sellerIds){
+        const share=calculateSellerShare(order,sid); const wallet=ensureWallet(db,sid);
         wallet.pending=Number(wallet.pending||0)+share.net;
-
-        addWalletTx(
-          db,
-          sid,
-          'sale_pending',
-          share.net,
-          `Venda #${String(order.id).slice(-8)} pendente de entrega`,
-          {orderId:order.id,gross:share.gross,commission:share.commission}
-        );
-
-        notify(
-          db,
-          sid,
-          'sale',
-          'Novo pedido',
-          `Recebeste um novo pedido #${String(order.id).slice(-8)}.`,
-          {orderId:order.id}
-        );
+        addWalletTx(db,sid,'sale_pending',share.net,`Venda #${String(order.id).slice(-8)} pendente de entrega`,{orderId:order.id,gross:share.gross,commission:share.commission});
+        notify(db,sid,'sale','Novo pedido',`Recebeste um novo pedido #${String(order.id).slice(-8)}.`,{orderId:order.id});
       }
-
-      write(db);
-      return json(res,201,order);
+      write(db);return json(res,201,order);
     }
+    if(u.pathname==='/api/orders'&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão para ver pedidos.'});return json(res,200,db.orders.filter(x=>x.userId===user.id));}
 
-    if(u.pathname==='/api/orders'&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão para ver pedidos.'});
-      return json(res,200,db.orders.filter(x=>x.userId===user.id));
-    }
-
-    // ==========================================================
-    // NOTIFICATIONS / WALLET / DISPUTES
-    // ==========================================================
+    // Kuanza Score V1.2: avaliações reais de compradores sobre vendedores/produtos.
     if(u.pathname==='/api/notifications'&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       const list=db.notifications.filter(n=>n.userId===user.id).slice(0,50);
       return json(res,200,{items:list,unread:list.filter(n=>!n.read).length});
     }
-
     const nr=u.pathname.match(/^\/api\/notifications\/([^/]+)\/read$/);
     if(nr&&req.method==='PATCH'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       const n=db.notifications.find(x=>x.id===nr[1]&&x.userId===user.id);
       if(!n)return json(res,404,{error:'Notificação não encontrada.'});
-      n.read=true;
-      write(db);
-      return json(res,200,n);
+      n.read=true;write(db);return json(res,200,n);
     }
-
     if(u.pathname==='/api/notifications/read-all'&&req.method==='PATCH'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-      db.notifications.filter(n=>n.userId===user.id).forEach(n=>n.read=true);
-      write(db);
-      return json(res,200,{ok:true});
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      db.notifications.filter(n=>n.userId===user.id).forEach(n=>n.read=true);write(db);return json(res,200,{ok:true});
     }
-
     if(u.pathname==='/api/wallet'&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-      const summary=walletSummary(db,user.id);
-      write(db);
-      return json(res,200,summary);
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const summary=walletSummary(db,user.id);write(db);return json(res,200,summary);
     }
-
     if(u.pathname==='/api/wallet/transactions'&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       return json(res,200,db.walletTransactions.filter(x=>x.userId===user.id).slice(0,100));
     }
-
     if(u.pathname==='/api/wallet/withdraw'&&req.method==='POST'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-
-      const b=await body(req);
-      const amount=Math.floor(Number(b.amount||0));
-
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const b=await body(req);const amount=Math.floor(Number(b.amount||0));
       if(amount<=0)return json(res,400,{error:'Valor de levantamento inválido.'});
-
       const wallet=ensureWallet(db,user.id);
-
       if(amount>wallet.available)return json(res,400,{error:'Saldo disponível insuficiente.'});
       if(amount<1000)return json(res,400,{error:'O levantamento mínimo é Kz 1.000.'});
-
-      wallet.available-=amount;
-      wallet.totalWithdrawn=Number(wallet.totalWithdrawn||0)+amount;
-
+      wallet.available-=amount;wallet.totalWithdrawn=Number(wallet.totalWithdrawn||0)+amount;
       const tx=addWalletTx(db,user.id,'withdrawal_request',-amount,'Pedido de levantamento criado',{amount,status:'Pendente'});
-
-      notify(
-        db,
-        user.id,
-        'wallet',
-        'Levantamento solicitado',
-        `Pedido de levantamento de Kz ${amount.toLocaleString('pt-AO')} criado.`,
-        {transactionId:tx.id,amount}
-      );
-
-      write(db);
-      return json(res,201,{ok:true,status:'Pendente',amount,transaction:tx,wallet:walletSummary(db,user.id)});
+      notify(db,user.id,'wallet','Levantamento solicitado',`Pedido de levantamento de Kz ${amount.toLocaleString('pt-AO')} criado.`,{transactionId:tx.id,amount});
+      write(db);return json(res,201,{ok:true,status:'Pendente',amount,transaction:tx,wallet:walletSummary(db,user.id)});
     }
-
     if(u.pathname==='/api/disputes'&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       return json(res,200,db.disputes.filter(d=>d.userId===user.id||d.sellerId===user.id));
     }
-
     if(u.pathname==='/api/disputes'&&req.method==='POST'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-
-      const b=await body(req);
-      const orderId=String(b.orderId||'');
-      const order=db.orders.find(o=>String(o.id)===orderId&&o.userId===user.id);
-
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const b=await body(req);const orderId=String(b.orderId||'');const order=db.orders.find(o=>String(o.id)===orderId&&o.userId===user.id);
       if(!order)return json(res,404,{error:'Pedido não encontrado.'});
-
       const reason=String(b.reason||'').trim();
       const description=String(b.description||'').trim();
       const allowed=['Produto não recebido','Produto diferente do anunciado','Problema com vendedor','Outro'];
-
       if(!allowed.includes(reason))return json(res,400,{error:'Motivo inválido.'});
       if(description.length<10)return json(res,400,{error:'Explica o problema com pelo menos 10 caracteres.'});
       if(db.disputes.some(d=>d.orderId===orderId&&d.userId===user.id&&d.status==='Aberta'))return json(res,409,{error:'Já existe uma reclamação aberta para este pedido.'});
-
       const sellerId=Array.isArray(order.items)&&order.items[0]?.sellerId||null;
-
-      const dispute={
-        id:'DSP-'+Date.now().toString().slice(-7),
-        orderId,
-        userId:user.id,
-        sellerId,
-        reason,
-        description,
-        status:'Aberta',
-        createdAt:new Date().toISOString(),
-        updatedAt:new Date().toISOString()
-      };
-
+      const dispute={id:'DSP-'+Date.now().toString().slice(-7),orderId,userId:user.id,sellerId,reason,description,status:'Aberta',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
       db.disputes.unshift(dispute);
       user.complaints=Number(user.complaints||0)+1;
-
       if(sellerId)notify(db,sellerId,'dispute','Nova reclamação',`Existe uma reclamação no pedido #${String(orderId).slice(-8)}.`,{orderId,disputeId:dispute.id});
-
-      write(db);
-      return json(res,201,dispute);
+      write(db);return json(res,201,dispute);
     }
 
-    // ==========================================================
-    // SELLER DASHBOARD
-    // ==========================================================
+    // V1.3 seller dashboard
     if(u.pathname==='/api/seller/dashboard'&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
-
       const period=['7','30','90','all'].includes(String(u.query.period||''))?String(u.query.period):'30';
       const cutoff=period==='all'?0:Date.now()-Number(period)*86400000;
       const entries=[];
-
       for(const order of db.orders){
-        const t=Date.parse(order.createdAt||0);
-        if(cutoff && (!t||t<cutoff))continue;
-
+        const t=Date.parse(order.createdAt||0); if(cutoff && (!t||t<cutoff))continue;
         const sellerItems=(Array.isArray(order.items)?order.items:[]).filter(i=>String(i.sellerId||'')===String(user.id));
         if(sellerItems.length)entries.push({order,sellerItems});
       }
-
       let gross=0,commission=0,pending=0,cancelled=0,totalProductsSold=0,totalSales=0,completedSales=0;
       const top=new Map(),history=[];
-
       for(const {order,sellerItems} of entries){
         const orderGross=sellerItems.reduce((sum,i)=>sum+Number(i.price||0)*Math.max(1,Number(i.quantity||1)),0);
         const status=String(order.status||'Pendente');
-
-        if(status==='Cancelado'){
-          cancelled++;
-          history.push({orderId:order.id,status,revenue:0,netRevenue:0,createdAt:order.createdAt});
-          continue;
-        }
-
-        gross+=orderGross;
-        commission+=orderGross*0.10;
-        totalSales++;
-        totalProductsSold+=sellerItems.reduce((sum,i)=>sum+Math.max(1,Number(i.quantity||1)),0);
-
-        const net=orderGross*0.90;
-        const isPending=['Pendente','Confirmado','Em preparação','Enviado'].includes(status);
-
-        if(isPending)pending+=net;
-        else completedSales++;
-
-        for(const i of sellerItems){
-          const qty=Math.max(1,Number(i.quantity||1));
-          const key=String(i.productId||i.productName||i.name||'produto');
-          const prev=top.get(key)||{name:i.productName||i.name||'Produto',quantity:0,revenue:0};
-          prev.quantity+=qty;
-          prev.revenue+=Number(i.price||0)*qty;
-          top.set(key,prev);
-        }
-
+        if(status==='Cancelado'){cancelled++;history.push({orderId:order.id,status,revenue:0,netRevenue:0,createdAt:order.createdAt});continue;}
+        gross+=orderGross; commission+=orderGross*0.10; totalSales++; totalProductsSold+=sellerItems.reduce((sum,i)=>sum+Math.max(1,Number(i.quantity||1)),0);
+        const net=orderGross*0.90; const isPending=['Pendente','Confirmado','Em preparação','Enviado'].includes(status);
+        if(isPending)pending+=net; else completedSales++;
+        for(const i of sellerItems){const qty=Math.max(1,Number(i.quantity||1));const key=String(i.productId||i.productName||i.name||'produto');const prev=top.get(key)||{name:i.productName||i.name||'Produto',quantity:0,revenue:0};prev.quantity+=qty;prev.revenue+=Number(i.price||0)*qty;top.set(key,prev);}
         history.push({orderId:order.id,status,revenue:orderGross,netRevenue:net,createdAt:order.createdAt});
       }
-
       history.sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0));
       const available=Math.max(0,gross-commission-pending);
-
-      return json(res,200,{
-        seller:publicUser(user,db),
-        commissionPercent:10,
-        summary:{
-          grossRevenue:gross,
-          netRevenue:gross-commission,
-          pendingRevenue:pending,
-          commission,
-          availableBalance:available,
-          cancelledSales:cancelled,
-          totalSales,
-          totalProductsSold,
-          averageTicket:completedSales?available/completedSales:0
-        },
-        topProducts:[...top.values()].sort((a,b)=>b.revenue-a.revenue).slice(0,5),
-        salesHistory:history
-      });
+      return json(res,200,{seller:publicUser(user,db),commissionPercent:10,summary:{grossRevenue:gross,netRevenue:gross-commission,pendingRevenue:pending,commission,availableBalance:available,cancelledSales:cancelled,totalSales,totalProductsSold,averageTicket:completedSales?available/completedSales:0},topProducts:[...top.values()].sort((a,b)=>b.revenue-a.revenue).slice(0,5),salesHistory:history});
     }
 
-    // ==========================================================
-    // SELLER ORDERS — ORDER STATE MACHINE
-    // ==========================================================
     if(u.pathname==='/api/seller/orders'&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
-
-      return json(
-        res,
-        200,
-        db.orders
-          .filter(o=>Array.isArray(o.items)&&o.items.some(i=>String(i.sellerId||'')===String(user.id)))
-          .map(o=>({
-            ...o,
-            items:o.items.filter(i=>String(i.sellerId||'')===String(user.id))
-          }))
-      );
+      return json(res,200,db.orders.filter(o=>Array.isArray(o.items)&&o.items.some(i=>String(i.sellerId||'')===String(user.id))).map(o=>({...o,items:o.items.filter(i=>String(i.sellerId||'')===String(user.id))})));
     }
 
     if(u.pathname.startsWith('/api/seller/orders/')&&req.method==='PATCH'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
-
-      const id=decodeURIComponent(u.pathname.split('/').pop()||'');
-      const order=db.orders.find(o=>String(o.id)===id);
-
+      const id=decodeURIComponent(u.pathname.split('/').pop()||''); const order=db.orders.find(o=>String(o.id)===id);
       if(!order)return json(res,404,{error:'Pedido não encontrado.'});
-
-      if(!Array.isArray(order.items)||!order.items.some(i=>String(i.sellerId||'')===String(user.id))){
-        return json(res,403,{error:'Este pedido não pertence às tuas vendas.'});
-      }
-
-      const b=await body(req);
-      const next=String(b.status||'');
-
-      // The seller cannot directly mark an order as Entregue.
-      // Delivery completion is controlled by buyer confirmation.
-      if(!SELLER_ORDER_TRANSITIONS[order.status]||!ORDER_STATUSES.includes(next)){
-        return json(res,400,{error:'Estado de pedido inválido.'});
-      }
-
+      if(!Array.isArray(order.items)||!order.items.some(i=>String(i.sellerId||'')===String(user.id)))return json(res,403,{error:'Este pedido não pertence às tuas vendas.'});
+      const b=await body(req); const next=String(b.status||'');
+      if(!ORDER_STATUSES.includes(next))return json(res,400,{error:'Estado inválido.'});
       const previous=String(order.status||'Pendente');
+      if(previous===next)return json(res,200,order);
+      if(!canTransition(ORDER_TRANSITIONS,previous,next))return json(res,409,{error:`Não é permitido passar o pedido de "${previous}" para "${next}".`});
+      if(next==='Entregue')return json(res,403,{error:'O pedido só pode ser concluído após a confirmação da entrega pelo comprador.'});
+      const now=new Date().toISOString();
+      order.status=next;order.updatedAt=now;
+      if(!Array.isArray(order.statusHistory))order.statusHistory=[];
+      order.statusHistory.push({status:next,at:now});
+      if(next==='Cancelado')cancelOrderFinancials(db,order);
+      const delivery=syncDeliveryWithOrder(db,order);
+      notify(db,order.userId,'order','Pedido atualizado',`O pedido #${String(order.id).slice(-8)} está agora: ${next}.`,{orderId:order.id,status:next});
+      if(delivery)notify(db,order.userId,'delivery','Entrega atualizada',`A entrega do pedido #${String(order.id).slice(-8)} está agora: ${delivery.status}.`,{orderId:order.id,deliveryId:delivery.id,status:delivery.status});
+      audit(db,req,user.id,'seller_order_status_changed',{orderId:order.id,from:previous,to:next});
+      write(db);return json(res,200,order);
+    }
 
-      if(previous===next){
-        const delivery=ensureDeliveryForOrder(db,order);
-        return json(res,200,{...order,delivery});
-      }
+    if(u.pathname==='/api/deliveries'&&req.method==='GET'){
+      const user=await auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const list=db.deliveries.filter(d=>d.buyerId===user.id||d.sellerIds?.includes(user.id)).slice(0,100);
+      return json(res,200,list.map(d=>deliveryView(db,d,user)));
+    }
 
-      if(!canTransition(SELLER_ORDER_TRANSITIONS,previous,next)){
-        return json(res,409,{error:`Transição de pedido inválida: ${previous} → ${next}.`});
-      }
+    if(u.pathname.startsWith('/api/deliveries/')&&req.method==='GET'){
+      const user=await auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const id=decodeURIComponent(u.pathname.split('/').pop()||''); const d=db.deliveries.find(x=>x.id===id);
+      if(!d)return json(res,404,{error:'Entrega não encontrada.'});
+      const order=db.orders.find(o=>String(o.id)===String(d.orderId));
+      const sellerIds=[...new Set([...(Array.isArray(d.sellerIds)?d.sellerIds:[]),...((order?.items||[]).map(i=>i.sellerId).filter(Boolean))])];
+      if(d.buyerId!==user.id&&!sellerIds.includes(user.id))return json(res,403,{error:'Sem permissão.'});
+      return json(res,200,deliveryView(db,{...d,sellerIds},user));
+    }
 
-      // A single order currently represents the checkout.
-      // Multi-seller order splitting remains a future architecture task.
+    const deliveryConfirm=u.pathname.match(/^\/api\/deliveries\/([^/]+)\/confirm$/);
+    if(deliveryConfirm&&req.method==='POST'){
+      const user=await auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const id=decodeURIComponent(deliveryConfirm[1]); const d=db.deliveries.find(x=>String(x.id)===id);
+      if(!d)return json(res,404,{error:'Entrega não encontrada.'});
+      if(String(d.buyerId)!==String(user.id))return json(res,403,{error:'Apenas o comprador pode confirmar a entrega.'});
+      if(d.status!=='Chegou à zona')return json(res,409,{error:'A entrega só pode ser confirmada quando chegar à zona de entrega.'});
+      const order=db.orders.find(o=>String(o.id)===String(d.orderId));
+      if(!order)return json(res,404,{error:'Pedido associado não encontrado.'});
+      if(order.status!=='Enviado')return json(res,409,{error:'O pedido ainda não está no estado correto para confirmação.'});
+      const b=await body(req,64*1024); const code=String(b.code||b.confirmationCode||'').trim();
+      if(!/^\d{6}$/.test(code)||code!==String(d.confirmationCode||''))return json(res,400,{error:'Código de confirmação inválido.'});
+      const now=new Date().toISOString();
+      d.status='Entregue';d.updatedAt=now;d.confirmedBy=user.id;d.confirmedAt=now;
+      if(!Array.isArray(d.statusHistory))d.statusHistory=[];
+      d.statusHistory.push({status:'Entregue',at:now,confirmedBy:user.id});
+      order.status='Entregue';order.updatedAt=now;
+      if(!Array.isArray(order.statusHistory))order.statusHistory=[];
+      order.statusHistory.push({status:'Entregue',at:now,confirmedBy:user.id});
+      settleDeliveredOrder(db,order);
       const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
-      if(sellerIds.length>1 && next!=='Cancelado'){
-        return json(res,409,{error:'Este pedido contém vários vendedores e ainda não pode avançar de estado individualmente.'});
-      }
+      for(const sid of sellerIds)notify(db,sid,'delivery','Entrega confirmada',`O comprador confirmou a entrega do pedido #${String(order.id).slice(-8)}.`,{orderId:order.id,deliveryId:d.id,status:'Entregue'});
+      audit(db,req,user.id,'delivery_confirmed',{orderId:order.id,deliveryId:d.id});
+      write(db);
+      return json(res,200,{ok:true,delivery:deliveryView(db,d,user),order});
+    }
 
-      const at=new Date().toISOString();
-      setOrderStatus(order,next,at);
-
-      if(next==='Cancelado'){
+    if(u.pathname.startsWith('/api/deliveries/')&&req.method==='PATCH'){
+      const user=await auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão.'});
+      if(user.role!=='seller')return json(res,403,{error:'Apenas vendedores podem atualizar a entrega.'});
+      const id=decodeURIComponent(u.pathname.split('/').pop()||''); const d=db.deliveries.find(x=>x.id===id);
+      if(!d)return json(res,404,{error:'Entrega não encontrada.'});
+      const order=db.orders.find(o=>String(o.id)===String(d.orderId));
+      const sellerIds=[...new Set([...(Array.isArray(d.sellerIds)?d.sellerIds:[]),...((order?.items||[]).map(i=>i.sellerId).filter(Boolean))])];
+      if(!sellerIds.includes(user.id))return json(res,403,{error:'Sem permissão.'});
+      if(!order)return json(res,404,{error:'Pedido associado não encontrado.'});
+      if(order.status==='Entregue'||order.status==='Cancelado'||d.status==='Entregue'||d.status==='Cancelada')return json(res,409,{error:'Esta entrega já terminou e não pode ser alterada.'});
+      const b=await body(req,64*1024); const next=String(b.status||'');
+      if(!DELIVERY_STATUSES.includes(next))return json(res,400,{error:'Estado de entrega inválido.'});
+      if(next==='Entregue')return json(res,403,{error:'O vendedor não pode marcar a entrega como Entregue. O comprador deve confirmar com o código.'});
+      const previous=String(d.status||'A preparar');
+      if(previous===next)return json(res,200,deliveryView(db,d,user));
+      if(!canTransition(DELIVERY_TRANSITIONS,previous,next))return json(res,409,{error:`Não é permitido passar a entrega de "${previous}" para "${next}".`});
+      if(next!=='Cancelada'&&order.status!=='Enviado')return json(res,409,{error:'Primeiro o pedido deve ser marcado como Enviado.'});
+      const now=new Date().toISOString();
+      d.status=next;d.updatedAt=now;
+      if(!Array.isArray(d.statusHistory))d.statusHistory=[];
+      d.statusHistory.push({status:next,at:now});
+      if(next==='Cancelada'){
+        if(order.status!=='Cancelado'){
+          order.status='Cancelado';order.updatedAt=now;
+          if(!Array.isArray(order.statusHistory))order.statusHistory=[];
+          order.statusHistory.push({status:'Cancelado',at:now});
+        }
         cancelOrderFinancials(db,order);
       }
-
-      const delivery=ensureDeliveryForOrder(db,order);
-      const beforeDeliveryStatus=delivery.status;
-      syncDeliveryForwardWithOrder(db,order);
-
-      if(next==='Cancelado'){
-        delivery.status='Cancelada';
-        delivery.updatedAt=at;
-        addStatusHistory(delivery,'Cancelada',at);
-      }
-
-      if(previous!==next){
-        notify(
-          db,
-          order.userId,
-          'order',
-          'Pedido atualizado',
-          `O pedido #${String(order.id).slice(-8)} está agora: ${next}.`,
-          {orderId:order.id,status:next}
-        );
-
-        if(beforeDeliveryStatus!==delivery.status){
-          notify(
-            db,
-            order.userId,
-            'delivery',
-            'Entrega atualizada',
-            `A entrega do pedido #${String(order.id).slice(-8)} está agora: ${delivery.status}.`,
-            {orderId:order.id,deliveryId:delivery.id,status:delivery.status}
-          );
-        }
-
-        audit(db,req,user.id,'order_status_changed',{
-          orderId:order.id,
-          from:previous,
-          to:next
-        });
-      }
-
-      write(db);
-      return json(res,200,{...order,delivery:publicDelivery(db,delivery,user)});
-    }
-
-    // ==========================================================
-    // DELIVERIES — READ
-    // ==========================================================
-    if(u.pathname==='/api/deliveries'&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-
-      const list=db.deliveries
-        .filter(d=>{
-          const order=db.orders.find(o=>String(o.id)===String(d.orderId));
-          const sellerIds=deliverySellerIds(db,d,order);
-          return String(d.buyerId)===String(user.id)||sellerIds.includes(String(user.id));
-        })
-        .slice(0,100)
-        .map(d=>publicDelivery(db,d,user));
-
-      return json(res,200,list);
-    }
-
-    const deliveryPath=u.pathname.match(/^\/api\/deliveries\/([^/]+)$/);
-
-    if(deliveryPath&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-
-      const id=decodeURIComponent(deliveryPath[1]||'');
-      const d=db.deliveries.find(x=>String(x.id)===id);
-
-      if(!d)return json(res,404,{error:'Entrega não encontrada.'});
-
-      const order=db.orders.find(o=>String(o.id)===String(d.orderId));
-      const sellerIds=deliverySellerIds(db,d,order);
-
-      if(String(d.buyerId)!==String(user.id)&&!sellerIds.includes(String(user.id))){
-        return json(res,403,{error:'Sem permissão.'});
-      }
-
-      // GET no longer mutates or writes the database.
-      return json(res,200,publicDelivery(db,d,user));
-    }
-
-    // ==========================================================
-    // DELIVERIES — SELLER LOGISTICS
-    // ==========================================================
-    if(deliveryPath&&req.method==='PATCH'){
-      const user=await auth(db,req);
-
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-      if(user.role!=='seller')return json(res,403,{error:'Apenas vendedores podem atualizar a entrega.'});
-
-      const id=decodeURIComponent(deliveryPath[1]||'');
-      const d=db.deliveries.find(x=>String(x.id)===id);
-
-      if(!d)return json(res,404,{error:'Entrega não encontrada.'});
-
-      const order=db.orders.find(o=>String(o.id)===String(d.orderId));
-      const sellerIds=deliverySellerIds(db,d,order);
-
-      if(!sellerIds.includes(String(user.id))){
-        return json(res,403,{error:'Sem permissão.'});
-      }
-
-      if(!order)return json(res,404,{error:'Pedido associado não encontrado.'});
-
-      const b=await body(req);
-      const next=String(b.status||'');
-
-      if(!SELLER_DELIVERY_TRANSITIONS[d.status]||!DELIVERY_STATUSES.includes(next)){
-        return json(res,400,{error:'Estado de entrega inválido.'});
-      }
-
-      const previous=String(d.status||'A preparar');
-
-      if(previous===next){
-        return json(res,200,publicDelivery(db,d,user));
-      }
-
-      // Seller is never allowed to finish the delivery.
-      if(next==='Entregue'){
-        return json(res,403,{error:'A entrega só pode ser concluída pelo comprador através da confirmação.'});
-      }
-
-      if(!canTransition(SELLER_DELIVERY_TRANSITIONS,previous,next)){
-        return json(res,409,{error:`Transição de entrega inválida: ${previous} → ${next}.`});
-      }
-
-      // A seller cannot modify a delivery belonging to a terminal order.
-      if(order.status==='Entregue'||order.status==='Cancelado'){
-        return json(res,409,{error:'Este pedido já está encerrado e a entrega não pode ser alterada.'});
-      }
-
-      const at=new Date().toISOString();
-
-      d.status=next;
-      d.updatedAt=at;
-      addStatusHistory(d,next,at);
-
-      if(next==='Cancelada'){
-        const previousOrder=String(order.status||'Pendente');
-
-        if(previousOrder!=='Entregue'&&previousOrder!=='Cancelado'){
-          setOrderStatus(order,'Cancelado',at);
-          cancelOrderFinancials(db,order);
-
-          notify(
-            db,
-            order.userId,
-            'order',
-            'Pedido cancelado',
-            `O pedido #${String(order.id).slice(-8)} foi cancelado.`,
-            {orderId:order.id,status:'Cancelado'}
-          );
-        }
-      }else if(['Recolhida','Em trânsito','Chegou à zona'].includes(next)){
-        // Logistics cannot downgrade the order.
-        // Once the parcel is in logistics, the commercial order is Enviado.
-        const currentOrder=String(order.status||'Pendente');
-
-        if(['Pendente','Confirmado','Em preparação'].includes(currentOrder)){
-          setOrderStatus(order,'Enviado',at);
-
-          notify(
-            db,
-            order.userId,
-            'order',
-            'Pedido enviado',
-            `O pedido #${String(order.id).slice(-8)} foi enviado.`,
-            {orderId:order.id,status:'Enviado'}
-          );
-        }
-      }
-
-      notify(
-        db,
-        order.userId,
-        'delivery',
-        'Estado da entrega',
-        `A entrega do pedido #${String(order.id).slice(-8)} está agora: ${next}.`,
-        {orderId:order.id,deliveryId:d.id,status:next}
-      );
-
-      audit(
-        db,
-        req,
-        user.id,
-        'delivery_status_changed',
-        {orderId:order.id,deliveryId:d.id,from:previous,to:next}
-      );
-
-      write(db);
-      return json(res,200,publicDelivery(db,d,user));
-    }
-
-    // ==========================================================
-    // DELIVERY CONFIRMATION — BUYER ONLY
-    // ==========================================================
-    const deliveryConfirmPath=u.pathname.match(/^\/api\/deliveries\/([^/]+)\/confirm$/);
-
-    if(deliveryConfirmPath&&req.method==='POST'){
-      const user=await auth(db,req);
-
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-
-      const id=decodeURIComponent(deliveryConfirmPath[1]||'');
-      const d=db.deliveries.find(x=>String(x.id)===id);
-
-      if(!d)return json(res,404,{error:'Entrega não encontrada.'});
-
-      if(String(d.buyerId)!==String(user.id)){
-        return json(res,403,{error:'Apenas o comprador pode confirmar esta entrega.'});
-      }
-
-      const order=db.orders.find(o=>String(o.id)===String(d.orderId));
-
-      if(!order)return json(res,404,{error:'Pedido associado não encontrado.'});
-
-      if(d.status==='Entregue'||order.status==='Entregue'){
-        return json(res,409,{error:'Esta entrega já foi confirmada.'});
-      }
-
-      if(d.status==='Cancelada'||order.status==='Cancelado'){
-        return json(res,409,{error:'Esta entrega está cancelada e não pode ser confirmada.'});
-      }
-
-      if(d.status!=='Chegou à zona'){
-        return json(res,409,{error:'A entrega só pode ser confirmada quando estiver no estado "Chegou à zona".'});
-      }
-
-      const b=await body(req,64*1024);
-      const provided=String(b.confirmationCode||b.code||'').trim();
-      const expected=String(d.confirmationCode||'');
-
-      if(!provided){
-        return json(res,400,{error:'Indica o código de confirmação da entrega.'});
-      }
-
-      if(!expected||provided.length!==expected.length||provided!==expected){
-        audit(db,req,user.id,'delivery_confirmation_failed',{orderId:order.id,deliveryId:d.id});
-        return json(res,403,{error:'Código de confirmação incorreto.'});
-      }
-
-      const at=new Date().toISOString();
-
-      d.status='Entregue';
-      d.updatedAt=at;
-      d.confirmedBy=user.id;
-      d.confirmedAt=at;
-      d.confirmationMethod='buyer_code';
-      addStatusHistory(d,'Entregue',at);
-
-      setOrderStatus(order,'Entregue',at);
-      const settled=settleDeliveredOrder(db,order);
-
-      notify(
-        db,
-        order.userId,
-        'delivery',
-        'Entrega confirmada',
-        `Confirmaste a entrega do pedido #${String(order.id).slice(-8)}.`,
-        {orderId:order.id,deliveryId:d.id,status:'Entregue'}
-      );
-
-      const sellerIds=deliverySellerIds(db,d,order);
-
-      for(const sellerId of sellerIds){
-        notify(
-          db,
-          sellerId,
-          'order',
-          'Pedido concluído',
-          `O comprador confirmou a entrega do pedido #${String(order.id).slice(-8)}.`,
-          {orderId:order.id,status:'Entregue'}
-        );
-      }
-
-      audit(
-        db,
-        req,
-        user.id,
-        'delivery_confirmed',
-        {orderId:order.id,deliveryId:d.id,settled}
-      );
-
-      write(db);
-
-      return json(res,200,{
-        ok:true,
-        message:'Entrega confirmada com sucesso.',
-        delivery:publicDelivery(db,d,user),
-        order,
-        financials:order.financials||null
-      });
+      notify(db,order.userId,'delivery','Estado da entrega',`A entrega do pedido #${String(order.id).slice(-8)} está agora: ${next}.`,{orderId:order.id,deliveryId:d.id,status:next});
+      audit(db,req,user.id,'delivery_status_changed',{orderId:order.id,deliveryId:d.id,from:previous,to:next});
+      write(db); return json(res,200,deliveryView(db,d,user));
     }
 
     if(u.pathname==='/api/reviews'&&req.method==='GET'){
-      const productId=String(u.query.productId||'');
-      const sellerId=String(u.query.sellerId||'');
-      let list=db.reviews.slice();
-
-      if(productId)list=list.filter(r=>r.productId===productId);
-      if(sellerId)list=list.filter(r=>r.sellerId===sellerId);
-
-      list=list
-        .map(r=>({...r,buyerName:(db.users.find(x=>x.id===r.buyerId)||{}).name||'Utilizador'}))
-        .sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
-
+      const productId=String(u.query.productId||''); const sellerId=String(u.query.sellerId||'');
+      let list=db.reviews.slice(); if(productId)list=list.filter(r=>r.productId===productId); if(sellerId)list=list.filter(r=>r.sellerId===sellerId);
+      list=list.map(r=>({...r,buyerName:(db.users.find(x=>x.id===r.buyerId)||{}).name||'Utilizador'})).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
       return json(res,200,list);
     }
-
     if(u.pathname==='/api/reviews'&&req.method==='POST'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão para avaliar.'});
-
-      const b=await body(req);
-      const productId=String(b.productId||'');
-      const product=db.products.find(x=>x.id===productId);
-
+      const user=await auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão para avaliar.'});
+      const b=await body(req); const productId=String(b.productId||''); const product=db.products.find(x=>x.id===productId);
       if(!product)return json(res,404,{error:'Produto não encontrado.'});
       if(product.sellerId===user.id)return json(res,400,{error:'Não podes avaliar o teu próprio produto.'});
-
-      const rating=Math.round(Number(b.rating||0));
-      if(rating<1||rating>5)return json(res,400,{error:'A avaliação deve ser de 1 a 5 estrelas.'});
+      const rating=Math.round(Number(b.rating||0)); if(rating<1||rating>5)return json(res,400,{error:'A avaliação deve ser de 1 a 5 estrelas.'});
       if(db.reviews.some(r=>r.productId===productId&&r.buyerId===user.id))return json(res,409,{error:'Já avalieste este produto.'});
-
       const comment=String(b.comment||'').trim().slice(0,500);
-
-      const review={
-        id:crypto.randomUUID(),
-        productId,
-        sellerId:product.sellerId,
-        buyerId:user.id,
-        rating,
-        comment,
-        createdAt:new Date().toISOString()
-      };
-
-      db.reviews.unshift(review);
-
-      const seller=db.users.find(x=>x.id===product.sellerId);
-
-      if(seller){
-        seller.score=calculateScore(db,seller);
-        notify(db,seller.id,'review','Nova avaliação',`Recebeste uma nova avaliação de ${review.rating} estrelas.`,{productId:product.id,rating:review.rating});
-      }
-
-      write(db);
+      const review={id:crypto.randomUUID(),productId,sellerId:product.sellerId,buyerId:user.id,rating,comment,createdAt:new Date().toISOString()};
+      db.reviews.unshift(review); const seller=db.users.find(x=>x.id===product.sellerId); if(seller){seller.score=calculateScore(db,seller);notify(db,seller.id,'review','Nova avaliação',`Recebeste uma nova avaliação de ${review.rating} estrelas.`,{productId:product.id,rating:review.rating});} write(db);
       return json(res,201,{...review,buyerName:user.name,sellerScore:seller?calculateScore(db,seller):null});
     }
 
-    // ==========================================================
-    // SECURITY & MODERATION
-    // ==========================================================
-    if(u.pathname==='/api/reports'&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-      return json(res,200,adminOnly(user)?db.reports.slice(0,200):db.reports.filter(r=>r.reporterId===user.id).slice(0,100));
-    }
+    // Security & moderation.
+    if(u.pathname==='/api/reports'&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});return json(res,200,adminOnly(user)?db.reports.slice(0,200):db.reports.filter(r=>r.reporterId===user.id).slice(0,100));}
+    if(u.pathname==='/api/reports'&&req.method==='POST'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const b=await body(req,256*1024);const targetType=String(b.targetType||'user');if(!['user','product','order','conversation'].includes(targetType))return json(res,400,{error:'Tipo de denúncia inválido.'});const targetId=String(b.targetId||'').trim();const reason=String(b.reason||'').trim().slice(0,120);const description=String(b.description||'').trim().slice(0,1000);if(!targetId||!reason)return json(res,400,{error:'Indica o alvo e o motivo da denúncia.'});const r={id:'REP-'+crypto.randomUUID(),reporterId:user.id,targetType,targetId,reason,description,status:'Aberta',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};db.reports.unshift(r);if(targetType==='user'){const t=db.users.find(x=>x.id===targetId);if(t)t.complaints=Number(t.complaints||0)+1;}audit(db,req,user.id,'report_created',{reportId:r.id,targetType,targetId});write(db);return json(res,201,r);}
+    const rr=u.pathname.match(/^\/api\/reports\/([^/]+)$/);if(rr&&req.method==='PATCH'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});const r=db.reports.find(x=>x.id===decodeURIComponent(rr[1]));if(!r)return json(res,404,{error:'Denúncia não encontrada.'});const b=await body(req,64*1024);const allowed=['Aberta','Em análise','Resolvida','Rejeitada'];if(!allowed.includes(String(b.status||'')))return json(res,400,{error:'Estado inválido.'});r.status=String(b.status);r.adminNote=String(b.adminNote||'').trim().slice(0,1000);r.updatedAt=new Date().toISOString();audit(db,req,user.id,'report_updated',{reportId:r.id,status:r.status});write(db);return json(res,200,r);}
+    if(u.pathname==='/api/admin/security'&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});return json(res,200,{events:db.securityEvents.slice(0,200),reports:db.reports.slice(0,200),blockedUsers:db.blockedUsers.slice(0,200)});}
+    if(u.pathname==='/api/admin/block'&&req.method==='POST'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});const b=await body(req,64*1024);const targetId=String(b.userId||'').trim();if(!targetId||targetId===user.id)return json(res,400,{error:'Utilizador inválido.'});if(!db.users.some(x=>x.id===targetId))return json(res,404,{error:'Utilizador não encontrado.'});let bl=db.blockedUsers.find(x=>x.userId===targetId);if(!bl){bl={id:'BLK-'+crypto.randomUUID(),userId:targetId,active:true,reason:String(b.reason||'').trim().slice(0,500),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};db.blockedUsers.push(bl);}else{bl.active=b.active!==false;bl.reason=String(b.reason||bl.reason||'').trim().slice(0,500);bl.updatedAt=new Date().toISOString();}audit(db,req,user.id,bl.active?'user_blocked':'user_unblocked',{userId:targetId,reason:bl.reason});write(db);return json(res,200,bl);}
 
-    if(u.pathname==='/api/reports'&&req.method==='POST'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-
-      const b=await body(req,256*1024);
-      const targetType=String(b.targetType||'user');
-
-      if(!['user','product','order','conversation'].includes(targetType))return json(res,400,{error:'Tipo de denúncia inválido.'});
-
-      const targetId=String(b.targetId||'').trim();
-      const reason=String(b.reason||'').trim().slice(0,120);
-      const description=String(b.description||'').trim().slice(0,1000);
-
-      if(!targetId||!reason)return json(res,400,{error:'Indica o alvo e o motivo da denúncia.'});
-
-      const r={
-        id:'REP-'+crypto.randomUUID(),
-        reporterId:user.id,
-        targetType,
-        targetId,
-        reason,
-        description,
-        status:'Aberta',
-        createdAt:new Date().toISOString(),
-        updatedAt:new Date().toISOString()
-      };
-
-      db.reports.unshift(r);
-
-      if(targetType==='user'){
-        const t=db.users.find(x=>x.id===targetId);
-        if(t)t.complaints=Number(t.complaints||0)+1;
-      }
-
-      audit(db,req,user.id,'report_created',{reportId:r.id,targetType,targetId});
-      write(db);
-      return json(res,201,r);
-    }
-
-    const rr=u.pathname.match(/^\/api\/reports\/([^/]+)$/);
-
-    if(rr&&req.method==='PATCH'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-      if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});
-
-      const r=db.reports.find(x=>x.id===decodeURIComponent(rr[1]));
-      if(!r)return json(res,404,{error:'Denúncia não encontrada.'});
-
-      const b=await body(req,64*1024);
-      const allowed=['Aberta','Em análise','Resolvida','Rejeitada'];
-
-      if(!allowed.includes(String(b.status||'')))return json(res,400,{error:'Estado inválido.'});
-
-      r.status=String(b.status);
-      r.adminNote=String(b.adminNote||'').trim().slice(0,1000);
-      r.updatedAt=new Date().toISOString();
-
-      audit(db,req,user.id,'report_updated',{reportId:r.id,status:r.status});
-      write(db);
-      return json(res,200,r);
-    }
-
-    if(u.pathname==='/api/admin/security'&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-      if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});
-      return json(res,200,{events:db.securityEvents.slice(0,200),reports:db.reports.slice(0,200),blockedUsers:db.blockedUsers.slice(0,200)});
-    }
-
-    if(u.pathname==='/api/admin/block'&&req.method==='POST'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-      if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});
-
-      const b=await body(req,64*1024);
-      const targetId=String(b.userId||'').trim();
-
-      if(!targetId||targetId===user.id)return json(res,400,{error:'Utilizador inválido.'});
-      if(!db.users.some(x=>x.id===targetId))return json(res,404,{error:'Utilizador não encontrado.'});
-
-      let bl=db.blockedUsers.find(x=>x.userId===targetId);
-
-      if(!bl){
-        bl={
-          id:'BLK-'+crypto.randomUUID(),
-          userId:targetId,
-          active:true,
-          reason:String(b.reason||'').trim().slice(0,500),
-          createdAt:new Date().toISOString(),
-          updatedAt:new Date().toISOString()
-        };
-        db.blockedUsers.push(bl);
-      }else{
-        bl.active=b.active!==false;
-        bl.reason=String(b.reason||bl.reason||'').trim().slice(0,500);
-        bl.updatedAt=new Date().toISOString();
-      }
-
-      audit(db,req,user.id,bl.active?'user_blocked':'user_unblocked',{userId:targetId,reason:bl.reason});
-      write(db);
-      return json(res,200,bl);
-    }
-
-    // ==========================================================
-    // CHAT
-    // ==========================================================
-    if(u.pathname==='/api/conversations'&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-
-      const list=db.conversations
-        .filter(c=>c.participants.includes(user.id))
-        .map(c=>{
-          const otherId=c.participants.find(id=>id!==user.id);
-          const other=db.users.find(x=>x.id===otherId);
-          const last=db.messages.filter(m=>m.conversationId===c.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))[0];
-          const product=c.productId?db.products.find(p=>p.id===c.productId):null;
-
-          return {
-            ...c,
-            other:publicUser(other,db),
-            otherName:other?.name||other?.full_name||'',
-            lastMessage:last||null,
-            lastMessageText:last?(last.type==='offer'?`Proposta: Kz ${Number(last.amount||0).toLocaleString('pt-AO')}`:(last.text||'')):'',
-            product:product?publicProduct(db,product):null,
-            productName:product?.name||'Conversa Kuanza Line'
-          };
-        })
-        .sort((a,b)=>new Date(b.lastMessage?.createdAt||b.createdAt)-new Date(a.lastMessage?.createdAt||a.createdAt));
-
-      return json(res,200,list);
-    }
-
-    if(u.pathname==='/api/conversations'&&req.method==='POST'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-
-      const b=await body(req);
-      const sellerId=String(b.sellerId||'');
-
-      if(!sellerId||sellerId===user.id)return json(res,400,{error:'Vendedor inválido.'});
-
-      const seller=db.users.find(x=>x.id===sellerId);
-      if(!seller)return json(res,404,{error:'Vendedor não encontrado.'});
-
-      const key=conversationKey(user.id,sellerId);
-      let c=db.conversations.find(x=>x.key===key&&String(x.productId||'')===String(b.productId||''));
-
-      if(!c){
-        c={
-          id:crypto.randomUUID(),
-          key,
-          participants:[user.id,sellerId],
-          productId:b.productId||null,
-          createdAt:new Date().toISOString()
-        };
-        db.conversations.push(c);
-        write(db);
-      }
-
-      return json(res,201,c);
-    }
-
+    // Chat: one private conversation between a buyer and seller, linked optionally to a product.
+    if(u.pathname==='/api/conversations'&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const list=db.conversations.filter(c=>c.participants.includes(user.id)).map(c=>{const otherId=c.participants.find(id=>id!==user.id);const other=db.users.find(x=>x.id===otherId);const last=db.messages.filter(m=>m.conversationId===c.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))[0];const product=c.productId?db.products.find(p=>p.id===c.productId):null;return {...c,other:publicUser(other,db),lastMessage:last||null,product:product?publicProduct(db,product):null};}).sort((a,b)=>new Date(b.lastMessage?.createdAt||b.createdAt)-new Date(a.lastMessage?.createdAt||a.createdAt));return json(res,200,list);}
+    if(u.pathname==='/api/conversations'&&req.method==='POST'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const b=await body(req);const sellerId=String(b.sellerId||'');if(!sellerId||sellerId===user.id)return json(res,400,{error:'Vendedor inválido.'});const seller=db.users.find(x=>x.id===sellerId);if(!seller)return json(res,404,{error:'Vendedor não encontrado.'});const key=conversationKey(user.id,sellerId);let c=db.conversations.find(x=>x.key===key&&String(x.productId||'')===String(b.productId||''));if(!c){c={id:crypto.randomUUID(),key,participants:[user.id,sellerId],productId:b.productId||null,createdAt:new Date().toISOString()};db.conversations.push(c);write(db);}return json(res,201,c);}
     const conv=u.pathname.match(/^\/api\/conversations\/([^/]+)$/);
-
-    if(conv&&req.method==='GET'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-
-      const c=db.conversations.find(x=>x.id===conv[1]&&x.participants.includes(user.id));
-      if(!c)return json(res,404,{error:'Conversa não encontrada.'});
-
-      const other=db.users.find(x=>x.id===c.participants.find(id=>id!==user.id));
-      const product=c.productId?db.products.find(p=>p.id===c.productId):null;
-      const messages=db.messages.filter(m=>m.conversationId===c.id).sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));
-
-      return json(res,200,{
-        conversation:{
-          ...c,
-          other:publicUser(other,db),
-          otherName:other?.name||other?.full_name||'',
-          product:product?publicProduct(db,product):null,
-          productName:product?.name||'Conversa Kuanza Line'
-        },
-        messages
-      });
-    }
-
-    if(conv&&req.method==='POST'){
-      const user=await auth(db,req);
-      if(!user)return json(res,401,{error:'Inicia sessão.'});
-
-      const c=db.conversations.find(x=>x.id===conv[1]&&x.participants.includes(user.id));
-      if(!c)return json(res,404,{error:'Conversa não encontrada.'});
-
-      const b=await body(req);
-      const text=String(b.text||'').trim();
-      const type=b.type==='offer'?'offer':'text';
-
-      if(!text&&type==='text')return json(res,400,{error:'Escreve uma mensagem.'});
-      if(type==='offer'&&(!Number(b.amount)||Number(b.amount)<=0))return json(res,400,{error:'Valor da oferta inválido.'});
-
-      const m={
-        id:crypto.randomUUID(),
-        conversationId:c.id,
-        senderId:user.id,
-        type,
-        text:text||('Oferta de '+Number(b.amount)+' Kz'),
-        amount:type==='offer'?Number(b.amount):null,
-        createdAt:new Date().toISOString()
-      };
-
-      db.messages.push(m);
-
-      const recipient=c.participants.find(id=>id!==user.id);
-
-      if(recipient){
-        notify(
-          db,
-          recipient,
-          'message',
-          'Nova mensagem',
-          type==='offer'?`Recebeste uma proposta de ${Number(b.amount).toLocaleString('pt-PT')} Kz.`:'Recebeste uma nova mensagem.',
-          {conversationId:c.id}
-        );
-      }
-
-      write(db);
-      return json(res,201,m);
-    }
+    if(conv&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const c=db.conversations.find(x=>x.id===conv[1]&&x.participants.includes(user.id));if(!c)return json(res,404,{error:'Conversa não encontrada.'});const other=db.users.find(x=>x.id===c.participants.find(id=>id!==user.id));const product=c.productId?db.products.find(p=>p.id===c.productId):null;const messages=db.messages.filter(m=>m.conversationId===c.id).sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));return json(res,200,{conversation:{...c,other:publicUser(other,db),product:product?publicProduct(db,product):null},messages});}
+    if(conv&&req.method==='POST'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const c=db.conversations.find(x=>x.id===conv[1]&&x.participants.includes(user.id));if(!c)return json(res,404,{error:'Conversa não encontrada.'});const b=await body(req);const text=String(b.text||'').trim();const type=b.type==='offer'?'offer':'text';if(!text&&type==='text')return json(res,400,{error:'Escreve uma mensagem.'});if(type==='offer'&&(!Number(b.amount)||Number(b.amount)<=0))return json(res,400,{error:'Valor da oferta inválido.'});const m={id:crypto.randomUUID(),conversationId:c.id,senderId:user.id,type,text:text||('Oferta de '+Number(b.amount)+' Kz'),amount:type==='offer'?Number(b.amount):null,createdAt:new Date().toISOString()};db.messages.push(m);const recipient=c.participants.find(id=>id!==user.id);if(recipient)notify(db,recipient,'message','Nova mensagem',type==='offer'?`Recebeste uma proposta de ${Number(b.amount).toLocaleString('pt-PT')} Kz.`:'Recebeste uma nova mensagem.',{conversationId:c.id});write(db);return json(res,201,m);}
 
     const file=path.join(PUBLIC,u.pathname==='/'?'index.html':u.pathname.replace(/^\//,''));
-
-    if(!file.startsWith(PUBLIC)||!fs.existsSync(file)||fs.statSync(file).isDirectory()){
-      return json(res,404,{error:'Not found'});
-    }
-
-    const ext=path.extname(file);
-    const types={
-      '.html':'text/html; charset=utf-8',
-      '.js':'text/javascript; charset=utf-8',
-      '.css':'text/css; charset=utf-8',
-      '.json':'application/json'
-    };
-
-    res.writeHead(200,{
-      'Content-Type':types[ext]||'application/octet-stream',
-      'Cache-Control':'no-cache',
-      'X-Content-Type-Options':'nosniff',
-      'X-Frame-Options':'DENY',
-      'Referrer-Policy':'strict-origin-when-cross-origin'
-    });
-
-    fs.createReadStream(file).pipe(res);
-
-  }catch(e){
-    console.error(e);
-    if(!res.headersSent)json(res,500,{error:e.message||'Erro interno'});
-  }
+    if(!file.startsWith(PUBLIC)||!fs.existsSync(file)||fs.statSync(file).isDirectory())return json(res,404,{error:'Not found'});
+    const ext=path.extname(file),types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json'};res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'strict-origin-when-cross-origin'});fs.createReadStream(file).pipe(res);
+  }catch(e){console.error(e);if(!res.headersSent)json(res,500,{error:e.message||'Erro interno'});}
 });
 
-const PORT=Number(process.env.PORT||3000);
-
-server.listen(PORT,'0.0.0.0',()=>{
-  console.log(`Kuanza Line API running on port ${PORT} | Supabase Auth enabled: ${!!(supabaseAuth&&supabaseAdmin)}`);
-});
-
-function shutdown(signal){
-  console.log(`Received ${signal}; shutting down Kuanza Line API.`);
-  server.close(()=>process.exit(0));
-  setTimeout(()=>process.exit(1),10000).unref();
-}
-
-process.on('SIGTERM',()=>shutdown('SIGTERM'));
-process.on('SIGINT',()=>shutdown('SIGINT'));
+const PORT=Number(process.env.PORT||3000);server.listen(PORT,'0.0.0.0',()=>console.log(`Kuanza Line API running on port ${PORT} | Supabase Auth enabled: ${!!(supabaseAuth&&supabaseAdmin)}`));
+function shutdown(signal){console.log(`Received ${signal}; shutting down Kuanza Line API.`);server.close(()=>process.exit(0));setTimeout(()=>process.exit(1),10000).unref();}
+process.on('SIGTERM',()=>shutdown('SIGTERM'));process.on('SIGINT',()=>shutdown('SIGINT'));
