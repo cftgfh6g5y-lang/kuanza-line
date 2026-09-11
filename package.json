@@ -1,6 +1,6 @@
 {
   "name": "kuanza-line",
-  "version": "1.9.4",
+  "version": "1.9.3",
   "private": true,
   "scripts": {
     "start": "node server.js"
