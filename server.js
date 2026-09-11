@@ -296,8 +296,8 @@ const server=http.createServer(async(req,res)=>{
     if(!rateLimit(req, u.pathname.startsWith('/api/login')?'login':u.pathname.startsWith('/api/register')?'register':'api', u.pathname.startsWith('/api/login')?12:u.pathname.startsWith('/api/register')?8:120, 60000)) return json(res,429,{error:'Muitas solicitações. Tenta novamente em instantes.'});
     const currentUser=await auth(db,req);
     if(currentUser && isBlocked(db,currentUser.id)) return json(res,403,{error:'A tua conta está temporariamente bloqueada.'});
-    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.9.3',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
-    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'1.9.3',supabase:!!(supabaseAuth&&supabaseAdmin)});
+    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.9.4-A1',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
+    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'1.9.4-A1',supabase:!!(supabaseAuth&&supabaseAdmin)});
 
     if(u.pathname==='/api/products'&&req.method==='GET'){
       let list=db.products.map(p=>publicProduct(db,p));
@@ -551,10 +551,17 @@ const server=http.createServer(async(req,res)=>{
       const now=new Date().toISOString(); const orderId=crypto.randomUUID();
       const orderRow={id:orderId,buyer_id:user.id,status:'Pendente',subtotal,delivery_fee:deliveryFee,total:grandTotal,delivery_method:deliveryMethod,recipient_name:recipient,recipient_phone:phone,delivery_address:deliveryAddress,payment_method:paymentMethod,payment_status:'Pendente',payment_reference:null,status_history:[{status:'Pendente',at:now}],created_at:now,updated_at:now};
       const {data:createdOrder,error:createError}=await supabaseAdmin.from('orders').insert(orderRow).select('*').single();
-      if(createError)return json(res,400,{error:createError.message||'Não foi possível criar o pedido.'});
+      if(createError){
+        console.error('SUPABASE ORDERS INSERT ERROR:',{message:createError.message,code:createError.code,details:createError.details,hint:createError.hint});
+        return json(res,500,{error:createError.message||'Não foi possível criar o pedido.',code:createError.code||null,stage:'orders_insert'});
+      }
       const orderItems=items.map(i=>({order_id:createdOrder.id,product_id:(typeof i.productId==='string'&&/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(i.productId))?i.productId:null,seller_id:(typeof i.sellerId==='string'&&/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(i.sellerId))?i.sellerId:null,product_name:i.productName,unit_price:i.unitPrice,quantity:i.quantity,total:i.total}));
       const {data:createdItems,error:itemError}=await supabaseAdmin.from('order_items').insert(orderItems).select('*');
-      if(itemError){ await supabaseAdmin.from('orders').delete().eq('id',createdOrder.id); return json(res,400,{error:itemError.message||'Não foi possível guardar os itens do pedido.'}); }
+      if(itemError){
+        console.error('SUPABASE ORDER_ITEMS INSERT ERROR:',{message:itemError.message,code:itemError.code,details:itemError.details,hint:itemError.hint});
+        await supabaseAdmin.from('orders').delete().eq('id',createdOrder.id);
+        return json(res,500,{error:itemError.message||'Não foi possível guardar os itens do pedido.',code:itemError.code||null,stage:'order_items_insert'});
+      }
       const clientOrder=orderToClient({...createdOrder,__items:createdItems||[]});
       mirrorOrder(db,clientOrder);
       ensureDeliveryForOrder(db,clientOrder);
@@ -741,6 +748,6 @@ const server=http.createServer(async(req,res)=>{
   }catch(e){console.error(e);if(!res.headersSent)json(res,500,{error:e.message||'Erro interno'});}
 });
 
-const PORT=Number(process.env.PORT||3000);server.listen(PORT,'0.0.0.0',()=>console.log(`Kuanza Line API running on port ${PORT} | Supabase Auth enabled: ${!!(supabaseAuth&&supabaseAdmin)}`));
+const PORT=Number(process.env.PORT||3000);server.listen(PORT,'0.0.0.0',()=>console.log(`Kuanza Line API V1.9.4-A1 running on port ${PORT} | Supabase enabled: ${!!(supabaseAuth&&supabaseAdmin)}`));
 function shutdown(signal){console.log(`Received ${signal}; shutting down Kuanza Line API.`);server.close(()=>process.exit(0));setTimeout(()=>process.exit(1),10000).unref();}
 process.on('SIGTERM',()=>shutdown('SIGTERM'));process.on('SIGINT',()=>shutdown('SIGINT'));
