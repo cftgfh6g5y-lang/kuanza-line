@@ -1,14 +1,14 @@
 {
   "name": "kuanza-line",
-  "version": "1.9.1",
+  "version": "1.9.4",
   "private": true,
   "scripts": {
     "start": "node server.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.0"
+    "@supabase/supabase-js": "^2.111.0"
   }
 }
