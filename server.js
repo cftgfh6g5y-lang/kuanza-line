@@ -121,7 +121,36 @@ function calculateScore(db,u){
 function scoreLabel(score){if(score>=90)return'Excelente';if(score>=75)return'Bom';if(score>=50)return'Regular';if(score>=25)return'Baixo';return'Crítico';}
 function publicUser(u,db){if(!u)return null;const completedOrders=db.orders.filter(o=>o.status==='Concluído'&&((o.userId===u.id)|| (Array.isArray(o.items)&&o.items.some(i=>i.sellerId===u.id||i.seller===u.name)))).length;const receivedReviews=db.reviews.filter(r=>r.sellerId===u.id).length;const cancelledOrders=db.orders.filter(o=>o.userId===u.id&&o.status==='Cancelado').length;const score=calculateScore(db,u);return{id:u.id,name:u.name,email:u.email,role:u.role,score,scoreLabel:scoreLabel(score),avatar:u.avatar||'',verified:!!u.verified,completedOrders,receivedReviews,cancelledOrders};}
 function getStore(db,ownerId){return db.stores.find(x=>x.ownerId===ownerId)||null;}
-function publicProduct(db,p){const seller=db.users.find(u=>u.id===p.sellerId);const store=getStore(db,p.sellerId);return {...p,seller:seller?seller.name:(p.seller||'Vendedor'),verified:seller?!!seller.verified:!!p.verified,rating:Number(p.rating||5),score:seller?calculateScore(db,seller):Number(p.score||100),storeName:store?.name||p.seller||'Loja',storeLogo:store?.logo||'',photos:Array.isArray(p.photos)?p.photos:[]};}
+function publicProduct(db,p){
+  const seller=db.users.find(u=>String(u.id)===String(p.sellerId));
+  const store=getStore(db,p.sellerId);
+  return {
+    ...p,
+    seller:seller?seller.name:(p.seller||'Vendedor'),
+    verified:seller?!!seller.verified:!!p.verified,
+    rating:Number(p.rating||5),
+    score:seller?calculateScore(db,seller):Number(p.score||100),
+    storeName:store?.name||p.seller||'Loja',
+    storeLogo:store?.logo||store?.logoUrl||'',
+    photos:Array.isArray(p.photos)?p.photos:[]
+  };
+}
+function slugify(value){
+  return String(value||'')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g,'-')
+    .replace(/^-+|-+$/g,'')
+    .slice(0,70) || 'item';
+}
+function productSlug(name){
+  return `${slugify(name)}-${crypto.randomUUID().slice(0,8)}`;
+}
+function storeSlug(name,ownerId){
+  return `${slugify(name)}-${String(ownerId||'').replace(/[^a-zA-Z0-9]/g,'').slice(0,8) || crypto.randomUUID().slice(0,8)}`;
+}
 async function supabaseSellerMaps(sellerIds){
   const ids=[...new Set((sellerIds||[]).filter(Boolean).map(String))];
   const profilesById=new Map();
@@ -129,7 +158,7 @@ async function supabaseSellerMaps(sellerIds){
   if(!supabaseAdmin||!ids.length)return {profilesById,storesByOwner};
   const [{data:profiles,error:profilesError},{data:stores,error:storesError}]=await Promise.all([
     supabaseAdmin.from('profiles').select('id,full_name,verified,score,avatar_url,phone,role').in('id',ids),
-    supabaseAdmin.from('stores').select('id,owner_id,name,logo,description,rating,created_at,updated_at').in('owner_id',ids)
+    supabaseAdmin.from('stores').select('id,owner_id,name,slug,description,logo_url,location,phone,verified,created_at,updated_at').in('owner_id',ids)
   ]);
   if(profilesError)throw new Error('Não foi possível carregar os vendedores no Supabase: '+profilesError.message);
   if(storesError)throw new Error('Não foi possível carregar as lojas no Supabase: '+storesError.message);
@@ -137,23 +166,126 @@ async function supabaseSellerMaps(sellerIds){
   for(const row of stores||[])storesByOwner.set(String(row.owner_id),row);
   return {profilesById,storesByOwner};
 }
-function supabaseProductToPublic(row,profile,store){
-  const sellerName=String(profile?.full_name||'Vendedor');
-  return {id:String(row.id),name:String(row.name||''),price:Number(row.price||0),cat:String(row.category||''),category:String(row.category||''),emoji:String(row.emoji||'📦'),seller:sellerName,sellerId:String(row.seller_id),verified:!!profile?.verified,rating:Number(row.rating||5),score:Number(profile?.score||50),description:String(row.description||''),condition:String(row.condition||'Usado'),location:String(row.location||''),photos:Array.isArray(row.photos)?row.photos:[],storeName:String(store?.name||sellerName+' Store'),storeLogo:String(store?.logo||''),createdAt:row.created_at||null,updatedAt:row.updated_at||null};
+async function supabaseCategory(categoryValue){
+  if(!supabaseAdmin)return null;
+  const value=String(categoryValue||'').trim();
+  if(!value)return null;
+  if(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)){
+    const byId=await supabaseAdmin.from('categories').select('id,name,slug,active').eq('id',value).eq('active',true).maybeSingle();
+    if(byId.error)throw new Error('Não foi possível consultar a categoria: '+byId.error.message);
+    if(byId.data)return byId.data;
+  }
+  const slug=slugify(value);
+  const bySlug=await supabaseAdmin.from('categories').select('id,name,slug,active').eq('slug',slug).eq('active',true).maybeSingle();
+  if(bySlug.error)throw new Error('Não foi possível consultar a categoria: '+bySlug.error.message);
+  if(bySlug.data)return bySlug.data;
+  const byName=await supabaseAdmin.from('categories').select('id,name,slug,active').ilike('name',value).eq('active',true).maybeSingle();
+  if(byName.error)throw new Error('Não foi possível consultar a categoria: '+byName.error.message);
+  return byName.data||null;
 }
-function supabaseStoreToPublic(row){
+async function supabaseCategoryMap(categoryIds){
+  const ids=[...new Set((categoryIds||[]).filter(Boolean).map(String))];
+  const map=new Map();
+  if(!supabaseAdmin||!ids.length)return map;
+  const {data,error}=await supabaseAdmin.from('categories').select('id,name,slug,active').in('id',ids);
+  if(error)throw new Error('Não foi possível carregar as categorias: '+error.message);
+  for(const row of data||[])map.set(String(row.id),row);
+  return map;
+}
+function supabaseProductToPublic(row,profile,store,legacy,category){
+  const sellerName=String(profile?.full_name||legacy?.seller||'Vendedor');
+  const categoryName=String(category?.name||legacy?.cat||legacy?.category||'');
+  return {
+    id:String(row.id),
+    name:String(row.name||''),
+    price:Number(row.price||0),
+    stock:Number(row.stock||0),
+    status:String(row.status||'active'),
+    views:Number(row.views||0),
+    cat:categoryName,
+    category:categoryName,
+    categoryId:row.category_id?String(row.category_id):'',
+    emoji:String(legacy?.emoji||'📦'),
+    seller:sellerName,
+    sellerId:String(row.seller_id),
+    verified:!!profile?.verified,
+    rating:Number(legacy?.rating||5),
+    score:Number(profile?.score||legacy?.score||50),
+    description:String(row.description||''),
+    condition:String(legacy?.condition||'Usado'),
+    location:String(legacy?.location||''),
+    photos:Array.isArray(legacy?.photos)?legacy.photos:[],
+    storeName:String(store?.name||sellerName+' Store'),
+    storeLogo:String(store?.logo_url||legacy?.storeLogo||''),
+    createdAt:row.created_at||null,
+    updatedAt:row.updated_at||null
+  };
+}
+function supabaseStoreToPublic(row,legacy){
   if(!row)return null;
-  return {id:String(row.id),ownerId:String(row.owner_id),name:String(row.name||''),logo:String(row.logo||''),description:String(row.description||''),rating:Number(row.rating||5),createdAt:row.created_at||null,updatedAt:row.updated_at||null};
+  return {
+    id:String(row.id),
+    ownerId:String(row.owner_id),
+    name:String(row.name||''),
+    slug:String(row.slug||''),
+    logo:String(row.logo_url||legacy?.logo||''),
+    logoUrl:String(row.logo_url||legacy?.logoUrl||legacy?.logo||''),
+    description:String(row.description||''),
+    location:String(row.location||''),
+    phone:String(row.phone||''),
+    verified:!!row.verified,
+    rating:Number(legacy?.rating||5),
+    createdAt:row.created_at||null,
+    updatedAt:row.updated_at||null
+  };
 }
 function mirrorProductToLegacy(db,p){
   if(!p)return;
-  const item={id:String(p.id),name:p.name,price:Number(p.price||0),cat:p.cat||p.category||'',emoji:p.emoji||'📦',seller:p.seller||'Vendedor',sellerId:String(p.sellerId),verified:!!p.verified,rating:Number(p.rating||5),score:Number(p.score||50),description:p.description||'',condition:p.condition||'Usado',location:p.location||'',photos:Array.isArray(p.photos)?p.photos:[],createdAt:p.createdAt||new Date().toISOString(),updatedAt:p.updatedAt||new Date().toISOString(),supabaseManaged:true};
+  const item={
+    id:String(p.id),
+    name:p.name,
+    price:Number(p.price||0),
+    cat:p.cat||p.category||'',
+    category:p.category||p.cat||'',
+    categoryId:p.categoryId||'',
+    emoji:p.emoji||'📦',
+    seller:p.seller||'Vendedor',
+    sellerId:String(p.sellerId),
+    verified:!!p.verified,
+    rating:Number(p.rating||5),
+    score:Number(p.score||50),
+    description:p.description||'',
+    condition:p.condition||'Usado',
+    location:p.location||'',
+    photos:Array.isArray(p.photos)?p.photos:[],
+    stock:Number(p.stock||0),
+    status:p.status||'active',
+    views:Number(p.views||0),
+    createdAt:p.createdAt||new Date().toISOString(),
+    updatedAt:p.updatedAt||new Date().toISOString(),
+    supabaseManaged:true
+  };
   const i=db.products.findIndex(x=>String(x.id)===String(item.id));
   if(i>=0)db.products[i]={...db.products[i],...item};else db.products.push(item);
 }
 function mirrorStoreToLegacy(db,st){
   if(!st)return;
-  const item={id:String(st.id),ownerId:String(st.ownerId),name:st.name,logo:st.logo||'',description:st.description||'',rating:Number(st.rating||5),createdAt:st.createdAt||new Date().toISOString(),updatedAt:st.updatedAt||new Date().toISOString(),supabaseManaged:true};
+  const item={
+    id:String(st.id),
+    ownerId:String(st.ownerId),
+    name:st.name,
+    slug:st.slug||'',
+    logo:st.logo||st.logoUrl||'',
+    logoUrl:st.logoUrl||st.logo||'',
+    description:st.description||'',
+    location:st.location||'',
+    phone:st.phone||'',
+    verified:!!st.verified,
+    rating:Number(st.rating||5),
+    createdAt:st.createdAt||new Date().toISOString(),
+    updatedAt:st.updatedAt||new Date().toISOString(),
+    supabaseManaged:true
+  };
   const i=db.stores.findIndex(x=>String(x.id)===String(item.id));
   if(i>=0)db.stores[i]={...db.stores[i],...item};else db.stores.push(item);
 }
@@ -403,87 +535,208 @@ const server=http.createServer(async(req,res)=>{
 
     // ============================================================
     // SUPABASE MIGRATION — STORES + PRODUCTS
-    // Supabase is the source of truth for these domains.
-    // db.json remains only as a compatibility mirror for modules
-    // that will be migrated in later phases.
+    // Supabase is the source of truth for core store/product fields.
+    // db.json remains a compatibility mirror for legacy fields/modules.
     // ============================================================
     if(u.pathname==='/api/stores'&&req.method==='GET'){
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
       const ownerId=String(u.query.ownerId||'').trim();
       if(!ownerId)return json(res,400,{error:'Vendedor inválido.'});
-      const {data:st,error:storeError}=await supabaseAdmin.from('stores').select('id,owner_id,name,logo,description,rating,created_at,updated_at').eq('owner_id',ownerId).maybeSingle();
+      const [{data:st,error:storeError},{data:products,error:productsError}]=await Promise.all([
+        supabaseAdmin.from('stores').select('id,owner_id,name,slug,description,logo_url,location,phone,verified,created_at,updated_at').eq('owner_id',ownerId).maybeSingle(),
+        supabaseAdmin.from('products').select('id,seller_id,store_id,category_id,name,slug,description,price,stock,status,views,created_at,updated_at').eq('seller_id',ownerId).order('created_at',{ascending:false})
+      ]);
       if(storeError)return json(res,500,{error:'Não foi possível carregar a loja.',details:storeError.message});
-      const {data:products,error:productsError}=await supabaseAdmin.from('products').select('id,seller_id,name,price,category,emoji,description,condition,location,photos,rating,created_at,updated_at').eq('seller_id',ownerId).order('created_at',{ascending:false});
       if(productsError)return json(res,500,{error:'Não foi possível carregar os produtos da loja.',details:productsError.message});
       const {profilesById,storesByOwner}=await supabaseSellerMaps([ownerId]);
       const ownerProfile=profilesById.get(ownerId)||null;
-      const store=supabaseStoreToPublic(st);
-      const publicProducts=(products||[]).map(p=>supabaseProductToPublic(p,ownerProfile,storesByOwner.get(ownerId)||st));
+      const legacyStore=db.stores.find(x=>String(x.ownerId)===ownerId)||null;
+      const store=supabaseStoreToPublic(st,legacyStore);
+      const categoryMap=await supabaseCategoryMap((products||[]).map(p=>p.category_id));
+      const publicProducts=(products||[]).map(p=>{
+        const legacy=db.products.find(x=>String(x.id)===String(p.id));
+        return supabaseProductToPublic(p,ownerProfile,storesByOwner.get(ownerId)||st,legacy,categoryMap.get(String(p.category_id)));
+      });
       for(const p of publicProducts)mirrorProductToLegacy(db,p);
       if(store)mirrorStoreToLegacy(db,store);
       write(db);
       const owner=ownerProfile?publicUser({...ownerProfile,id:ownerId,name:ownerProfile.full_name||'Vendedor',avatar:ownerProfile.avatar_url||'',verified:!!ownerProfile.verified,score:Number(ownerProfile.score||50),role:ownerProfile.role||'seller'},db):null;
       return json(res,200,{store,stores:store?[store]:[],owner,products:publicProducts});
     }
+
     if(u.pathname==='/api/stores'&&(req.method==='POST'||req.method==='PATCH')){
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
       const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
       const b=await body(req,6*1024*1024);
-      const {data:existing,error:findError}=await supabaseAdmin.from('stores').select('id,owner_id,name,logo,description,rating,created_at,updated_at').eq('owner_id',user.id).maybeSingle();
+      const {data:existing,error:findError}=await supabaseAdmin.from('stores').select('id,owner_id,name,slug,description,logo_url,location,phone,verified,created_at,updated_at').eq('owner_id',user.id).maybeSingle();
       if(findError)return json(res,500,{error:'Não foi possível consultar a loja.',details:findError.message});
       const now=new Date().toISOString();
-      const payload={owner_id:user.id,name:b.name!==undefined?String(b.name).trim():String(existing?.name||user.name+' Store').trim(),logo:b.logo!==undefined?String(b.logo||''):String(existing?.logo||''),description:b.description!==undefined?String(b.description).trim():String(existing?.description||'')};
+      const payload={
+        owner_id:user.id,
+        name:b.name!==undefined?String(b.name).trim():String(existing?.name||user.name+' Store').trim(),
+        slug:b.slug!==undefined?slugify(b.slug):String(existing?.slug||storeSlug(b.name||existing?.name||user.name+' Store',user.id)),
+        description:b.description!==undefined?String(b.description).trim():String(existing?.description||''),
+        logo_url:b.logo!==undefined?String(b.logo||''):String(existing?.logo_url||''),
+        location:b.location!==undefined?String(b.location||'').trim():String(existing?.location||''),
+        phone:b.phone!==undefined?String(b.phone||'').trim():String(existing?.phone||''),
+        verified:existing?.verified===true
+      };
       if(payload.name.length<2)return json(res,400,{error:'O nome da loja deve ter pelo menos 2 caracteres.'});
       if(payload.name.length>100)return json(res,400,{error:'O nome da loja é demasiado longo.'});
       if(payload.description.length>500)return json(res,400,{error:'A descrição deve ter no máximo 500 caracteres.'});
-      if(payload.logo&&!payload.logo.startsWith('data:image/'))return json(res,400,{error:'O logotipo deve ser uma imagem válida.'});
-      if(payload.logo.length>5500000)return json(res,400,{error:'A imagem da loja é demasiado grande.'});
+      if(payload.location.length>200)return json(res,400,{error:'A localização deve ter no máximo 200 caracteres.'});
+      if(payload.phone.length>40)return json(res,400,{error:'O telefone deve ter no máximo 40 caracteres.'});
+      if(payload.logo_url&&!payload.logo_url.startsWith('data:image/'))return json(res,400,{error:'O logotipo deve ser uma imagem válida.'});
+      if(payload.logo_url.length>5500000)return json(res,400,{error:'A imagem da loja é demasiado grande.'});
       let result;
-      if(existing)result=await supabaseAdmin.from('stores').update({name:payload.name,logo:payload.logo,description:payload.description,updated_at:now}).eq('id',existing.id).eq('owner_id',user.id).select('id,owner_id,name,logo,description,rating,created_at,updated_at').single();
-      else result=await supabaseAdmin.from('stores').insert({id:crypto.randomUUID(),...payload,rating:5,created_at:now,updated_at:now}).select('id,owner_id,name,logo,description,rating,created_at,updated_at').single();
+      if(existing){
+        result=await supabaseAdmin.from('stores').update({...payload,updated_at:now}).eq('id',existing.id).eq('owner_id',user.id).select('id,owner_id,name,slug,description,logo_url,location,phone,verified,created_at,updated_at').single();
+      }else{
+        result=await supabaseAdmin.from('stores').insert({...payload,id:crypto.randomUUID(),created_at:now,updated_at:now}).select('id,owner_id,name,slug,description,logo_url,location,phone,verified,created_at,updated_at').single();
+      }
       if(result.error)return json(res,500,{error:'Não foi possível guardar a loja no Supabase.',details:result.error.message});
-      const store=supabaseStoreToPublic(result.data);mirrorStoreToLegacy(db,store);write(db);return json(res,200,{...store,store,ok:true});
+      const store=supabaseStoreToPublic(result.data,db.stores.find(x=>String(x.id)===String(result.data.id)));
+      mirrorStoreToLegacy(db,store);write(db);
+      return json(res,200,{...store,store,ok:true});
     }
+
     if(u.pathname==='/api/products'&&req.method==='GET'){
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
-      const q=String(u.query.search||'').trim().toLowerCase();const cat=String(u.query.cat||'Todos').trim();const sort=String(u.query.sort||'').trim();
-      let query=supabaseAdmin.from('products').select('id,seller_id,name,price,category,emoji,description,condition,location,photos,rating,created_at,updated_at');
-      if(cat&&cat!=='Todos')query=query.eq('category',cat);
-      if(sort==='low')query=query.order('price',{ascending:true});else if(sort==='high')query=query.order('price',{ascending:false});else query=query.order('created_at',{ascending:false});
-      const {data:rows,error}=await query;if(error)return json(res,500,{error:'Não foi possível carregar os produtos do Supabase.',details:error.message});
-      let list=rows||[];if(q)list=list.filter(p=>(String(p.name||'')+' '+String(p.description||'')+' '+String(p.category||'')).toLowerCase().includes(q));
+      const q=String(u.query.search||'').trim().toLowerCase();
+      const cat=String(u.query.cat||'Todos').trim();
+      const sort=String(u.query.sort||'').trim();
+      let query=supabaseAdmin.from('products').select('id,seller_id,store_id,category_id,name,slug,description,price,stock,status,views,created_at,updated_at');
+      if(cat&&cat!=='Todos'){
+        const category=await supabaseCategory(cat);
+        if(!category)return json(res,200,[]);
+        query=query.eq('category_id',category.id);
+      }
+      if(sort==='low')query=query.order('price',{ascending:true});
+      else if(sort==='high')query=query.order('price',{ascending:false});
+      else query=query.order('created_at',{ascending:false});
+      const {data:rows,error}=await query;
+      if(error)return json(res,500,{error:'Não foi possível carregar os produtos do Supabase.',details:error.message});
+      let list=rows||[];
+      if(q)list=list.filter(p=>{
+        const legacy=db.products.find(x=>String(x.id)===String(p.id));
+        return (String(p.name||'')+' '+String(p.description||'')+' '+String(legacy?.cat||legacy?.category||'')).toLowerCase().includes(q);
+      });
       const {profilesById,storesByOwner}=await supabaseSellerMaps(list.map(p=>p.seller_id));
-      const out=list.map(p=>supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id))));
-      for(const p of out)mirrorProductToLegacy(db,p);write(db);return json(res,200,out);
+      const categoryMap=await supabaseCategoryMap(list.map(p=>p.category_id));
+      const out=list.map(p=>{
+        const legacy=db.products.find(x=>String(x.id)===String(p.id));
+        return supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)),legacy,categoryMap.get(String(p.category_id)));
+      });
+      for(const p of out)mirrorProductToLegacy(db,p);
+      write(db);
+      return json(res,200,out);
     }
+
     const pm=u.pathname.match(/^\/api\/products\/([^/]+)$/);
+
     if(pm&&req.method==='GET'){
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
-      const id=decodeURIComponent(pm[1]);const {data:p,error}=await supabaseAdmin.from('products').select('id,seller_id,name,price,category,emoji,description,condition,location,photos,rating,created_at,updated_at').eq('id',id).maybeSingle();
-      if(error)return json(res,500,{error:'Não foi possível carregar o produto.',details:error.message});if(!p)return json(res,404,{error:'Produto não encontrado.'});
-      const {profilesById,storesByOwner}=await supabaseSellerMaps([p.seller_id]);const out=supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)));mirrorProductToLegacy(db,out);write(db);return json(res,200,out);
+      const id=decodeURIComponent(pm[1]);
+      const {data:p,error}=await supabaseAdmin.from('products').select('id,seller_id,store_id,category_id,name,slug,description,price,stock,status,views,created_at,updated_at').eq('id',id).maybeSingle();
+      if(error)return json(res,500,{error:'Não foi possível carregar o produto.',details:error.message});
+      if(!p)return json(res,404,{error:'Produto não encontrado.'});
+      const {profilesById,storesByOwner}=await supabaseSellerMaps([p.seller_id]);
+      const categoryMap=await supabaseCategoryMap([p.category_id]);
+      const legacy=db.products.find(x=>String(x.id)===String(p.id));
+      const out=supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)),legacy,categoryMap.get(String(p.category_id)));
+      mirrorProductToLegacy(db,out);write(db);
+      return json(res,200,out);
     }
+
     if(u.pathname==='/api/products'&&req.method==='POST'){
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão para publicar.'});if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor antes de publicar.'});
-      const b=await body(req,10*1024*1024);const name=String(b.name||'').trim();const category=String(b.cat||b.category||'').trim();const price=Number(b.price||0);const description=String(b.description||'').trim();const photos=Array.isArray(b.photos)?b.photos.slice(0,10):[];
-      if(!name||price<=0||!category)return json(res,400,{error:'Preenche nome, preço e categoria.'});if(!validPhotos(photos))return json(res,400,{error:'O produto precisa de pelo menos 5 fotos reais. Podes adicionar até 10.'});if(description.length<15)return json(res,400,{error:'A descrição é obrigatória e deve ter pelo menos 15 caracteres.'});
-      const now=new Date().toISOString();const payload={id:crypto.randomUUID(),seller_id:user.id,name,price,category,emoji:String(b.emoji||'📦'),description,condition:String(b.condition||'Usado'),location:String(b.location||''),photos,rating:5,created_at:now,updated_at:now};
-      const {data:p,error}=await supabaseAdmin.from('products').insert(payload).select('id,seller_id,name,price,category,emoji,description,condition,location,photos,rating,created_at,updated_at').single();
+      const user=await auth(db,req);
+      if(!user)return json(res,401,{error:'Inicia sessão para publicar.'});
+      if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor antes de publicar.'});
+      const b=await body(req,10*1024*1024);
+      const name=String(b.name||'').trim();
+      const categoryValue=String(b.categoryId||b.cat||b.category||'').trim();
+      const price=Number(b.price||0);
+      const stock=Math.max(0,Number.isFinite(Number(b.stock))?Math.floor(Number(b.stock)):0);
+      const description=String(b.description||'').trim();
+      const photos=Array.isArray(b.photos)?b.photos.slice(0,10):[];
+      const condition=String(b.condition||'Usado').trim();
+      const location=String(b.location||'').trim();
+      if(!name||price<=0||!categoryValue)return json(res,400,{error:'Preenche nome, preço e categoria.'});
+      if(!validPhotos(photos))return json(res,400,{error:'O produto precisa de pelo menos 5 fotos reais. Podes adicionar até 10.'});
+      if(description.length<15)return json(res,400,{error:'A descrição é obrigatória e deve ter pelo menos 15 caracteres.'});
+      if(description.length>5000)return json(res,400,{error:'A descrição é demasiado longa.'});
+      if(condition.length<2||condition.length>50)return json(res,400,{error:'A condição do produto é inválida.'});
+      if(location.length>200)return json(res,400,{error:'A localização deve ter no máximo 200 caracteres.'});
+      const category=await supabaseCategory(categoryValue);
+      if(!category)return json(res,400,{error:'Categoria não encontrada ou inativa.'});
+      const {data:store,error:storeError}=await supabaseAdmin.from('stores').select('id,name,logo_url').eq('owner_id',user.id).maybeSingle();
+      if(storeError)return json(res,500,{error:'Não foi possível verificar a loja do vendedor.',details:storeError.message});
+      if(!store)return json(res,400,{error:'Cria a tua loja antes de publicar produtos.'});
+      const now=new Date().toISOString();
+      const payload={
+        id:crypto.randomUUID(),
+        seller_id:user.id,
+        store_id:store.id,
+        category_id:category.id,
+        name,
+        slug:productSlug(name),
+        description,
+        price,
+        stock,
+        status:'active',
+        views:0,
+        created_at:now,
+        updated_at:now
+      };
+      const {data:p,error}=await supabaseAdmin.from('products').insert(payload).select('id,seller_id,store_id,category_id,name,slug,description,price,stock,status,views,created_at,updated_at').single();
       if(error)return json(res,500,{error:'Não foi possível publicar o produto no Supabase.',details:error.message});
-      const {profilesById,storesByOwner}=await supabaseSellerMaps([p.seller_id]);const out=supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)));mirrorProductToLegacy(db,out);write(db);return json(res,201,out);
+      const {profilesById,storesByOwner}=await supabaseSellerMaps([p.seller_id]);
+      const out=supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)),{emoji:String(b.emoji||'📦'),rating:5,score:Number(user.score||50),seller:user.name,cat:category.name,category:category.name,condition,location,photos},category);
+      mirrorProductToLegacy(db,out);write(db);
+      return json(res,201,out);
     }
+
     if(pm&&req.method==='PATCH'){
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(user.role!=='seller')return json(res,403,{error:'Apenas vendedores podem editar produtos.'});
-      const id=decodeURIComponent(pm[1]);const {data:existing,error:findError}=await supabaseAdmin.from('products').select('id,seller_id,name,price,category,emoji,description,condition,location,photos,rating,created_at,updated_at').eq('id',id).maybeSingle();
-      if(findError)return json(res,500,{error:'Não foi possível consultar o produto.',details:findError.message});if(!existing)return json(res,404,{error:'Produto não encontrado.'});if(String(existing.seller_id)!==String(user.id))return json(res,403,{error:'Sem permissão para editar este produto.'});
-      const b=await body(req,10*1024*1024);const name=b.name!==undefined?String(b.name).trim():existing.name;const category=b.cat!==undefined?String(b.cat).trim():(b.category!==undefined?String(b.category).trim():existing.category);const price=b.price!==undefined?Number(b.price):Number(existing.price);const description=b.description!==undefined?String(b.description).trim():String(existing.description||'');const photos=b.photos!==undefined?(Array.isArray(b.photos)?b.photos.slice(0,10):[]):(Array.isArray(existing.photos)?existing.photos:[]);
-      if(!name||price<=0||!category)return json(res,400,{error:'Preenche nome, preço e categoria.'});if(!validPhotos(photos))return json(res,400,{error:'O produto precisa de pelo menos 5 fotos reais. Podes adicionar até 10.'});if(description.length<15)return json(res,400,{error:'A descrição é obrigatória e deve ter pelo menos 15 caracteres.'});
-      const patch={name,price,category,description,photos,updated_at:new Date().toISOString()};if(b.emoji!==undefined)patch.emoji=String(b.emoji||'📦');if(b.condition!==undefined)patch.condition=String(b.condition||'Usado');if(b.location!==undefined)patch.location=String(b.location||'');
-      const {data:p,error}=await supabaseAdmin.from('products').update(patch).eq('id',id).eq('seller_id',user.id).select('id,seller_id,name,price,category,emoji,description,condition,location,photos,rating,created_at,updated_at').single();if(error)return json(res,500,{error:'Não foi possível atualizar o produto.',details:error.message});
-      const {profilesById,storesByOwner}=await supabaseSellerMaps([p.seller_id]);const out=supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)));mirrorProductToLegacy(db,out);write(db);return json(res,200,out);
+      const user=await auth(db,req);
+      if(!user)return json(res,401,{error:'Inicia sessão.'});
+      if(user.role!=='seller')return json(res,403,{error:'Apenas vendedores podem editar produtos.'});
+      const id=decodeURIComponent(pm[1]);
+      const {data:existing,error:findError}=await supabaseAdmin.from('products').select('id,seller_id,store_id,category_id,name,slug,description,price,stock,status,views,created_at,updated_at').eq('id',id).maybeSingle();
+      if(findError)return json(res,500,{error:'Não foi possível consultar o produto.',details:findError.message});
+      if(!existing)return json(res,404,{error:'Produto não encontrado.'});
+      if(String(existing.seller_id)!==String(user.id))return json(res,403,{error:'Sem permissão para editar este produto.'});
+      const legacy=db.products.find(x=>String(x.id)===String(existing.id))||{};
+      const b=await body(req,10*1024*1024);
+      const name=b.name!==undefined?String(b.name).trim():existing.name;
+      const categoryValue=b.categoryId!==undefined?String(b.categoryId).trim():(b.cat!==undefined?String(b.cat).trim():(b.category!==undefined?String(b.category).trim():String(existing.category_id||'')));
+      const price=b.price!==undefined?Number(b.price):Number(existing.price);
+      const description=b.description!==undefined?String(b.description).trim():String(existing.description||'');
+      const stock=b.stock!==undefined?Math.max(0,Number.isFinite(Number(b.stock))?Math.floor(Number(b.stock)):0):Number(existing.stock||0);
+      const status=b.status!==undefined?String(b.status||'active'):String(existing.status||'active');
+      const condition=b.condition!==undefined?String(b.condition||'Usado').trim():String(legacy.condition||'Usado');
+      const location=b.location!==undefined?String(b.location||'').trim():String(legacy.location||'');
+      const photos=b.photos!==undefined?(Array.isArray(b.photos)?b.photos.slice(0,10):[]):(Array.isArray(legacy.photos)?legacy.photos:[]);
+      if(!name||price<=0||!categoryValue)return json(res,400,{error:'Preenche nome, preço e categoria.'});
+      if(!validPhotos(photos))return json(res,400,{error:'O produto precisa de pelo menos 5 fotos reais. Podes adicionar até 10.'});
+      if(description.length<15)return json(res,400,{error:'A descrição é obrigatória e deve ter pelo menos 15 caracteres.'});
+      if(description.length>5000)return json(res,400,{error:'A descrição é demasiado longa.'});
+      if(condition.length<2||condition.length>50)return json(res,400,{error:'A condição do produto é inválida.'});
+      if(location.length>200)return json(res,400,{error:'A localização deve ter no máximo 200 caracteres.'});
+      const category=await supabaseCategory(categoryValue);
+      if(!category)return json(res,400,{error:'Categoria não encontrada ou inativa.'});
+      const patch={name,price,category_id:category.id,description,stock,status,updated_at:new Date().toISOString()};
+      if(b.slug!==undefined)patch.slug=slugify(b.slug)||productSlug(name);
+      else if(!existing.slug)patch.slug=productSlug(name);
+      const {data:p,error}=await supabaseAdmin.from('products').update(patch).eq('id',id).eq('seller_id',user.id).select('id,seller_id,store_id,category_id,name,slug,description,price,stock,status,views,created_at,updated_at').single();
+      if(error)return json(res,500,{error:'Não foi possível atualizar o produto.',details:error.message});
+      const out=supabaseProductToPublic(p,undefined,undefined,{...legacy,emoji:b.emoji!==undefined?String(b.emoji||'📦'):legacy.emoji,rating:legacy.rating||5,score:legacy.score||50,seller:legacy.seller||user.name,condition,location,photos},category);
+      const {profilesById,storesByOwner}=await supabaseSellerMaps([p.seller_id]);
+      const finalOut=supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)),{...legacy,emoji:b.emoji!==undefined?String(b.emoji||'📦'):legacy.emoji,rating:legacy.rating||5,score:legacy.score||50,seller:legacy.seller||user.name,condition,location,photos},category);
+      mirrorProductToLegacy(db,finalOut);write(db);
+      return json(res,200,finalOut);
     }
 
     const fav=u.pathname.match(/^\/api\/favorites\/([^/]+)$/);
