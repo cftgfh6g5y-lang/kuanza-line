@@ -165,26 +165,37 @@ function deliveryStatusFromOrderStatus(status){
 
 function ensureDeliveryForOrder(db,order){
   if(!Array.isArray(db.deliveries))db.deliveries=[];
+
+  const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
   let d=db.deliveries.find(x=>x.orderId===order.id);
+
   if(!d){
+    const now=new Date().toISOString();
     d={
       id:'DEL-'+crypto.randomUUID(),
       orderId:order.id,
       buyerId:order.userId,
-      sellerIds:[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))],
+      sellerIds,
       recipient:order.delivery?.recipient||'',
       phone:order.delivery?.phone||'',
       address:order.delivery?.address||'',
       method:order.delivery?.method||'delivery',
       fee:Number(order.delivery?.fee||0),
       status:deliveryStatusFromOrderStatus(order.status),
-      statusHistory:[{status:deliveryStatusFromOrderStatus(order.status),at:order.createdAt||new Date().toISOString()}],
+      statusHistory:[{status:deliveryStatusFromOrderStatus(order.status),at:order.createdAt||now}],
       confirmationCode:String(Math.floor(100000+Math.random()*900000)),
-      createdAt:order.createdAt||new Date().toISOString(),
-      updatedAt:new Date().toISOString()
+      createdAt:order.createdAt||now,
+      updatedAt:now
     };
     db.deliveries.unshift(d);
+  }else{
+    d.buyerId=order.userId;
+    d.sellerIds=[...new Set([...(Array.isArray(d.sellerIds)?d.sellerIds:[]),...sellerIds])];
+    if(!d.status)d.status=deliveryStatusFromOrderStatus(order.status);
+    if(!Array.isArray(d.statusHistory))d.statusHistory=[];
+    d.updatedAt=new Date().toISOString();
   }
+
   return d;
 }
 
