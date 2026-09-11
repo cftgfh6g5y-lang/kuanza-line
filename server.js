@@ -637,8 +637,13 @@ const server=http.createServer(async(req,res)=>{
       const user=await auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão.'});
       const id=decodeURIComponent(u.pathname.split('/').pop()||''); const d=db.deliveries.find(x=>x.id===id);
       if(!d)return json(res,404,{error:'Entrega não encontrada.'});
+      const order=db.orders.find(o=>o.id===d.orderId);
+      if(order){
+        const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
+        d.sellerIds=[...new Set([...(Array.isArray(d.sellerIds)?d.sellerIds:[]),...sellerIds])];
+      }
       if(d.buyerId!==user.id&&!d.sellerIds?.includes(user.id))return json(res,403,{error:'Sem permissão.'});
-      return json(res,200,d);
+      write(db); return json(res,200,d);
     }
 
     if(u.pathname.startsWith('/api/deliveries/')&&req.method==='PATCH'){
@@ -646,6 +651,11 @@ const server=http.createServer(async(req,res)=>{
       if(user.role!=='seller')return json(res,403,{error:'Apenas vendedores podem atualizar a entrega.'});
       const id=decodeURIComponent(u.pathname.split('/').pop()||''); const d=db.deliveries.find(x=>x.id===id);
       if(!d)return json(res,404,{error:'Entrega não encontrada.'});
+      const order=db.orders.find(o=>o.id===d.orderId);
+      if(order){
+        const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
+        d.sellerIds=[...new Set([...(Array.isArray(d.sellerIds)?d.sellerIds:[]),...sellerIds])];
+      }
       if(!d.sellerIds?.includes(user.id))return json(res,403,{error:'Sem permissão.'});
       const b=await body(req); const allowed=['A preparar','Recolhida','Em trânsito','Chegou à zona','Entregue','Cancelada']; const next=String(b.status||'');
       if(!allowed.includes(next))return json(res,400,{error:'Estado de entrega inválido.'});
