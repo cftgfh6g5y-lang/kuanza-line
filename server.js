@@ -214,6 +214,75 @@ function settleDeliveredOrder(db,order){
   return true;
 }
 
+
+async function supabaseOrdersForUser(userId, sellerId=null){
+  if(!supabaseAdmin) throw new Error('Supabase não está configurado no servidor.');
+  let query=supabaseAdmin.from('orders').select('*').order('created_at',{ascending:false});
+  if(sellerId){
+    const {data:itemRows,error:itemError}=await supabaseAdmin.from('order_items').select('*').eq('seller_id',sellerId).order('created_at',{ascending:false});
+    if(itemError) throw itemError;
+    const orderIds=[...new Set((itemRows||[]).map(x=>x.order_id))];
+    if(!orderIds.length)return [];
+    const {data:orders,error}=await supabaseAdmin.from('orders').select('*').in('id',orderIds).order('created_at',{ascending:false});
+    if(error)throw error;
+    return (orders||[]).map(o=>({...o,__items:(itemRows||[]).filter(i=>i.order_id===o.id)}));
+  }
+  query=query.eq('buyer_id',userId);
+  const {data:orders,error}=await query;
+  if(error)throw error;
+  const ids=(orders||[]).map(o=>o.id);
+  let itemRows=[];
+  if(ids.length){
+    const {data:rows,error:itemError}=await supabaseAdmin.from('order_items').select('*').in('order_id',ids).order('created_at',{ascending:true});
+    if(itemError)throw itemError;
+    itemRows=rows||[];
+  }
+  return (orders||[]).map(o=>({...o,__items:itemRows.filter(i=>i.order_id===o.id)}));
+}
+
+function orderToClient(o){
+  const items=(o.__items||[]).map(i=>({
+    productId:i.product_id||null,
+    productName:i.product_name,
+    name:i.product_name,
+    price:Number(i.unit_price||0),
+    quantity:Number(i.quantity||1),
+    sellerId:i.seller_id||null,
+    seller:'Vendedor',
+    total:Number(i.total||0),
+    photos:[]
+  }));
+  return {
+    id:o.id,
+    userId:o.buyer_id,
+    items,
+    total:Number(o.total||0),
+    subtotal:Number(o.subtotal||0),
+    deliveryFee:Number(o.delivery_fee||0),
+    payment:{method:o.payment_method||'',status:o.payment_status||'Pendente',reference:o.payment_reference||null},
+    delivery:{method:o.delivery_method||'delivery',address:o.delivery_address||'',fee:Number(o.delivery_fee||0),recipient:o.recipient_name||'',phone:o.recipient_phone||''},
+    status:o.status||'Pendente',
+    statusHistory:Array.isArray(o.status_history)?o.status_history:[],
+    createdAt:o.created_at,
+    updatedAt:o.updated_at||o.created_at
+  };
+}
+
+async function getSupabaseOrder(orderId){
+  if(!supabaseAdmin)throw new Error('Supabase não está configurado no servidor.');
+  const {data:o,error}=await supabaseAdmin.from('orders').select('*').eq('id',orderId).maybeSingle();
+  if(error)throw error;
+  if(!o)return null;
+  const {data:items,error:itemError}=await supabaseAdmin.from('order_items').select('*').eq('order_id',orderId).order('created_at',{ascending:true});
+  if(itemError)throw itemError;
+  return {...o,__items:items||[]};
+}
+
+function mirrorOrder(db,order){
+  const i=db.orders.findIndex(x=>String(x.id)===String(order.id));
+  if(i>=0)db.orders[i]=order;else db.orders.unshift(order);
+}
+
 const rateBuckets=new Map();
 function rateLimit(req,key,limit=60,windowMs=60000){const now=Date.now();const id=key+'|'+(req.socket.remoteAddress||'unknown');const a=rateBuckets.get(id)||[];const fresh=a.filter(t=>now-t<windowMs);fresh.push(now);rateBuckets.set(id,fresh);return fresh.length<=limit;}
 function audit(db,req,userId,event,meta={}){if(!Array.isArray(db.securityEvents))db.securityEvents=[];db.securityEvents.unshift({id:crypto.randomUUID(),userId:userId||null,event,ip:req.socket.remoteAddress||'unknown',at:new Date().toISOString(),meta});if(db.securityEvents.length>1000)db.securityEvents=db.securityEvents.slice(0,1000);}
@@ -455,15 +524,16 @@ const server=http.createServer(async(req,res)=>{
 
     if(u.pathname==='/api/orders'&&req.method==='POST'){
       const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão para comprar.'});
+      if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
       const b=await body(req); const rawItems=Array.isArray(b.items)?b.items:[];
       if(!rawItems.length)return json(res,400,{error:'O carrinho está vazio.'});
-      const items=[]; let total=0;
+      const items=[]; let subtotal=0;
       for(const raw of rawItems){
         const product=db.products.find(p=>p.id===String(raw.productId||raw.id||''));
         const quantity=Math.max(1,Math.min(99,Number(raw.quantity||1)));
         if(!product)continue;
-        total+=Number(product.price||0)*quantity;
-        items.push({productId:product.id,productName:product.name,name:product.name,price:Number(product.price||0),quantity,sellerId:product.sellerId,seller:product.seller||'Vendedor',cat:product.cat,photos:Array.isArray(product.photos)?product.photos.slice(0,1):[]});
+        const unitPrice=Number(product.price||0); const lineTotal=unitPrice*quantity; subtotal+=lineTotal;
+        items.push({productId:product.id,productName:product.name,unitPrice,quantity,total:lineTotal,sellerId:product.sellerId, seller:product.seller||'Vendedor',cat:product.cat,photos:Array.isArray(product.photos)?product.photos.slice(0,1):[]});
       }
       if(!items.length)return json(res,400,{error:'Nenhum produto válido no carrinho.'});
       const paymentMethods=['multicaixa_express','bank_transfer','card'];
@@ -477,21 +547,33 @@ const server=http.createServer(async(req,res)=>{
       if(!deliveryMethods.includes(deliveryMethod))return json(res,400,{error:'Forma de entrega inválida.'});
       if(!deliveryAddress)return json(res,400,{error:'Indica a morada ou ponto de entrega.'});
       const deliveryFee=deliveryMethod==='delivery'?1500:0;
-      const grandTotal=total+deliveryFee;
-      const now=new Date().toISOString();
-      const order={id:'KL-'+Date.now().toString().slice(-7),userId:user.id,items,total:grandTotal,subtotal:total,deliveryFee,payment:{method:paymentMethod,status:'Pendente',reference:null},delivery:{method:deliveryMethod,address:deliveryAddress,fee:deliveryFee,recipient,phone},status:'Pendente',statusHistory:[{status:'Pendente',at:now}],createdAt:now};
-      db.orders.unshift(order);
+      const grandTotal=subtotal+deliveryFee;
+      const now=new Date().toISOString(); const orderId=crypto.randomUUID();
+      const orderRow={id:orderId,buyer_id:user.id,status:'Pendente',subtotal,delivery_fee:deliveryFee,total:grandTotal,delivery_method:deliveryMethod,recipient_name:recipient,recipient_phone:phone,delivery_address:deliveryAddress,payment_method:paymentMethod,payment_status:'Pendente',payment_reference:null,status_history:[{status:'Pendente',at:now}],created_at:now,updated_at:now};
+      const {data:createdOrder,error:createError}=await supabaseAdmin.from('orders').insert(orderRow).select('*').single();
+      if(createError)return json(res,400,{error:createError.message||'Não foi possível criar o pedido.'});
+      const orderItems=items.map(i=>({order_id:createdOrder.id,product_id:(typeof i.productId==='string'&&/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(i.productId))?i.productId:null,seller_id:(typeof i.sellerId==='string'&&/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(i.sellerId))?i.sellerId:null,product_name:i.productName,unit_price:i.unitPrice,quantity:i.quantity,total:i.total}));
+      const {data:createdItems,error:itemError}=await supabaseAdmin.from('order_items').insert(orderItems).select('*');
+      if(itemError){ await supabaseAdmin.from('orders').delete().eq('id',createdOrder.id); return json(res,400,{error:itemError.message||'Não foi possível guardar os itens do pedido.'}); }
+      const clientOrder=orderToClient({...createdOrder,__items:createdItems||[]});
+      mirrorOrder(db,clientOrder);
+      ensureDeliveryForOrder(db,clientOrder);
       const sellerIds=[...new Set(items.map(i=>i.sellerId).filter(Boolean))];
-      ensureDeliveryForOrder(db,order);
-        for(const sid of sellerIds){
-        const share=calculateSellerShare(order,sid); const wallet=ensureWallet(db,sid);
+      for(const sid of sellerIds){
+        const share=calculateSellerShare(clientOrder,sid); const wallet=ensureWallet(db,sid);
         wallet.pending=Number(wallet.pending||0)+share.net;
-        addWalletTx(db,sid,'sale_pending',share.net,`Venda #${String(order.id).slice(-8)} pendente de entrega`,{orderId:order.id,gross:share.gross,commission:share.commission});
-        notify(db,sid,'sale','Novo pedido',`Recebeste um novo pedido #${String(order.id).slice(-8)}.`,{orderId:order.id});
+        addWalletTx(db,sid,'sale_pending',share.net,`Venda #${String(clientOrder.id).slice(-8)} pendente de entrega`,{orderId:clientOrder.id,gross:share.gross,commission:share.commission});
+        notify(db,sid,'sale','Novo pedido',`Recebeste um novo pedido #${String(clientOrder.id).slice(-8)}.`,{orderId:clientOrder.id});
       }
-      write(db);return json(res,201,order);
+      write(db);return json(res,201,clientOrder);
     }
-    if(u.pathname==='/api/orders'&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão para ver pedidos.'});return json(res,200,db.orders.filter(x=>x.userId===user.id));}
+    if(u.pathname==='/api/orders'&&req.method==='GET'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão para ver pedidos.'});
+      try{
+        const rows=await supabaseOrdersForUser(user.id); const orders=rows.map(orderToClient);
+        orders.forEach(o=>mirrorOrder(db,o)); write(db); return json(res,200,orders);
+      }catch(e){console.error('Supabase orders GET:',e.message);return json(res,500,{error:e.message||'Não foi possível carregar os pedidos.'});}
+    }
 
     // Kuanza Score V1.2: avaliações reais de compradores sobre vendedores/produtos.
     if(u.pathname==='/api/notifications'&&req.method==='GET'){
@@ -552,68 +634,46 @@ const server=http.createServer(async(req,res)=>{
       write(db);return json(res,201,dispute);
     }
 
-    // V1.3 seller dashboard
+    // V1.3 seller dashboard — reads persisted orders from Supabase.
     if(u.pathname==='/api/seller/dashboard'&&req.method==='GET'){
       const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
-      const period=['7','30','90','all'].includes(String(u.query.period||''))?String(u.query.period):'30';
-      const cutoff=period==='all'?0:Date.now()-Number(period)*86400000;
-      const entries=[];
-      for(const order of db.orders){
-        const t=Date.parse(order.createdAt||0); if(cutoff && (!t||t<cutoff))continue;
-        const sellerItems=(Array.isArray(order.items)?order.items:[]).filter(i=>String(i.sellerId||'')===String(user.id));
-        if(sellerItems.length)entries.push({order,sellerItems});
-      }
-      let gross=0,commission=0,pending=0,cancelled=0,totalProductsSold=0,totalSales=0,completedSales=0;
-      const top=new Map(),history=[];
-      for(const {order,sellerItems} of entries){
-        const orderGross=sellerItems.reduce((sum,i)=>sum+Number(i.price||0)*Math.max(1,Number(i.quantity||1)),0);
-        const status=String(order.status||'Pendente');
-        if(status==='Cancelado'){cancelled++;history.push({orderId:order.id,status,revenue:0,netRevenue:0,createdAt:order.createdAt});continue;}
-        gross+=orderGross; commission+=orderGross*0.10; totalSales++; totalProductsSold+=sellerItems.reduce((sum,i)=>sum+Math.max(1,Number(i.quantity||1)),0);
-        const net=orderGross*0.90; const isPending=['Pendente','Confirmado','Em preparação','Enviado'].includes(status);
-        if(isPending)pending+=net; else completedSales++;
-        for(const i of sellerItems){const qty=Math.max(1,Number(i.quantity||1));const key=String(i.productId||i.productName||i.name||'produto');const prev=top.get(key)||{name:i.productName||i.name||'Produto',quantity:0,revenue:0};prev.quantity+=qty;prev.revenue+=Number(i.price||0)*qty;top.set(key,prev);}
-        history.push({orderId:order.id,status,revenue:orderGross,netRevenue:net,createdAt:order.createdAt});
-      }
-      history.sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0));
-      const available=Math.max(0,gross-commission-pending);
-      return json(res,200,{seller:publicUser(user,db),commissionPercent:10,summary:{grossRevenue:gross,netRevenue:gross-commission,pendingRevenue:pending,commission,availableBalance:available,cancelledSales:cancelled,totalSales,totalProductsSold,averageTicket:completedSales?available/completedSales:0},topProducts:[...top.values()].sort((a,b)=>b.revenue-a.revenue).slice(0,5),salesHistory:history});
-    }
-
-    if(u.pathname==='/api/seller/orders'&&req.method==='GET'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
-      if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
-      return json(res,200,db.orders.filter(o=>Array.isArray(o.items)&&o.items.some(i=>String(i.sellerId||'')===String(user.id))).map(o=>({...o,items:o.items.filter(i=>String(i.sellerId||'')===String(user.id))})));
-    }
-
-    if(u.pathname.startsWith('/api/seller/orders/')&&req.method==='PATCH'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
-      if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
-      const id=decodeURIComponent(u.pathname.split('/').pop()||''); const order=db.orders.find(o=>String(o.id)===id);
-      if(!order)return json(res,404,{error:'Pedido não encontrado.'});
-      if(!Array.isArray(order.items)||!order.items.some(i=>String(i.sellerId||'')===String(user.id)))return json(res,403,{error:'Este pedido não pertence às tuas vendas.'});
-      const b=await body(req); const allowed=['Pendente','Confirmado','Em preparação','Enviado','Entregue','Cancelado'];
-      if(!allowed.includes(String(b.status||'')))return json(res,400,{error:'Estado inválido.'});
-      const next=String(b.status);const previous=order.status;
-      order.status=next;order.updatedAt=new Date().toISOString();
-      if(!Array.isArray(order.statusHistory))order.statusHistory=[];
-      if(previous!==next)order.statusHistory.push({status:next,at:order.updatedAt});
-      if(previous!==next){
-        if(next==='Entregue') settleDeliveredOrder(db,order);
-        if(next==='Cancelado' && !order.financials?.cancelled){
-          const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
-          order.financials={...(order.financials||{}),cancelled:true,cancelledAt:new Date().toISOString()};
-          for(const sid of sellerIds){
-            const share=calculateSellerShare(order,sid);const wallet=ensureWallet(db,sid);
-            wallet.pending=Math.max(0,Number(wallet.pending||0)-share.net);
-            addWalletTx(db,sid,'sale_cancelled',-share.net,`Venda #${String(order.id).slice(-8)} cancelada`,{orderId:order.id,amount:share.net});
-          }
+      try{
+        const period=['7','30','90','all'].includes(String(u.query.period||''))?String(u.query.period):'30';
+        const cutoff=period==='all'?0:Date.now()-Number(period)*86400000;
+        const rows=await supabaseOrdersForUser(null,user.id); const entries=rows.map(orderToClient).filter(o=>{const t=Date.parse(o.createdAt||0);return !cutoff|| (t&&t>=cutoff);});
+        let gross=0,commission=0,pending=0,cancelled=0,totalProductsSold=0,totalSales=0,completedSales=0; const top=new Map(),history=[];
+        for(const order of entries){
+          const sellerItems=(order.items||[]).filter(i=>String(i.sellerId||'')===String(user.id)); if(!sellerItems.length)continue;
+          const orderGross=sellerItems.reduce((sum,i)=>sum+Number(i.price||0)*Math.max(1,Number(i.quantity||1)),0); const status=String(order.status||'Pendente');
+          if(status==='Cancelado'){cancelled++;history.push({orderId:order.id,status,revenue:0,netRevenue:0,createdAt:order.createdAt});continue;}
+          gross+=orderGross;commission+=orderGross*0.10;totalSales++;totalProductsSold+=sellerItems.reduce((sum,i)=>sum+Math.max(1,Number(i.quantity||1)),0);
+          const net=orderGross*0.90;const isPending=['Pendente','Confirmado','Em preparação','Enviado'].includes(status);if(isPending)pending+=net;else completedSales++;
+          for(const i of sellerItems){const qty=Math.max(1,Number(i.quantity||1));const key=String(i.productId||i.productName||i.name||'produto');const prev=top.get(key)||{name:i.productName||i.name||'Produto',quantity:0,revenue:0};prev.quantity+=qty;prev.revenue+=Number(i.price||0)*qty;top.set(key,prev);}
+          history.push({orderId:order.id,status,revenue:orderGross,netRevenue:net,createdAt:order.createdAt});
         }
-        notify(db,order.userId,'order','Pedido atualizado',`O pedido #${String(order.id).slice(-8)} está agora: ${next}.`,{orderId:order.id,status:next});
-        const delivery=ensureDeliveryForOrder(db,order); const ds=deliveryStatusFromOrderStatus(next); if(delivery.status!==ds){delivery.status=ds;delivery.updatedAt=new Date().toISOString(); if(!Array.isArray(delivery.statusHistory))delivery.statusHistory=[]; delivery.statusHistory.push({status:ds,at:delivery.updatedAt}); notify(db,order.userId,'delivery','Entrega atualizada',`A entrega do pedido #${String(order.id).slice(-8)} está agora: ${ds}.`,{orderId:order.id,deliveryId:delivery.id,status:ds});}
-      }
-      write(db);return json(res,200,order);
+        history.sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0)); const available=Math.max(0,gross-commission-pending);
+        return json(res,200,{seller:publicUser(user,db),commissionPercent:10,summary:{grossRevenue:gross,netRevenue:gross-commission,pendingRevenue:pending,commission,availableBalance:available,cancelledSales:cancelled,totalSales,totalProductsSold,averageTicket:completedSales?available/completedSales:0},topProducts:[...top.values()].sort((a,b)=>b.revenue-a.revenue).slice(0,5),salesHistory:history});
+      }catch(e){console.error('Supabase seller dashboard:',e.message);return json(res,500,{error:e.message||'Não foi possível carregar o painel.'});}
+    }
+    if(u.pathname==='/api/seller/orders'&&req.method==='GET'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
+      try{const rows=await supabaseOrdersForUser(null,user.id);return json(res,200,rows.map(orderToClient));}catch(e){console.error('Supabase seller orders:',e.message);return json(res,500,{error:e.message||'Não foi possível carregar as vendas.'});}
+    }
+    if(u.pathname.startsWith('/api/seller/orders/')&&req.method==='PATCH'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
+      const id=decodeURIComponent(u.pathname.split('/').pop()||'');
+      try{
+        const remote=await getSupabaseOrder(id);if(!remote)return json(res,404,{error:'Pedido não encontrado.'});
+        if(!remote.__items.some(i=>String(i.seller_id||'')===String(user.id)))return json(res,403,{error:'Este pedido não pertence às tuas vendas.'});
+        const b=await body(req);const allowed=['Pendente','Confirmado','Em preparação','Enviado','Entregue','Cancelado'];if(!allowed.includes(String(b.status||'')))return json(res,400,{error:'Estado inválido.'});
+        const next=String(b.status),previous=remote.status,history=Array.isArray(remote.status_history)?remote.status_history.slice():[];if(previous!==next)history.push({status:next,at:new Date().toISOString()});
+        const {data:updated,error}=await supabaseAdmin.from('orders').update({status:next,status_history:history,updated_at:new Date().toISOString()}).eq('id',id).select('*').single();if(error)return json(res,400,{error:error.message||'Não foi possível atualizar o pedido.'});
+        const client=orderToClient({...updated,__items:remote.__items}); mirrorOrder(db,client);
+        // Keep existing wallet/delivery behavior synchronized during this migration stage.
+        if(previous!==next){if(next==='Entregue')settleDeliveredOrder(db,client);if(next==='Cancelado'&&!client.financials?.cancelled){const sellerIds=[...new Set((client.items||[]).map(i=>i.sellerId).filter(Boolean))];client.financials={...(client.financials||{}),cancelled:true,cancelledAt:new Date().toISOString()};for(const sid of sellerIds){const share=calculateSellerShare(client,sid);const wallet=ensureWallet(db,sid);wallet.pending=Math.max(0,Number(wallet.pending||0)-share.net);addWalletTx(db,sid,'sale_cancelled',-share.net,`Venda #${String(client.id).slice(-8)} cancelada`,{orderId:client.id,amount:share.net});}}notify(db,client.userId,'order','Pedido atualizado',`O pedido #${String(client.id).slice(-8)} está agora: ${next}.`,{orderId:client.id,status:next});const delivery=ensureDeliveryForOrder(db,client);const ds=deliveryStatusFromOrderStatus(next);if(delivery.status!==ds){delivery.status=ds;delivery.updatedAt=new Date().toISOString();if(!Array.isArray(delivery.statusHistory))delivery.statusHistory=[];delivery.statusHistory.push({status:ds,at:delivery.updatedAt});notify(db,client.userId,'delivery','Entrega atualizada',`A entrega do pedido #${String(client.id).slice(-8)} está agora: ${ds}.`,{orderId:client.id,deliveryId:delivery.id,status:ds});}}
+        write(db);return json(res,200,client);
+      }catch(e){console.error('Supabase seller order PATCH:',e.message);return json(res,500,{error:e.message||'Não foi possível atualizar o pedido.'});}
     }
 
     if(u.pathname==='/api/deliveries'&&req.method==='GET'){
