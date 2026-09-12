@@ -20,6 +20,7 @@ const SUPABASE_SECRET_KEY = String(
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   ''
 ).trim();
+const SUPABASE_PRODUCT_IMAGES_BUCKET = String(process.env.SUPABASE_PRODUCT_IMAGES_BUCKET || 'product-images').trim();
 
 const supabaseAuth =
   SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY
@@ -53,6 +54,38 @@ function ensureDB(db){
 function json(res,code,data){res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type,Authorization','Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'strict-origin-when-cross-origin','Permissions-Policy':'camera=(),microphone=(),geolocation=(self)','Cache-Control':'no-store'});res.end(JSON.stringify(data));}
 function body(req,max=8*1024*1024){return new Promise((resolve,reject)=>{let s='',size=0;req.on('data',c=>{size+=c.length;if(size>max){reject(new Error('Dados demasiado grandes.'));req.destroy();return;}s+=c});req.on('end',()=>{try{resolve(s?JSON.parse(s):{})}catch(e){reject(new Error('JSON inválido.'))}});req.on('error',reject)})}
 function token(){return crypto.randomBytes(24).toString('hex');}
+
+async function migrateFavoritesAndCart(db){
+  if(!supabaseAdmin)return;
+  try{
+    const favorites=Array.isArray(db.favorites)?db.favorites:[];
+    const carts=Array.isArray(db.carts)?db.carts:[];
+    if(favorites.length){
+      const productIds=[...new Set(favorites.map(x=>String(x.productId||'')).filter(Boolean))];
+      const userIds=[...new Set(favorites.map(x=>String(x.userId||'')).filter(Boolean))];
+      if(productIds.length&&userIds.length){
+        const {data:products,error:pe}=await supabaseAdmin.from('products').select('id').in('id',productIds);
+        if(pe)throw pe;
+        const validProducts=new Set((products||[]).map(x=>String(x.id)));
+        const rows=favorites.filter(x=>userIds.includes(String(x.userId))&&validProducts.has(String(x.productId))).map(x=>({user_id:String(x.userId),product_id:String(x.productId)}));
+        if(rows.length){const {error}=await supabaseAdmin.from('favorites').upsert(rows,{onConflict:'user_id,product_id'});if(error)throw error;}
+      }
+    }
+    if(carts.length){
+      const productIds=[...new Set(carts.map(x=>String(x.productId||'')).filter(Boolean))];
+      const userIds=[...new Set(carts.map(x=>String(x.userId||'')).filter(Boolean))];
+      if(productIds.length&&userIds.length){
+        const {data:products,error:pe}=await supabaseAdmin.from('products').select('id').in('id',productIds);
+        if(pe)throw pe;
+        const validProducts=new Set((products||[]).map(x=>String(x.id)));
+        const rows=carts.filter(x=>userIds.includes(String(x.userId))&&validProducts.has(String(x.productId))).map(x=>({user_id:String(x.userId),product_id:String(x.productId),quantity:Math.max(1,Math.min(99,Number(x.qty||x.quantity||1)))}));
+        if(rows.length){
+          const {error}=await supabaseAdmin.from('cart_items').upsert(rows,{onConflict:'user_id,product_id'});if(error)throw error;
+        }
+      }
+    }
+  }catch(e){console.error('Migração inicial de favoritos/carrinho:',e.message||e);}
+}
 
 async function auth(db,req){
   const accessToken=(req.headers.authorization||'').replace('Bearer ','').trim();
@@ -191,6 +224,82 @@ async function supabaseCategoryMap(categoryIds){
   if(error)throw new Error('Não foi possível carregar as categorias: '+error.message);
   for(const row of data||[])map.set(String(row.id),row);
   return map;
+}
+function isDataImage(value){
+  return typeof value==='string' && /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(value);
+}
+function dataImageParts(dataUrl){
+  const m=String(dataUrl||'').match(/^data:(image\/(png|jpe?g|webp|gif));base64,(.+)$/i);
+  if(!m)return null;
+  const mime=m[1].toLowerCase();
+  const ext=mime==='image/jpeg'?'jpg':mime.split('/')[1].replace('jpeg','jpg');
+  return {mime,ext,buffer:Buffer.from(m[3],'base64')};
+}
+async function getProductImages(productIds){
+  const ids=[...new Set((productIds||[]).filter(Boolean).map(String))];
+  const map=new Map();
+  if(!supabaseAdmin||!ids.length)return map;
+  const {data,error}=await supabaseAdmin
+    .from('product_images')
+    .select('id,product_id,image_url,position,created_at')
+    .in('product_id',ids)
+    .order('position',{ascending:true});
+  if(error)throw new Error('Não foi possível carregar as fotos dos produtos: '+error.message);
+  for(const row of data||[]){
+    const key=String(row.product_id);
+    if(!map.has(key))map.set(key,[]);
+    map.get(key).push(String(row.image_url||''));
+  }
+  return map;
+}
+async function uploadProductImages(productId,photos){
+  if(!supabaseAdmin)return {ok:false,error:'Supabase não está configurado no servidor.'};
+  if(!Array.isArray(photos)||photos.length<5||photos.length>10)return {ok:false,error:'O produto precisa de pelo menos 5 fotos reais e no máximo 10.'};
+  const uploaded=[];
+  try{
+    for(let i=0;i<photos.length;i++){
+      const parts=dataImageParts(photos[i]);
+      if(!parts)return {ok:false,error:'Uma das fotos tem um formato inválido.'};
+      const filePath=`products/${String(productId)}/${i+1}-${crypto.randomUUID()}.${parts.ext}`;
+      const {error}=await supabaseAdmin.storage.from(SUPABASE_PRODUCT_IMAGES_BUCKET).upload(filePath,parts.buffer,{contentType:parts.mime,upsert:false});
+      if(error)throw new Error(error.message);
+      const {data:publicData}=supabaseAdmin.storage.from(SUPABASE_PRODUCT_IMAGES_BUCKET).getPublicUrl(filePath);
+      const imageUrl=String(publicData?.publicUrl||'').trim();
+      if(!imageUrl)throw new Error('Não foi possível obter a URL pública da foto.');
+      uploaded.push({filePath,imageUrl,position:i});
+    }
+    const {data,error}=await supabaseAdmin.from('product_images').insert(uploaded.map(x=>({product_id:String(productId),image_url:x.imageUrl,position:x.position}))).select('id,product_id,image_url,position,created_at');
+    if(error)throw new Error(error.message);
+    return {ok:true,rows:data||[],files:uploaded};
+  }catch(e){
+    for(const file of uploaded){
+      try{await supabaseAdmin.storage.from(SUPABASE_PRODUCT_IMAGES_BUCKET).remove([file.filePath]);}catch(_){}
+    }
+    return {ok:false,error:e.message||'Falha ao guardar as fotos.'};
+  }
+}
+async function replaceProductImages(productId,photos){
+  if(!supabaseAdmin)return {ok:false,error:'Supabase não está configurado no servidor.'};
+  const current=await getProductImages([productId]);
+  const oldUrls=current.get(String(productId))||[];
+  const uploaded=await uploadProductImages(productId,photos);
+  if(!uploaded.ok)return uploaded;
+  const {error}=await supabaseAdmin.from('product_images').delete().eq('product_id',String(productId));
+  if(error)return {ok:false,error:'As novas fotos foram enviadas, mas não foi possível substituir as fotos antigas: '+error.message};
+  const oldPaths=[];
+  for(const url of oldUrls){
+    const marker=`/${SUPABASE_PRODUCT_IMAGES_BUCKET}/`;
+    const idx=String(url).indexOf(marker);
+    if(idx>=0)oldPaths.push(String(url).slice(idx+marker.length));
+  }
+  if(oldPaths.length){try{await supabaseAdmin.storage.from(SUPABASE_PRODUCT_IMAGES_BUCKET).remove(oldPaths);}catch(_){}
+  }
+  return uploaded;
+}
+async function attachProductImages(products){
+  const list=Array.isArray(products)?products:[];
+  const map=await getProductImages(list.map(p=>p.id));
+  return list.map(p=>({...p,photos:(map.get(String(p.id))||[]).length?(map.get(String(p.id))||[]):(Array.isArray(p.photos)?p.photos:[])}));
 }
 function supabaseProductToPublic(row,profile,store,legacy,category){
   const sellerName=String(profile?.full_name||legacy?.seller||'Vendedor');
@@ -403,6 +512,7 @@ const server=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type,Authorization','Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS'});return res.end();}
   try{
     let db=ensureDB(read());
+    if(!globalThis.__kuanzaFavCartMigrationStarted){globalThis.__kuanzaFavCartMigrationStarted=true;migrateFavoritesAndCart(db);}
     if(!rateLimit(req, u.pathname.startsWith('/api/login')?'login':u.pathname.startsWith('/api/register')?'register':'api', u.pathname.startsWith('/api/login')?12:u.pathname.startsWith('/api/register')?8:120, 60000)) return json(res,429,{error:'Muitas solicitações. Tenta novamente em instantes.'});
     const currentUser=await auth(db,req);
     if(currentUser && isBlocked(db,currentUser.id)) return json(res,403,{error:'A tua conta está temporariamente bloqueada.'});
@@ -740,14 +850,84 @@ const server=http.createServer(async(req,res)=>{
     }
 
     const fav=u.pathname.match(/^\/api\/favorites\/([^/]+)$/);
-    if(u.pathname==='/api/favorites'&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});return json(res,200,db.favorites.filter(x=>x.userId===user.id).map(x=>db.products.find(p=>p.id===x.productId)).filter(Boolean).map(p=>publicProduct(db,p)));}
-    if(fav&&req.method==='POST'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!db.products.some(p=>p.id===fav[1]))return json(res,404,{error:'Produto não encontrado.'});if(!db.favorites.some(x=>x.userId===user.id&&x.productId===fav[1]))db.favorites.push({userId:user.id,productId:fav[1]});write(db);return json(res,201,{ok:true});}
-    if(fav&&req.method==='DELETE'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});db.favorites=db.favorites.filter(x=>!(x.userId===user.id&&x.productId===fav[1]));write(db);return json(res,200,{ok:true});}
+    if(u.pathname==='/api/favorites'&&req.method==='GET'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
+      const {data:rows,error}=await supabaseAdmin.from('favorites').select('product_id,created_at').eq('user_id',user.id).order('created_at',{ascending:false});
+      if(error)return json(res,500,{error:'Não foi possível carregar os favoritos.',details:error.message});
+      const ids=(rows||[]).map(x=>String(x.product_id));
+      if(!ids.length)return json(res,200,[]);
+      const {data:products,error:pe}=await supabaseAdmin.from('products').select('id,seller_id,store_id,category_id,name,slug,description,price,stock,status,views,created_at,updated_at').in('id',ids);
+      if(pe)return json(res,500,{error:'Não foi possível carregar os produtos favoritos.',details:pe.message});
+      const {profilesById,storesByOwner}=await supabaseSellerMaps((products||[]).map(p=>p.seller_id));
+      const categoryMap=await supabaseCategoryMap((products||[]).map(p=>p.category_id));
+      const byId=new Map((products||[]).map(p=>[String(p.id),p]));
+      const out=ids.map(id=>byId.get(id)).filter(Boolean).map(p=>{const legacy=db.products.find(x=>String(x.id)===String(p.id));return supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)),legacy,categoryMap.get(String(p.category_id)));});
+      for(const p of out)mirrorProductToLegacy(db,p);write(db);return json(res,200,out);
+    }
+    if(fav&&req.method==='POST'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
+      const productId=decodeURIComponent(fav[1]);
+      const {data:product,error:pe}=await supabaseAdmin.from('products').select('id').eq('id',productId).maybeSingle();
+      if(pe)return json(res,500,{error:'Não foi possível consultar o produto.',details:pe.message});
+      if(!product)return json(res,404,{error:'Produto não encontrado.'});
+      const {error}=await supabaseAdmin.from('favorites').upsert({user_id:user.id,product_id:productId},{onConflict:'user_id,product_id'});
+      if(error)return json(res,500,{error:'Não foi possível guardar o favorito.',details:error.message});
+      return json(res,201,{ok:true});
+    }
+    if(fav&&req.method==='DELETE'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
+      const productId=decodeURIComponent(fav[1]);
+      const {error}=await supabaseAdmin.from('favorites').delete().eq('user_id',user.id).eq('product_id',productId);
+      if(error)return json(res,500,{error:'Não foi possível remover o favorito.',details:error.message});
+      return json(res,200,{ok:true});
+    }
 
     const cartItem=u.pathname.match(/^\/api\/cart\/([^/]+)$/);
-    if(u.pathname==='/api/cart'&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const items=db.carts.filter(x=>x.userId===user.id).map(x=>{const p=db.products.find(p=>p.id===x.productId);return p?{...x,product:publicProduct(db,p)}:null}).filter(Boolean);return json(res,200,items);}
-    if(u.pathname==='/api/cart'&&req.method==='POST'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const b=await body(req);const p=db.products.find(x=>x.id===b.productId);if(!p)return json(res,404,{error:'Produto não encontrado.'});let x=db.carts.find(x=>x.userId===user.id&&x.productId===p.id);if(x)x.qty=Math.min(99,x.qty+Math.max(1,Number(b.qty||1)));else db.carts.push({userId:user.id,productId:p.id,qty:Math.max(1,Number(b.qty||1))});write(db);return json(res,201,{ok:true});}
-    if(cartItem&&req.method==='DELETE'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});db.carts=db.carts.filter(x=>!(x.userId===user.id&&x.productId===cartItem[1]));write(db);return json(res,200,{ok:true});}
+    if(u.pathname==='/api/cart'&&req.method==='GET'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
+      const {data:rows,error}=await supabaseAdmin.from('cart_items').select('id,product_id,quantity,created_at').eq('user_id',user.id).order('created_at',{ascending:true});
+      if(error)return json(res,500,{error:'Não foi possível carregar o carrinho.',details:error.message});
+      const ids=(rows||[]).map(x=>String(x.product_id));
+      if(!ids.length)return json(res,200,[]);
+      const {data:products,error:pe}=await supabaseAdmin.from('products').select('id,seller_id,store_id,category_id,name,slug,description,price,stock,status,views,created_at,updated_at').in('id',ids);
+      if(pe)return json(res,500,{error:'Não foi possível carregar os produtos do carrinho.',details:pe.message});
+      const {profilesById,storesByOwner}=await supabaseSellerMaps((products||[]).map(p=>p.seller_id));
+      const categoryMap=await supabaseCategoryMap((products||[]).map(p=>p.category_id));
+      const byId=new Map((products||[]).map(p=>[String(p.id),p]));
+      const out=(rows||[]).map(row=>{const p=byId.get(String(row.product_id));if(!p)return null;const legacy=db.products.find(x=>String(x.id)===String(p.id));const product=supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)),legacy,categoryMap.get(String(p.category_id)));return {id:String(row.id),userId:user.id,productId:String(row.product_id),qty:Number(row.quantity||1),quantity:Number(row.quantity||1),createdAt:row.created_at,product};}).filter(Boolean);
+      for(const item of out)mirrorProductToLegacy(db,item.product);write(db);return json(res,200,out);
+    }
+    if(u.pathname==='/api/cart'&&req.method==='POST'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
+      const b=await body(req);const productId=String(b.productId||'').trim();
+      const {data:p,error:pe}=await supabaseAdmin.from('products').select('id,stock,status').eq('id',productId).maybeSingle();
+      if(pe)return json(res,500,{error:'Não foi possível consultar o produto.',details:pe.message});
+      if(!p)return json(res,404,{error:'Produto não encontrado.'});
+      if(String(p.status||'active')!=='active')return json(res,400,{error:'Este produto não está disponível.'});
+      const qty=Math.max(1,Math.min(99,Math.floor(Number(b.qty||b.quantity||1))));
+      const {data:existing,error:ee}=await supabaseAdmin.from('cart_items').select('id,quantity').eq('user_id',user.id).eq('product_id',productId).maybeSingle();
+      if(ee)return json(res,500,{error:'Não foi possível consultar o carrinho.',details:ee.message});
+      const next=Math.min(99,Math.max(1,Number(existing?.quantity||0)+qty));
+      if(Number(p.stock||0)>0&&next>Number(p.stock))return json(res,400,{error:'Quantidade superior ao stock disponível.'});
+      let result;
+      if(existing)result=await supabaseAdmin.from('cart_items').update({quantity:next}).eq('id',existing.id).eq('user_id',user.id).select('id,product_id,quantity,created_at').single();
+      else result=await supabaseAdmin.from('cart_items').insert({user_id:user.id,product_id:productId,quantity:qty}).select('id,product_id,quantity,created_at').single();
+      if(result.error)return json(res,500,{error:'Não foi possível guardar no carrinho.',details:result.error.message});
+      return json(res,201,{ok:true,id:result.data.id,productId:productId,qty:Number(result.data.quantity),quantity:Number(result.data.quantity)});
+    }
+    if(cartItem&&req.method==='DELETE'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
+      const productId=decodeURIComponent(cartItem[1]);
+      const {error}=await supabaseAdmin.from('cart_items').delete().eq('user_id',user.id).eq('product_id',productId);
+      if(error)return json(res,500,{error:'Não foi possível remover do carrinho.',details:error.message});
+      return json(res,200,{ok:true});
+    }
 
     if(u.pathname==='/api/orders'&&req.method==='POST'){
       const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão para comprar.'});
