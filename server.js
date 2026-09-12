@@ -953,10 +953,11 @@ const server=http.createServer(async(req,res)=>{
       });
       const {profilesById,storesByOwner}=await supabaseSellerMaps(list.map(p=>p.seller_id));
       const categoryMap=await supabaseCategoryMap(list.map(p=>p.category_id));
-      const out=list.map(p=>{
+      let out=list.map(p=>{
         const legacy=db.products.find(x=>String(x.id)===String(p.id));
         return supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)),legacy,categoryMap.get(String(p.category_id)));
       });
+      out=await attachProductImages(out);
       for(const p of out)mirrorProductToLegacy(db,p);
       write(db);
       return json(res,200,out);
@@ -973,7 +974,9 @@ const server=http.createServer(async(req,res)=>{
       const {profilesById,storesByOwner}=await supabaseSellerMaps([p.seller_id]);
       const categoryMap=await supabaseCategoryMap([p.category_id]);
       const legacy=db.products.find(x=>String(x.id)===String(p.id));
-      const out=supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)),legacy,categoryMap.get(String(p.category_id)));
+      let out=supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)),legacy,categoryMap.get(String(p.category_id)));
+      const attached=await attachProductImages([out]);
+      out=attached[0]||out;
       mirrorProductToLegacy(db,out);write(db);
       return json(res,200,out);
     }
@@ -1094,7 +1097,8 @@ const server=http.createServer(async(req,res)=>{
       const {profilesById,storesByOwner}=await supabaseSellerMaps((products||[]).map(p=>p.seller_id));
       const categoryMap=await supabaseCategoryMap((products||[]).map(p=>p.category_id));
       const byId=new Map((products||[]).map(p=>[String(p.id),p]));
-      const out=ids.map(id=>byId.get(id)).filter(Boolean).map(p=>{const legacy=db.products.find(x=>String(x.id)===String(p.id));return supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)),legacy,categoryMap.get(String(p.category_id)));});
+      let out=ids.map(id=>byId.get(id)).filter(Boolean).map(p=>{const legacy=db.products.find(x=>String(x.id)===String(p.id));return supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)),legacy,categoryMap.get(String(p.category_id)));});
+      out=await attachProductImages(out);
       for(const p of out)mirrorProductToLegacy(db,p);write(db);return json(res,200,out);
     }
     if(fav&&req.method==='POST'){
@@ -1130,7 +1134,10 @@ const server=http.createServer(async(req,res)=>{
       const {profilesById,storesByOwner}=await supabaseSellerMaps((products||[]).map(p=>p.seller_id));
       const categoryMap=await supabaseCategoryMap((products||[]).map(p=>p.category_id));
       const byId=new Map((products||[]).map(p=>[String(p.id),p]));
-      const out=(rows||[]).map(row=>{const p=byId.get(String(row.product_id));if(!p)return null;const legacy=db.products.find(x=>String(x.id)===String(p.id));const product=supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)),legacy,categoryMap.get(String(p.category_id)));return {id:String(row.id),userId:user.id,productId:String(row.product_id),qty:Number(row.quantity||1),quantity:Number(row.quantity||1),createdAt:row.created_at,product};}).filter(Boolean);
+      let out=(rows||[]).map(row=>{const p=byId.get(String(row.product_id));if(!p)return null;const legacy=db.products.find(x=>String(x.id)===String(p.id));const product=supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)),legacy,categoryMap.get(String(p.category_id)));return {id:String(row.id),userId:user.id,productId:String(row.product_id),qty:Number(row.quantity||1),quantity:Number(row.quantity||1),createdAt:row.created_at,product};}).filter(Boolean);
+      const attached=await attachProductImages(out.map(x=>x.product));
+      const attachedById=new Map(attached.map(x=>[String(x.id),x]));
+      out=out.map(x=>({...x,product:attachedById.get(String(x.product.id))||x.product}));
       for(const item of out)mirrorProductToLegacy(db,item.product);write(db);return json(res,200,out);
     }
     if(u.pathname==='/api/cart'&&req.method==='POST'){
