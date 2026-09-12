@@ -377,6 +377,225 @@ function mirrorProductToLegacy(db,p){
   const i=db.products.findIndex(x=>String(x.id)===String(item.id));
   if(i>=0)db.products[i]={...db.products[i],...item};else db.products.push(item);
 }
+
+async function supabaseOrderItemsMap(orderIds){
+  const ids=[...new Set((orderIds||[]).filter(Boolean).map(String))];
+  const map=new Map();
+  if(!supabaseAdmin||!ids.length)return map;
+  const {data,error}=await supabaseAdmin
+    .from('order_items')
+    .select('id,order_id,product_id,seller_id,product_name,unit_price,quantity,total,created_at')
+    .in('order_id',ids)
+    .order('created_at',{ascending:true});
+  if(error)throw new Error('Não foi possível carregar os itens dos pedidos: '+error.message);
+  for(const row of data||[]){
+    const key=String(row.order_id);
+    if(!map.has(key))map.set(key,[]);
+    map.get(key).push(row);
+  }
+  return map;
+}
+
+async function supabaseOrdersToPublic(rows,db){
+  const orders=Array.isArray(rows)?rows:[];
+  if(!orders.length)return [];
+  const itemMap=await supabaseOrderItemsMap(orders.map(o=>o.id));
+  const out=[];
+  for(const row of orders){
+    const orderItems=itemMap.get(String(row.id))||[];
+    const items=orderItems.map(item=>{
+      const legacy=db.products.find(p=>String(p.id)===String(item.product_id));
+      return {
+        id:String(item.id),
+        productId:item.product_id?String(item.product_id):'',
+        productName:String(item.product_name||legacy?.name||'Produto'),
+        name:String(item.product_name||legacy?.name||'Produto'),
+        price:Number(item.unit_price||0),
+        unitPrice:Number(item.unit_price||0),
+        quantity:Math.max(1,Number(item.quantity||1)),
+        total:Number(item.total||0),
+        sellerId:item.seller_id?String(item.seller_id):String(legacy?.sellerId||''),
+        seller:String(legacy?.seller||'Vendedor'),
+        cat:String(legacy?.cat||legacy?.category||''),
+        photos:Array.isArray(legacy?.photos)?legacy.photos.slice(0,1):[]
+      };
+    });
+    const legacy=db.orders.find(o=>String(o.id)===String(row.id));
+    out.push({
+      id:String(row.id),
+      userId:row.buyer_id?String(row.buyer_id):'',
+      items,
+      total:Number(row.total||0),
+      subtotal:Number(row.subtotal||0),
+      deliveryFee:Number(row.delivery_fee||0),
+      payment:{
+        method:String(row.payment_method||''),
+        status:String(row.payment_status||'Pendente'),
+        reference:row.payment_reference||null
+      },
+      delivery:{
+        method:String(row.delivery_method||'delivery'),
+        address:String(row.delivery_address||''),
+        fee:Number(row.delivery_fee||0),
+        recipient:String(row.recipient_name||''),
+        phone:String(row.recipient_phone||'')
+      },
+      status:String(row.status||'Pendente'),
+      statusHistory:Array.isArray(row.status_history)?row.status_history:[],
+      createdAt:row.created_at||null,
+      updatedAt:row.updated_at||null,
+      ...(legacy?.financials?{financials:legacy.financials}:{}),
+    });
+  }
+  return out;
+}
+
+async function getSupabaseOrdersForBuyer(userId,db){
+  if(!supabaseAdmin)throw new Error('Supabase não está configurado no servidor.');
+  const {data,error}=await supabaseAdmin
+    .from('orders')
+    .select('id,buyer_id,status,subtotal,delivery_fee,total,delivery_method,recipient_name,recipient_phone,delivery_address,payment_method,payment_status,payment_reference,status_history,created_at,updated_at')
+    .eq('buyer_id',String(userId))
+    .order('created_at',{ascending:false});
+  if(error)throw new Error('Não foi possível carregar os pedidos: '+error.message);
+  return supabaseOrdersToPublic(data||[],db);
+}
+
+async function getSupabaseOrderForId(orderId,db){
+  if(!supabaseAdmin)throw new Error('Supabase não está configurado no servidor.');
+  const {data,error}=await supabaseAdmin
+    .from('orders')
+    .select('id,buyer_id,status,subtotal,delivery_fee,total,delivery_method,recipient_name,recipient_phone,delivery_address,payment_method,payment_status,payment_reference,status_history,created_at,updated_at')
+    .eq('id',String(orderId))
+    .maybeSingle();
+  if(error)throw new Error('Não foi possível consultar o pedido: '+error.message);
+  if(!data)return null;
+  const list=await supabaseOrdersToPublic([data],db);
+  return list[0]||null;
+}
+
+async function mirrorOrderToLegacy(db,order){
+  if(!order)return;
+  const i=db.orders.findIndex(x=>String(x.id)===String(order.id));
+  if(i>=0)db.orders[i]={...db.orders[i],...order};
+  else db.orders.unshift({...order});
+}
+
+async function createSupabaseOrder(db,user,b){
+  if(!supabaseAdmin)throw new Error('Supabase não está configurado no servidor.');
+  const rawItems=Array.isArray(b.items)?b.items:[];
+  if(!rawItems.length)return {error:'O carrinho está vazio.'};
+
+  const requestedIds=[...new Set(rawItems.map(raw=>String(raw.productId||raw.id||'').trim()).filter(Boolean))];
+  if(!requestedIds.length)return {error:'Nenhum produto válido no carrinho.'};
+
+  const {data:products,error:productsError}=await supabaseAdmin
+    .from('products')
+    .select('id,seller_id,store_id,category_id,name,price,stock,status,description,created_at,updated_at')
+    .in('id',requestedIds);
+  if(productsError)throw new Error('Não foi possível consultar os produtos para o pedido: '+productsError.message);
+
+  const productMap=new Map((products||[]).map(p=>[String(p.id),p]));
+  const items=[];
+  let subtotal=0;
+  for(const raw of rawItems){
+    const productId=String(raw.productId||raw.id||'').trim();
+    const product=productMap.get(productId);
+    if(!product)continue;
+    if(String(product.status||'active')!=='active')continue;
+    const quantity=Math.max(1,Math.min(99,Math.floor(Number(raw.quantity||raw.qty||1))));
+    if(Number(product.stock||0)>0&&quantity>Number(product.stock))return {error:`Quantidade superior ao stock disponível para ${product.name}.`};
+    const unitPrice=Number(product.price||0);
+    const itemTotal=unitPrice*quantity;
+    subtotal+=itemTotal;
+    items.push({
+      product_id:String(product.id),
+      seller_id:product.seller_id?String(product.seller_id):null,
+      product_name:String(product.name||'Produto'),
+      unit_price:unitPrice,
+      quantity,
+      total:itemTotal
+    });
+  }
+  if(!items.length)return {error:'Nenhum produto válido no carrinho.'};
+
+  const paymentMethods=['multicaixa_express','bank_transfer','card'];
+  const deliveryMethods=['delivery','pickup'];
+  const paymentMethod=String(b.paymentMethod||'');
+  const deliveryMethod=String(b.deliveryMethod||'delivery');
+  const deliveryAddress=String(b.deliveryAddress||'').trim().slice(0,500);
+  const recipient=String(b.recipient||user.name||'').trim().slice(0,120);
+  const phone=String(b.phone||'').trim().slice(0,40);
+  if(!paymentMethods.includes(paymentMethod))return {error:'Método de pagamento inválido.'};
+  if(!deliveryMethods.includes(deliveryMethod))return {error:'Forma de entrega inválida.'};
+  if(!deliveryAddress)return {error:'Indica a morada ou ponto de entrega.'};
+
+  const deliveryFee=deliveryMethod==='delivery'?1500:0;
+  const grandTotal=subtotal+deliveryFee;
+  const now=new Date().toISOString();
+  const statusHistory=[{status:'Pendente',at:now}];
+  const {data:createdOrder,error:orderError}=await supabaseAdmin
+    .from('orders')
+    .insert({
+      buyer_id:String(user.id),
+      status:'Pendente',
+      subtotal,
+      delivery_fee:deliveryFee,
+      total:grandTotal,
+      delivery_method:deliveryMethod,
+      recipient_name:recipient,
+      recipient_phone:phone,
+      delivery_address:deliveryAddress,
+      payment_method:paymentMethod,
+      payment_status:'Pendente',
+      payment_reference:null,
+      status_history:statusHistory
+    })
+    .select('id,buyer_id,status,subtotal,delivery_fee,total,delivery_method,recipient_name,recipient_phone,delivery_address,payment_method,payment_status,payment_reference,status_history,created_at,updated_at')
+    .single();
+  if(orderError)throw new Error('Não foi possível criar o pedido no Supabase: '+orderError.message);
+
+  const orderId=String(createdOrder.id);
+  const {error:itemsError}=await supabaseAdmin.from('order_items').insert(items.map(item=>({...item,order_id:orderId})));
+  if(itemsError){
+    await supabaseAdmin.from('orders').delete().eq('id',orderId);
+    throw new Error('Não foi possível guardar os itens do pedido: '+itemsError.message);
+  }
+
+  const order=(await supabaseOrdersToPublic([createdOrder],db))[0];
+  await mirrorOrderToLegacy(db,order);
+  ensureDeliveryForOrder(db,order);
+  const sellerIds=[...new Set(items.map(i=>i.seller_id).filter(Boolean).map(String))];
+  for(const sid of sellerIds){
+    const share=calculateSellerShare(order,sid);
+    const wallet=ensureWallet(db,sid);
+    wallet.pending=Number(wallet.pending||0)+share.net;
+    addWalletTx(db,sid,'sale_pending',share.net,`Venda #${String(order.id).slice(-8)} pendente de entrega`,{orderId:order.id,gross:share.gross,commission:share.commission});
+    notify(db,sid,'sale','Novo pedido',`Recebeste um novo pedido #${String(order.id).slice(-8)}.`,{orderId:order.id});
+  }
+  write(db);
+  return {order};
+}
+
+async function updateSupabaseOrderStatus(orderId,next,db){
+  if(!supabaseAdmin)throw new Error('Supabase não está configurado no servidor.');
+  const current=await getSupabaseOrderForId(orderId,db);
+  if(!current)return null;
+  if(String(current.status)===String(next))return current;
+  const updatedAt=new Date().toISOString();
+  const history=Array.isArray(current.statusHistory)?current.statusHistory.slice():[];
+  history.push({status:String(next),at:updatedAt});
+  const {data,error}=await supabaseAdmin
+    .from('orders')
+    .update({status:String(next),status_history:history,updated_at:updatedAt})
+    .eq('id',String(orderId))
+    .select('id,buyer_id,status,subtotal,delivery_fee,total,delivery_method,recipient_name,recipient_phone,delivery_address,payment_method,payment_status,payment_reference,status_history,created_at,updated_at')
+    .single();
+  if(error)throw new Error('Não foi possível atualizar o estado do pedido: '+error.message);
+  const out=(await supabaseOrdersToPublic([data],db))[0];
+  return out||null;
+}
+
 function mirrorStoreToLegacy(db,st){
   if(!st)return;
   const item={
@@ -944,43 +1163,28 @@ const server=http.createServer(async(req,res)=>{
 
     if(u.pathname==='/api/orders'&&req.method==='POST'){
       const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão para comprar.'});
-      const b=await body(req); const rawItems=Array.isArray(b.items)?b.items:[];
-      if(!rawItems.length)return json(res,400,{error:'O carrinho está vazio.'});
-      const items=[]; let total=0;
-      for(const raw of rawItems){
-        const product=db.products.find(p=>p.id===String(raw.productId||raw.id||''));
-        const quantity=Math.max(1,Math.min(99,Number(raw.quantity||1)));
-        if(!product)continue;
-        total+=Number(product.price||0)*quantity;
-        items.push({productId:product.id,productName:product.name,name:product.name,price:Number(product.price||0),quantity,sellerId:product.sellerId,seller:product.seller||'Vendedor',cat:product.cat,photos:Array.isArray(product.photos)?product.photos.slice(0,1):[]});
+      try{
+        const b=await body(req);
+        const result=await createSupabaseOrder(db,user,b);
+        if(result.error)return json(res,400,{error:result.error});
+        return json(res,201,result.order);
+      }catch(e){
+        console.error('Erro ao criar pedido Supabase:',e.message||e);
+        return json(res,500,{error:e.message||'Não foi possível criar o pedido.'});
       }
-      if(!items.length)return json(res,400,{error:'Nenhum produto válido no carrinho.'});
-      const paymentMethods=['multicaixa_express','bank_transfer','card'];
-      const deliveryMethods=['delivery','pickup'];
-      const paymentMethod=String(b.paymentMethod||'');
-      const deliveryMethod=String(b.deliveryMethod||'delivery');
-      const deliveryAddress=String(b.deliveryAddress||'').trim().slice(0,500);
-      const recipient=String(b.recipient||user.name||'').trim().slice(0,120);
-      const phone=String(b.phone||'').trim().slice(0,40);
-      if(!paymentMethods.includes(paymentMethod))return json(res,400,{error:'Método de pagamento inválido.'});
-      if(!deliveryMethods.includes(deliveryMethod))return json(res,400,{error:'Forma de entrega inválida.'});
-      if(!deliveryAddress)return json(res,400,{error:'Indica a morada ou ponto de entrega.'});
-      const deliveryFee=deliveryMethod==='delivery'?1500:0;
-      const grandTotal=total+deliveryFee;
-      const now=new Date().toISOString();
-      const order={id:'KL-'+Date.now().toString().slice(-7),userId:user.id,items,total:grandTotal,subtotal:total,deliveryFee,payment:{method:paymentMethod,status:'Pendente',reference:null},delivery:{method:deliveryMethod,address:deliveryAddress,fee:deliveryFee,recipient,phone},status:'Pendente',statusHistory:[{status:'Pendente',at:now}],createdAt:now};
-      db.orders.unshift(order);
-      const sellerIds=[...new Set(items.map(i=>i.sellerId).filter(Boolean))];
-      ensureDeliveryForOrder(db,order);
-        for(const sid of sellerIds){
-        const share=calculateSellerShare(order,sid); const wallet=ensureWallet(db,sid);
-        wallet.pending=Number(wallet.pending||0)+share.net;
-        addWalletTx(db,sid,'sale_pending',share.net,`Venda #${String(order.id).slice(-8)} pendente de entrega`,{orderId:order.id,gross:share.gross,commission:share.commission});
-        notify(db,sid,'sale','Novo pedido',`Recebeste um novo pedido #${String(order.id).slice(-8)}.`,{orderId:order.id});
-      }
-      write(db);return json(res,201,order);
     }
-    if(u.pathname==='/api/orders'&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão para ver pedidos.'});return json(res,200,db.orders.filter(x=>x.userId===user.id));}
+    if(u.pathname==='/api/orders'&&req.method==='GET'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão para ver pedidos.'});
+      try{
+        const orders=await getSupabaseOrdersForBuyer(user.id,db);
+        for(const order of orders)await mirrorOrderToLegacy(db,order);
+        write(db);
+        return json(res,200,orders);
+      }catch(e){
+        console.error('Erro ao carregar pedidos Supabase:',e.message||e);
+        return json(res,500,{error:e.message||'Não foi possível carregar os pedidos.'});
+      }
+    }
 
     // Kuanza Score V1.2: avaliações reais de compradores sobre vendedores/produtos.
     if(u.pathname==='/api/notifications'&&req.method==='GET'){
@@ -1073,36 +1277,76 @@ const server=http.createServer(async(req,res)=>{
     if(u.pathname==='/api/seller/orders'&&req.method==='GET'){
       const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
-      return json(res,200,db.orders.filter(o=>Array.isArray(o.items)&&o.items.some(i=>String(i.sellerId||'')===String(user.id))).map(o=>({...o,items:o.items.filter(i=>String(i.sellerId||'')===String(user.id))})));
+      try{
+        if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
+        const {data:itemRows,error:itemError}=await supabaseAdmin
+          .from('order_items')
+          .select('order_id')
+          .eq('seller_id',String(user.id));
+        if(itemError)throw new Error('Não foi possível carregar as vendas: '+itemError.message);
+        const ids=[...new Set((itemRows||[]).map(x=>String(x.order_id)).filter(Boolean))];
+        if(!ids.length)return json(res,200,[]);
+        const {data:orders,error:ordersError}=await supabaseAdmin
+          .from('orders')
+          .select('id,buyer_id,status,subtotal,delivery_fee,total,delivery_method,recipient_name,recipient_phone,delivery_address,payment_method,payment_status,payment_reference,status_history,created_at,updated_at')
+          .in('id',ids)
+          .order('created_at',{ascending:false});
+        if(ordersError)throw new Error('Não foi possível carregar os pedidos das vendas: '+ordersError.message);
+        const all=await supabaseOrdersToPublic(orders||[],db);
+        const out=all.map(order=>({...order,items:order.items.filter(i=>String(i.sellerId)===String(user.id))})).filter(order=>order.items.length);
+        for(const order of all)await mirrorOrderToLegacy(db,order);
+        write(db);
+        return json(res,200,out);
+      }catch(e){
+        console.error('Erro ao carregar vendas Supabase:',e.message||e);
+        return json(res,500,{error:e.message||'Não foi possível carregar as vendas.'});
+      }
     }
 
     if(u.pathname.startsWith('/api/seller/orders/')&&req.method==='PATCH'){
       const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
-      const id=decodeURIComponent(u.pathname.split('/').pop()||''); const order=db.orders.find(o=>String(o.id)===id);
-      if(!order)return json(res,404,{error:'Pedido não encontrado.'});
-      if(!Array.isArray(order.items)||!order.items.some(i=>String(i.sellerId||'')===String(user.id)))return json(res,403,{error:'Este pedido não pertence às tuas vendas.'});
-      const b=await body(req); const allowed=['Pendente','Confirmado','Em preparação','Enviado','Entregue','Cancelado'];
-      if(!allowed.includes(String(b.status||'')))return json(res,400,{error:'Estado inválido.'});
-      const next=String(b.status);const previous=order.status;
-      order.status=next;order.updatedAt=new Date().toISOString();
-      if(!Array.isArray(order.statusHistory))order.statusHistory=[];
-      if(previous!==next)order.statusHistory.push({status:next,at:order.updatedAt});
-      if(previous!==next){
-        if(next==='Entregue') settleDeliveredOrder(db,order);
-        if(next==='Cancelado' && !order.financials?.cancelled){
-          const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
-          order.financials={...(order.financials||{}),cancelled:true,cancelledAt:new Date().toISOString()};
-          for(const sid of sellerIds){
-            const share=calculateSellerShare(order,sid);const wallet=ensureWallet(db,sid);
-            wallet.pending=Math.max(0,Number(wallet.pending||0)-share.net);
-            addWalletTx(db,sid,'sale_cancelled',-share.net,`Venda #${String(order.id).slice(-8)} cancelada`,{orderId:order.id,amount:share.net});
+      const id=decodeURIComponent(u.pathname.split('/').pop()||'');
+      const allowed=['Pendente','Confirmado','Em preparação','Enviado','Entregue','Cancelado'];
+      try{
+        if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
+        const current=await getSupabaseOrderForId(id,db);
+        if(!current)return json(res,404,{error:'Pedido não encontrado.'});
+        if(!current.items.some(i=>String(i.sellerId)===String(user.id)))return json(res,403,{error:'Este pedido não pertence às tuas vendas.'});
+        const b=await body(req);
+        if(!allowed.includes(String(b.status||'')))return json(res,400,{error:'Estado inválido.'});
+        const next=String(b.status);const previous=current.status;
+        const updated=await updateSupabaseOrderStatus(id,next,db);
+        if(!updated)return json(res,404,{error:'Pedido não encontrado.'});
+        await mirrorOrderToLegacy(db,updated);
+        const order=db.orders.find(o=>String(o.id)===String(id))||updated;
+        order.items=updated.items;
+        if(previous!==next){
+          if(next==='Entregue')settleDeliveredOrder(db,order);
+          if(next==='Cancelado'&&!order.financials?.cancelled){
+            const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
+            order.financials={...(order.financials||{}),cancelled:true,cancelledAt:new Date().toISOString()};
+            for(const sid of sellerIds){
+              const share=calculateSellerShare(order,sid);const wallet=ensureWallet(db,sid);
+              wallet.pending=Math.max(0,Number(wallet.pending||0)-share.net);
+              addWalletTx(db,sid,'sale_cancelled',-share.net,`Venda #${String(order.id).slice(-8)} cancelada`,{orderId:order.id,amount:share.net});
+            }
+          }
+          notify(db,order.userId,'order','Pedido atualizado',`O pedido #${String(order.id).slice(-8)} está agora: ${next}.`,{orderId:order.id,status:next});
+          const delivery=ensureDeliveryForOrder(db,order); const ds=deliveryStatusFromOrderStatus(next);
+          if(delivery.status!==ds){
+            delivery.status=ds;delivery.updatedAt=new Date().toISOString();
+            if(!Array.isArray(delivery.statusHistory))delivery.statusHistory=[];
+            delivery.statusHistory.push({status:ds,at:delivery.updatedAt});
+            notify(db,order.userId,'delivery','Entrega atualizada',`A entrega do pedido #${String(order.id).slice(-8)} está agora: ${ds}.`,{orderId:order.id,deliveryId:delivery.id,status:ds});
           }
         }
-        notify(db,order.userId,'order','Pedido atualizado',`O pedido #${String(order.id).slice(-8)} está agora: ${next}.`,{orderId:order.id,status:next});
-        const delivery=ensureDeliveryForOrder(db,order); const ds=deliveryStatusFromOrderStatus(next); if(delivery.status!==ds){delivery.status=ds;delivery.updatedAt=new Date().toISOString(); if(!Array.isArray(delivery.statusHistory))delivery.statusHistory=[]; delivery.statusHistory.push({status:ds,at:delivery.updatedAt}); notify(db,order.userId,'delivery','Entrega atualizada',`A entrega do pedido #${String(order.id).slice(-8)} está agora: ${ds}.`,{orderId:order.id,deliveryId:delivery.id,status:ds});}
+        order.status=updated.status;order.statusHistory=updated.statusHistory;order.updatedAt=updated.updatedAt;
+        write(db);return json(res,200,order);
+      }catch(e){
+        console.error('Erro ao atualizar pedido Supabase:',e.message||e);
+        return json(res,500,{error:e.message||'Não foi possível atualizar o pedido.'});
       }
-      write(db);return json(res,200,order);
     }
 
     if(u.pathname==='/api/deliveries'&&req.method==='GET'){
@@ -1127,7 +1371,7 @@ const server=http.createServer(async(req,res)=>{
       if(!d.sellerIds?.includes(user.id))return json(res,403,{error:'Sem permissão.'});
       const b=await body(req); const allowed=['A preparar','Recolhida','Em trânsito','Chegou à zona','Entregue','Cancelada']; const next=String(b.status||'');
       if(!allowed.includes(next))return json(res,400,{error:'Estado de entrega inválido.'});
-      if(d.status!==next){d.status=next;d.updatedAt=new Date().toISOString();d.statusHistory.push({status:next,at:d.updatedAt}); const order=db.orders.find(o=>o.id===d.orderId); if(order&&next==='Entregue'){order.status='Entregue';order.updatedAt=d.updatedAt;if(!Array.isArray(order.statusHistory))order.statusHistory=[];order.statusHistory.push({status:'Entregue',at:d.updatedAt});settleDeliveredOrder(db,order);} if(d.buyerId)notify(db,d.buyerId,'delivery','Estado da entrega',`A entrega do pedido #${String(d.orderId).slice(-8)} está agora: ${next}.`,{orderId:d.orderId,deliveryId:d.id,status:next});}
+      if(d.status!==next){d.status=next;d.updatedAt=new Date().toISOString();d.statusHistory.push({status:next,at:d.updatedAt}); const order=db.orders.find(o=>o.id===d.orderId); if(order&&next==='Entregue'){order.status='Entregue';order.updatedAt=d.updatedAt;if(!Array.isArray(order.statusHistory))order.statusHistory=[];order.statusHistory.push({status:'Entregue',at:d.updatedAt});settleDeliveredOrder(db,order); if(supabaseAdmin){try{const updated=await updateSupabaseOrderStatus(d.orderId,'Entregue',db);if(updated){order.status=updated.status;order.statusHistory=updated.statusHistory;order.updatedAt=updated.updatedAt;}}catch(e){console.error('Erro ao sincronizar entrega com Supabase:',e.message||e);return json(res,500,{error:'A entrega foi atualizada, mas não foi possível sincronizar o pedido.'});}}} if(d.buyerId)notify(db,d.buyerId,'delivery','Estado da entrega',`A entrega do pedido #${String(d.orderId).slice(-8)} está agora: ${next}.`,{orderId:d.orderId,deliveryId:d.id,status:next});}
       write(db); return json(res,200,d);
     }
 
