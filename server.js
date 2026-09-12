@@ -802,6 +802,13 @@ const server=http.createServer(async(req,res)=>{
       };
       const {data:p,error}=await supabaseAdmin.from('products').insert(payload).select('id,seller_id,store_id,category_id,name,slug,description,price,stock,status,views,created_at,updated_at').single();
       if(error)return json(res,500,{error:'Não foi possível publicar o produto no Supabase.',details:error.message});
+
+      const photoResult=await uploadProductImages(p.id,photos);
+      if(!photoResult.ok){
+        await supabaseAdmin.from('products').delete().eq('id',p.id);
+        return json(res,500,{error:'Não foi possível guardar as fotos do produto.',details:photoResult.error});
+      }
+
       const {profilesById,storesByOwner}=await supabaseSellerMaps([p.seller_id]);
       const out=supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)),{emoji:String(b.emoji||'📦'),rating:5,score:Number(user.score||50),seller:user.name,cat:category.name,category:category.name,condition,location,photos},category);
       mirrorProductToLegacy(db,out);write(db);
@@ -842,6 +849,12 @@ const server=http.createServer(async(req,res)=>{
       else if(!existing.slug)patch.slug=productSlug(name);
       const {data:p,error}=await supabaseAdmin.from('products').update(patch).eq('id',id).eq('seller_id',user.id).select('id,seller_id,store_id,category_id,name,slug,description,price,stock,status,views,created_at,updated_at').single();
       if(error)return json(res,500,{error:'Não foi possível atualizar o produto.',details:error.message});
+
+      if(b.photos!==undefined){
+        const photoResult=await replaceProductImages(p.id,photos);
+        if(!photoResult.ok)return json(res,500,{error:'Não foi possível atualizar as fotos do produto.',details:photoResult.error});
+      }
+
       const out=supabaseProductToPublic(p,undefined,undefined,{...legacy,emoji:b.emoji!==undefined?String(b.emoji||'📦'):legacy.emoji,rating:legacy.rating||5,score:legacy.score||50,seller:legacy.seller||user.name,condition,location,photos},category);
       const {profilesById,storesByOwner}=await supabaseSellerMaps([p.seller_id]);
       const finalOut=supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)),{...legacy,emoji:b.emoji!==undefined?String(b.emoji||'📦'):legacy.emoji,rating:legacy.rating||5,score:legacy.score||50,seller:legacy.seller||user.name,condition,location,photos},category);
