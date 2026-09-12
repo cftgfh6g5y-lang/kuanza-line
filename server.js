@@ -564,7 +564,7 @@ async function createSupabaseOrder(db,user,b){
 
   const order=(await supabaseOrdersToPublic([createdOrder],db))[0];
   await mirrorOrderToLegacy(db,order);
-  ensureDeliveryForOrder(db,order);
+  await ensureDeliveryForOrder(db,order);
   const sellerIds=[...new Set(items.map(i=>i.seller_id).filter(Boolean).map(String))];
   for(const sid of sellerIds){
     const share=calculateSellerShare(order,sid);
@@ -647,52 +647,109 @@ function walletSummary(db,userId){
   const tx=db.walletTransactions.filter(x=>x.userId===userId).slice(0,50);
   return {...w,available:Number(w.available||0),pending:Number(w.pending||0),totalEarned:Number(w.totalEarned||0),totalWithdrawn:Number(w.totalWithdrawn||0),transactions:tx};
 }
-function deliveryStatusFromOrderStatus(status){
-  const map={
-    'Pendente':'A preparar',
-    'Confirmado':'A preparar',
-    'Em preparação':'A preparar',
-    'Enviado':'Em trânsito',
-    'Entregue':'Entregue',
-    'Cancelado':'Cancelada'
-  };
-  return map[status]||'A preparar';
+async function migrateDeliveriesToSupabase(db){
+  if(!supabaseAdmin)return;
+  if(db.migrations?.deliveriesSupabase)return;
+  try{
+    const deliveries=Array.isArray(db.deliveries)?db.deliveries:[];
+    for(const d of deliveries){
+      const orderId=String(d.orderId||'');
+      if(!/^[0-9a-fA-F-]{36}$/.test(orderId))continue;
+      const row={
+        id:/^[0-9a-fA-F-]{36}$/.test(String(d.id||''))?String(d.id):undefined,
+        order_id:orderId,
+        buyer_id:d.buyerId?String(d.buyerId):null,
+        seller_ids:Array.isArray(d.sellerIds)?d.sellerIds.map(String):[],
+        recipient:String(d.recipient||''),
+        phone:String(d.phone||''),
+        address:String(d.address||''),
+        method:String(d.method||'delivery'),
+        fee:Number(d.fee||0),
+        status:String(d.status||'A preparar'),
+        status_history:Array.isArray(d.statusHistory)?d.statusHistory:[],
+        confirmation_code:d.confirmationCode?String(d.confirmationCode):null,
+        created_at:d.createdAt||new Date().toISOString(),
+        updated_at:d.updatedAt||new Date().toISOString()
+      };
+      if(!row.id)delete row.id;
+      const {error}=await supabaseAdmin.from('deliveries').upsert(row,{onConflict:'order_id'});
+      if(error)throw error;
+    }
+    db.migrations={...(db.migrations||{}),deliveriesSupabase:new Date().toISOString()};
+    write(db);
+  }catch(e){console.error('Erro na migração de entregas para Supabase:',e.message||e);}
 }
 
-function ensureDeliveryForOrder(db,order){
-  if(!Array.isArray(db.deliveries))db.deliveries=[];
+async function createSupabaseDelivery(order){
+  if(!supabaseAdmin)return null;
+  const existing=await getSupabaseDeliveryForOrder(order.id);
+  if(existing)return existing;
+  const now=new Date().toISOString();
+  const status=deliveryStatusFromOrderStatus(order.status);
+  const row={
+    order_id:String(order.id),
+    buyer_id:order.userId?String(order.userId):null,
+    seller_ids:[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean).map(String))],
+    recipient:String(order.delivery?.recipient||''),
+    phone:String(order.delivery?.phone||''),
+    address:String(order.delivery?.address||''),
+    method:String(order.delivery?.method||'delivery'),
+    fee:Number(order.delivery?.fee||0),
+    status,
+    status_history:[{status,at:order.createdAt||now}],
+    confirmation_code:String(Math.floor(100000+Math.random()*900000)),
+    created_at:order.createdAt||now,
+    updated_at:now
+  };
+  const {data,error}=await supabaseAdmin.from('deliveries').insert(row).select('*').single();
+  if(error)throw new Error('Não foi possível criar a entrega no Supabase: '+error.message);
+  return data;
+}
 
-  const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
-  let d=db.deliveries.find(x=>x.orderId===order.id);
+async function getSupabaseDeliveryForOrder(orderId){
+  if(!supabaseAdmin)return null;
+  const {data,error}=await supabaseAdmin.from('deliveries').select('*').eq('order_id',String(orderId)).maybeSingle();
+  if(error)throw new Error('Não foi possível consultar a entrega: '+error.message);
+  return data||null;
+}
 
-  if(!d){
-    const now=new Date().toISOString();
-    d={
-      id:'DEL-'+crypto.randomUUID(),
-      orderId:order.id,
-      buyerId:order.userId,
-      sellerIds,
-      recipient:order.delivery?.recipient||'',
-      phone:order.delivery?.phone||'',
-      address:order.delivery?.address||'',
-      method:order.delivery?.method||'delivery',
-      fee:Number(order.delivery?.fee||0),
-      status:deliveryStatusFromOrderStatus(order.status),
-      statusHistory:[{status:deliveryStatusFromOrderStatus(order.status),at:order.createdAt||now}],
-      confirmationCode:String(Math.floor(100000+Math.random()*900000)),
-      createdAt:order.createdAt||now,
-      updatedAt:now
-    };
-    db.deliveries.unshift(d);
-  }else{
-    d.buyerId=order.userId;
-    d.sellerIds=[...new Set([...(Array.isArray(d.sellerIds)?d.sellerIds:[]),...sellerIds])];
-    if(!d.status)d.status=deliveryStatusFromOrderStatus(order.status);
-    if(!Array.isArray(d.statusHistory))d.statusHistory=[];
-    d.updatedAt=new Date().toISOString();
-  }
+async function getSupabaseDeliveryForId(id){
+  if(!supabaseAdmin)return null;
+  const {data,error}=await supabaseAdmin.from('deliveries').select('*').eq('id',String(id)).maybeSingle();
+  if(error)throw new Error('Não foi possível consultar a entrega: '+error.message);
+  return data||null;
+}
 
-  return d;
+function publicDelivery(row){
+  if(!row)return null;
+  return {
+    id:String(row.id),orderId:String(row.order_id),buyerId:row.buyer_id?String(row.buyer_id):'',sellerIds:Array.isArray(row.seller_ids)?row.seller_ids.map(String):[],
+    recipient:String(row.recipient||''),phone:String(row.phone||''),address:String(row.address||''),method:String(row.method||'delivery'),fee:Number(row.fee||0),
+    status:String(row.status||'A preparar'),statusHistory:Array.isArray(row.status_history)?row.status_history:[],confirmationCode:row.confirmation_code||'',createdAt:row.created_at||null,updatedAt:row.updated_at||null
+  };
+}
+
+async function ensureDeliveryForOrder(db,order){
+  if(!order||!supabaseAdmin)return null;
+  let row=await getSupabaseDeliveryForOrder(order.id);
+  if(!row)row=await createSupabaseDelivery(order);
+  const publicD=publicDelivery(row);
+  const i=db.deliveries.findIndex(x=>String(x.orderId)===String(order.id));
+  if(i>=0)db.deliveries[i]={...db.deliveries[i],...publicD};else db.deliveries.unshift(publicD);
+  return publicD;
+}
+
+async function updateSupabaseDeliveryStatus(id,next){
+  if(!supabaseAdmin)throw new Error('Supabase não está configurado no servidor.');
+  const current=await getSupabaseDeliveryForId(id);
+  if(!current)return null;
+  if(String(current.status)===String(next))return publicDelivery(current);
+  const updatedAt=new Date().toISOString();
+  const history=Array.isArray(current.status_history)?current.status_history.slice():[];
+  history.push({status:String(next),at:updatedAt});
+  const {data,error}=await supabaseAdmin.from('deliveries').update({status:String(next),status_history:history,updated_at:updatedAt}).eq('id',String(id)).select('*').single();
+  if(error)throw new Error('Não foi possível atualizar a entrega no Supabase: '+error.message);
+  return publicDelivery(data);
 }
 
 function addWalletTx(db,userId,type,amount,description,meta={}){
@@ -732,6 +789,7 @@ const server=http.createServer(async(req,res)=>{
   try{
     let db=ensureDB(read());
     if(!globalThis.__kuanzaFavCartMigrationStarted){globalThis.__kuanzaFavCartMigrationStarted=true;migrateFavoritesAndCart(db);}
+    if(!globalThis.__kuanzaDeliveryMigrationStarted){globalThis.__kuanzaDeliveryMigrationStarted=true;migrateDeliveriesToSupabase(db);}
     if(!rateLimit(req, u.pathname.startsWith('/api/login')?'login':u.pathname.startsWith('/api/register')?'register':'api', u.pathname.startsWith('/api/login')?12:u.pathname.startsWith('/api/register')?8:120, 60000)) return json(res,429,{error:'Muitas solicitações. Tenta novamente em instantes.'});
     const currentUser=await auth(db,req);
     if(currentUser && isBlocked(db,currentUser.id)) return json(res,403,{error:'A tua conta está temporariamente bloqueada.'});
@@ -1340,7 +1398,7 @@ const server=http.createServer(async(req,res)=>{
             }
           }
           notify(db,order.userId,'order','Pedido atualizado',`O pedido #${String(order.id).slice(-8)} está agora: ${next}.`,{orderId:order.id,status:next});
-          const delivery=ensureDeliveryForOrder(db,order); const ds=deliveryStatusFromOrderStatus(next);
+          const delivery=await ensureDeliveryForOrder(db,order); const ds=deliveryStatusFromOrderStatus(next);
           if(delivery.status!==ds){
             delivery.status=ds;delivery.updatedAt=new Date().toISOString();
             if(!Array.isArray(delivery.statusHistory))delivery.statusHistory=[];
@@ -1358,28 +1416,47 @@ const server=http.createServer(async(req,res)=>{
 
     if(u.pathname==='/api/deliveries'&&req.method==='GET'){
       const user=await auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão.'});
-      const list=db.deliveries.filter(d=>d.buyerId===user.id||d.sellerIds?.includes(user.id));
-      return json(res,200,list.slice(0,100));
+      try{
+        const {data,error}=await supabaseAdmin.from('deliveries').select('*').or(`buyer_id.eq.${user.id},seller_ids.cs.{${user.id}}`).order('created_at',{ascending:false}).limit(100);
+        if(error)throw new Error(error.message);
+        return json(res,200,(data||[]).map(publicDelivery));
+      }catch(e){console.error('Erro ao carregar entregas Supabase:',e.message||e);return json(res,500,{error:e.message||'Não foi possível carregar as entregas.'});}
     }
 
     if(u.pathname.startsWith('/api/deliveries/')&&req.method==='GET'){
       const user=await auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão.'});
-      const id=decodeURIComponent(u.pathname.split('/').pop()||''); const d=db.deliveries.find(x=>x.id===id);
-      if(!d)return json(res,404,{error:'Entrega não encontrada.'});
-      if(d.buyerId!==user.id&&!d.sellerIds?.includes(user.id))return json(res,403,{error:'Sem permissão.'});
-      return json(res,200,d);
+      const id=decodeURIComponent(u.pathname.split('/').pop()||'');
+      try{
+        const d=await getSupabaseDeliveryForId(id); if(!d)return json(res,404,{error:'Entrega não encontrada.'});
+        const p=publicDelivery(d); if(p.buyerId!==user.id&&!p.sellerIds.includes(String(user.id)))return json(res,403,{error:'Sem permissão.'});
+        return json(res,200,p);
+      }catch(e){return json(res,500,{error:e.message||'Não foi possível carregar a entrega.'});}
     }
 
     if(u.pathname.startsWith('/api/deliveries/')&&req.method==='PATCH'){
       const user=await auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(user.role!=='seller')return json(res,403,{error:'Apenas vendedores podem atualizar a entrega.'});
-      const id=decodeURIComponent(u.pathname.split('/').pop()||''); const d=db.deliveries.find(x=>x.id===id);
-      if(!d)return json(res,404,{error:'Entrega não encontrada.'});
-      if(!d.sellerIds?.includes(user.id))return json(res,403,{error:'Sem permissão.'});
+      const id=decodeURIComponent(u.pathname.split('/').pop()||'');
       const b=await body(req); const allowed=['A preparar','Recolhida','Em trânsito','Chegou à zona','Entregue','Cancelada']; const next=String(b.status||'');
       if(!allowed.includes(next))return json(res,400,{error:'Estado de entrega inválido.'});
-      if(d.status!==next){d.status=next;d.updatedAt=new Date().toISOString();d.statusHistory.push({status:next,at:d.updatedAt}); const order=db.orders.find(o=>o.id===d.orderId); if(order&&next==='Entregue'){order.status='Entregue';order.updatedAt=d.updatedAt;if(!Array.isArray(order.statusHistory))order.statusHistory=[];order.statusHistory.push({status:'Entregue',at:d.updatedAt});settleDeliveredOrder(db,order); if(supabaseAdmin){try{const updated=await updateSupabaseOrderStatus(d.orderId,'Entregue',db);if(updated){order.status=updated.status;order.statusHistory=updated.statusHistory;order.updatedAt=updated.updatedAt;}}catch(e){console.error('Erro ao sincronizar entrega com Supabase:',e.message||e);return json(res,500,{error:'A entrega foi atualizada, mas não foi possível sincronizar o pedido.'});}}} if(d.buyerId)notify(db,d.buyerId,'delivery','Estado da entrega',`A entrega do pedido #${String(d.orderId).slice(-8)} está agora: ${next}.`,{orderId:d.orderId,deliveryId:d.id,status:next});}
-      write(db); return json(res,200,d);
+      try{
+        const current=await getSupabaseDeliveryForId(id); if(!current)return json(res,404,{error:'Entrega não encontrada.'});
+        const p=publicDelivery(current); if(!p.sellerIds.includes(String(user.id)))return json(res,403,{error:'Sem permissão.'});
+        const previous=p.status; const updated=await updateSupabaseDeliveryStatus(id,next); if(!updated)return json(res,404,{error:'Entrega não encontrada.'});
+        const order=await getSupabaseOrderForId(updated.orderId,db);
+        if(order&&next==='Entregue'&&order.status!=='Entregue'){
+          const updatedOrder=await updateSupabaseOrderStatus(updated.orderId,'Entregue',db);
+          if(updatedOrder){
+            await mirrorOrderToLegacy(db,updatedOrder);
+            const legacy=db.orders.find(o=>String(o.id)===String(updatedOrder.id))||updatedOrder;
+            legacy.items=updatedOrder.items;legacy.status=updatedOrder.status;legacy.statusHistory=updatedOrder.statusHistory;legacy.updatedAt=updatedOrder.updatedAt;
+            settleDeliveredOrder(db,legacy);
+          }
+        }
+        if(previous!==next&&updated.buyerId)notify(db,updated.buyerId,'delivery','Estado da entrega',`A entrega do pedido #${String(updated.orderId).slice(-8)} está agora: ${next}.`,{orderId:updated.orderId,deliveryId:updated.id,status:next});
+        const i=db.deliveries.findIndex(x=>String(x.id)===String(updated.id)); if(i>=0)db.deliveries[i]=updated;else db.deliveries.unshift(updated);
+        write(db); return json(res,200,updated);
+      }catch(e){console.error('Erro ao atualizar entrega Supabase:',e.message||e);return json(res,500,{error:e.message||'Não foi possível atualizar a entrega.'});}
     }
 
     if(u.pathname==='/api/reviews'&&req.method==='GET'){
