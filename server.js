@@ -647,10 +647,80 @@ function walletSummary(db,userId){
   const tx=db.walletTransactions.filter(x=>x.userId===userId).slice(0,50);
   return {...w,available:Number(w.available||0),pending:Number(w.pending||0),totalEarned:Number(w.totalEarned||0),totalWithdrawn:Number(w.totalWithdrawn||0),transactions:tx};
 }
+function deliveryStatusFromOrderStatus(status){
+  const map={
+    Pendente:'A preparar',
+    Confirmado:'A preparar',
+    'Em preparação':'A preparar',
+    Enviado:'Em trânsito',
+    Entregue:'Entregue',
+    Cancelado:'Cancelada'
+  };
+  return map[String(status||'Pendente')]||'A preparar';
+}
+
+async function syncMissingDeliveriesFromSupabase(db){
+  if(!supabaseAdmin)return;
+  const {data:orders,error:ordersError}=await supabaseAdmin
+    .from('orders')
+    .select('id,buyer_id,status,delivery_fee,delivery_method,recipient_name,recipient_phone,delivery_address,status_history,created_at,updated_at')
+    .order('created_at',{ascending:true});
+  if(ordersError)throw ordersError;
+  if(!orders?.length)return;
+
+  const orderIds=orders.map(o=>String(o.id));
+  const {data:itemRows,error:itemError}=await supabaseAdmin
+    .from('order_items')
+    .select('order_id,seller_id')
+    .in('order_id',orderIds);
+  if(itemError)throw itemError;
+
+  const sellers=new Map();
+  for(const item of itemRows||[]){
+    const key=String(item.order_id);
+    if(!sellers.has(key))sellers.set(key,[]);
+    if(item.seller_id&&!sellers.get(key).includes(String(item.seller_id)))sellers.get(key).push(String(item.seller_id));
+  }
+
+  for(const order of orders){
+    const orderId=String(order.id);
+    const existing=await getSupabaseDeliveryForOrder(orderId);
+    if(existing)continue;
+    const orderHistory=Array.isArray(order.status_history)?order.status_history:[];
+    const history=[];
+    for(const h of orderHistory){
+      const ds=deliveryStatusFromOrderStatus(h?.status);
+      if(!history.length||history[history.length-1].status!==ds)history.push({status:ds,at:h?.at||order.created_at||new Date().toISOString()});
+    }
+    const currentStatus=deliveryStatusFromOrderStatus(order.status);
+    if(!history.length)history.push({status:currentStatus,at:order.created_at||new Date().toISOString()});
+    else if(history[history.length-1].status!==currentStatus)history.push({status:currentStatus,at:order.updated_at||new Date().toISOString()});
+    const row={
+      order_id:orderId,
+      buyer_id:order.buyer_id?String(order.buyer_id):null,
+      seller_ids:sellers.get(orderId)||[],
+      recipient:String(order.recipient_name||''),
+      phone:String(order.recipient_phone||''),
+      address:String(order.delivery_address||''),
+      method:String(order.delivery_method||'delivery'),
+      fee:Number(order.delivery_fee||0),
+      status:currentStatus,
+      status_history:history,
+      confirmation_code:String(Math.floor(100000+Math.random()*900000)),
+      created_at:order.created_at||new Date().toISOString(),
+      updated_at:order.updated_at||new Date().toISOString()
+    };
+    const {error}=await supabaseAdmin.from('deliveries').insert(row);
+    if(error)throw error;
+    console.log('Entrega sincronizada para pedido:',orderId);
+  }
+}
+
 async function migrateDeliveriesToSupabase(db){
   if(!supabaseAdmin)return;
-  if(db.migrations?.deliveriesSupabase)return;
   try{
+    await syncMissingDeliveriesFromSupabase(db);
+    if(db.migrations?.deliveriesSupabase)return;
     const deliveries=Array.isArray(db.deliveries)?db.deliveries:[];
     for(const d of deliveries){
       const orderId=String(d.orderId||'');
@@ -1399,11 +1469,13 @@ const server=http.createServer(async(req,res)=>{
           }
           notify(db,order.userId,'order','Pedido atualizado',`O pedido #${String(order.id).slice(-8)} está agora: ${next}.`,{orderId:order.id,status:next});
           const delivery=await ensureDeliveryForOrder(db,order); const ds=deliveryStatusFromOrderStatus(next);
-          if(delivery.status!==ds){
-            delivery.status=ds;delivery.updatedAt=new Date().toISOString();
-            if(!Array.isArray(delivery.statusHistory))delivery.statusHistory=[];
-            delivery.statusHistory.push({status:ds,at:delivery.updatedAt});
-            notify(db,order.userId,'delivery','Entrega atualizada',`A entrega do pedido #${String(order.id).slice(-8)} está agora: ${ds}.`,{orderId:order.id,deliveryId:delivery.id,status:ds});
+          if(delivery&&delivery.status!==ds){
+            const updatedDelivery=await updateSupabaseDeliveryStatus(delivery.id,ds);
+            if(updatedDelivery){
+              const i=db.deliveries.findIndex(x=>String(x.id)===String(updatedDelivery.id));
+              if(i>=0)db.deliveries[i]=updatedDelivery;else db.deliveries.unshift(updatedDelivery);
+              notify(db,order.userId,'delivery','Entrega atualizada',`A entrega do pedido #${String(order.id).slice(-8)} está agora: ${ds}.`,{orderId:order.id,deliveryId:updatedDelivery.id,status:ds});
+            }
           }
         }
         order.status=updated.status;order.statusHistory=updated.statusHistory;order.updatedAt=updated.updatedAt;
