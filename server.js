@@ -647,6 +647,30 @@ function walletSummary(db,userId){
   const tx=db.walletTransactions.filter(x=>x.userId===userId).slice(0,50);
   return {...w,available:Number(w.available||0),pending:Number(w.pending||0),totalEarned:Number(w.totalEarned||0),totalWithdrawn:Number(w.totalWithdrawn||0),transactions:tx};
 }
+const PAYMENT_STATUSES=['Pendente','Aguardando confirmação','Pago','Falhou','Cancelado','Reembolsado'];
+const PAYMENT_METHODS=['multicaixa_express','bank_transfer','card'];
+function paymentStatusLabel(status){return PAYMENT_STATUSES.includes(String(status||''))?String(status):'Pendente';}
+function publicPayment(order){
+  if(!order)return null;
+  return {
+    method:String(order.payment?.method||''),
+    status:paymentStatusLabel(order.payment?.status),
+    reference:order.payment?.reference||null
+  };
+}
+async function updateSupabasePayment(orderId,nextStatus,reference,db){
+  if(!supabaseAdmin)throw new Error('Supabase não está configurado no servidor.');
+  const current=await getSupabaseOrderForId(orderId,db);
+  if(!current)return null;
+  const status=paymentStatusLabel(nextStatus);
+  const ref=reference===undefined?current.payment?.reference||null:(String(reference||'').trim().slice(0,120)||null);
+  const {data,error}=await supabaseAdmin.from('orders').update({payment_status:status,payment_reference:ref,updated_at:new Date().toISOString()}).eq('id',String(orderId)).select('id,buyer_id,status,subtotal,delivery_fee,total,delivery_method,recipient_name,recipient_phone,delivery_address,payment_method,payment_status,payment_reference,status_history,created_at,updated_at').single();
+  if(error)throw new Error('Não foi possível atualizar o pagamento no Supabase: '+error.message);
+  const out=(await supabaseOrdersToPublic([data],db))[0];
+  if(out)await mirrorOrderToLegacy(db,out);
+  return out||null;
+}
+
 function deliveryStatusFromOrderStatus(status){
   const map={
     Pendente:'A preparar',
@@ -863,8 +887,8 @@ const server=http.createServer(async(req,res)=>{
     if(!rateLimit(req, u.pathname.startsWith('/api/login')?'login':u.pathname.startsWith('/api/register')?'register':'api', u.pathname.startsWith('/api/login')?12:u.pathname.startsWith('/api/register')?8:120, 60000)) return json(res,429,{error:'Muitas solicitações. Tenta novamente em instantes.'});
     const currentUser=await auth(db,req);
     if(currentUser && isBlocked(db,currentUser.id)) return json(res,403,{error:'A tua conta está temporariamente bloqueada.'});
-    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.9.3',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
-    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'1.9.3',supabase:!!(supabaseAuth&&supabaseAdmin)});
+    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.9.4',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
+    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'1.9.4',supabase:!!(supabaseAuth&&supabaseAdmin)});
 
     if(u.pathname==='/api/register'&&req.method==='POST'){
       if(!supabaseAdmin || !supabaseAuth) return json(res,503,{error:'Supabase não está configurado no servidor.'});
@@ -1319,6 +1343,63 @@ const server=http.createServer(async(req,res)=>{
         console.error('Erro ao carregar pedidos Supabase:',e.message||e);
         return json(res,500,{error:e.message||'Não foi possível carregar os pedidos.'});
       }
+    }
+
+    // ============================================================
+    // PAGAMENTOS — SUPABASE SOURCE OF TRUTH
+    // O pagamento pertence ao pedido. Nesta fase não existe provedor
+    // automático: o comprador pode enviar uma referência e o admin
+    // pode confirmar/recusar/reembolsar o pagamento.
+    // ============================================================
+    const paymentRoute=u.pathname.match(/^\/api\/orders\/([^/]+)\/payment$/);
+    if(paymentRoute&&req.method==='GET'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      try{
+        const order=await getSupabaseOrderForId(decodeURIComponent(paymentRoute[1]),db);
+        if(!order)return json(res,404,{error:'Pedido não encontrado.'});
+        const sellerIds=[...new Set((order.items||[]).map(i=>String(i.sellerId||'')).filter(Boolean))];
+        if(order.userId!==user.id&&!sellerIds.includes(String(user.id))&&!adminOnly(user))return json(res,403,{error:'Sem permissão.'});
+        return json(res,200,{orderId:order.id,total:order.total,payment:publicPayment(order)});
+      }catch(e){return json(res,500,{error:e.message||'Não foi possível carregar o pagamento.'});}
+    }
+    if(paymentRoute&&req.method==='POST'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      try{
+        const id=decodeURIComponent(paymentRoute[1]);
+        const order=await getSupabaseOrderForId(id,db);
+        if(!order)return json(res,404,{error:'Pedido não encontrado.'});
+        if(String(order.userId)!==String(user.id))return json(res,403,{error:'Apenas o comprador pode enviar o comprovativo.'});
+        if(!PAYMENT_METHODS.includes(String(order.payment?.method||'')))return json(res,400,{error:'Método de pagamento inválido.'});
+        if(['Pago','Reembolsado'].includes(paymentStatusLabel(order.payment?.status)))return json(res,409,{error:'Este pagamento não pode ser enviado novamente.'});
+        const b=await body(req,64*1024);
+        const reference=String(b.reference||'').trim().slice(0,120);
+        if(reference.length<3)return json(res,400,{error:'Indica a referência do pagamento.'});
+        const updated=await updateSupabasePayment(id,'Aguardando confirmação',reference,db);
+        if(!updated)return json(res,404,{error:'Pedido não encontrado.'});
+        notify(db,user.id,'payment','Pagamento enviado','A referência do pagamento foi enviada e aguarda confirmação.',{orderId:id,status:'Aguardando confirmação'});
+        const sellerIds=[...new Set((updated.items||[]).map(i=>String(i.sellerId||'')).filter(Boolean))];
+        for(const sid of sellerIds)notify(db,sid,'payment','Pagamento enviado',`O pagamento do pedido #${String(id).slice(-8)} aguarda confirmação.`,{orderId:id,status:'Aguardando confirmação'});
+        write(db);return json(res,200,{orderId:id,payment:publicPayment(updated)});
+      }catch(e){return json(res,500,{error:e.message||'Não foi possível enviar o pagamento.'});}
+    }
+    if(paymentRoute&&req.method==='PATCH'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      if(!adminOnly(user))return json(res,403,{error:'Apenas administradores podem confirmar pagamentos.'});
+      try{
+        const id=decodeURIComponent(paymentRoute[1]);
+        const order=await getSupabaseOrderForId(id,db);
+        if(!order)return json(res,404,{error:'Pedido não encontrado.'});
+        const b=await body(req,64*1024);
+        const next=String(b.status||'').trim();
+        const allowed=['Pago','Falhou','Cancelado','Reembolsado'];
+        if(!allowed.includes(next))return json(res,400,{error:'Estado de pagamento inválido.'});
+        if(next==='Pago'&&paymentStatusLabel(order.payment?.status)==='Reembolsado')return json(res,409,{error:'Um pagamento reembolsado não pode voltar a pago.'});
+        if(next==='Reembolsado'&&paymentStatusLabel(order.payment?.status)!=='Pago')return json(res,409,{error:'Só é possível reembolsar um pagamento confirmado.'});
+        const updated=await updateSupabasePayment(id,next,b.reference,db);
+        if(!updated)return json(res,404,{error:'Pedido não encontrado.'});
+        notify(db,updated.userId,'payment','Estado do pagamento',`O pagamento do pedido #${String(id).slice(-8)} está agora: ${next}.`,{orderId:id,status:next});
+        write(db);return json(res,200,{orderId:id,payment:publicPayment(updated)});
+      }catch(e){return json(res,500,{error:e.message||'Não foi possível atualizar o pagamento.'});}
     }
 
     // Kuanza Score V1.2: avaliações reais de compradores sobre vendedores/produtos.
