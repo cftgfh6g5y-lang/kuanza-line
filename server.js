@@ -566,13 +566,7 @@ async function createSupabaseOrder(db,user,b){
   await mirrorOrderToLegacy(db,order);
   await ensureDeliveryForOrder(db,order);
   const sellerIds=[...new Set(items.map(i=>i.seller_id).filter(Boolean).map(String))];
-  for(const sid of sellerIds){
-    const share=calculateSellerShare(order,sid);
-    const wallet=ensureWallet(db,sid);
-    wallet.pending=Number(wallet.pending||0)+share.net;
-    addWalletTx(db,sid,'sale_pending',share.net,`Venda #${String(order.id).slice(-8)} pendente de entrega`,{orderId:order.id,gross:share.gross,commission:share.commission});
-    notify(db,sid,'sale','Novo pedido',`Recebeste um novo pedido #${String(order.id).slice(-8)}.`,{orderId:order.id});
-  }
+  for(const sid of sellerIds)notify(db,sid,'sale','Novo pedido',`Recebeste um novo pedido #${String(order.id).slice(-8)}.`,{orderId:order.id});
   write(db);
   return {order};
 }
@@ -637,6 +631,8 @@ function orderTimeline(order){
 }
 
 const PLATFORM_COMMISSION_RATE=0.10;
+const PROTECTION_MINUTES=30;
+const PROTECTION_WINDOW_MS=PROTECTION_MINUTES*60*1000;
 function ensureWallet(db,userId){
   let w=db.wallets.find(x=>x.userId===userId);
   if(!w){w={id:'WAL-'+crypto.randomUUID(),userId,available:0,pending:0,totalEarned:0,totalWithdrawn:0,createdAt:new Date().toISOString()};db.wallets.push(w);}
@@ -856,19 +852,94 @@ function calculateSellerShare(order,sellerId){
   const commission=Math.round(gross*PLATFORM_COMMISSION_RATE);
   return {gross,commission,net:gross-commission};
 }
+function addPendingForPaidOrder(db,order){
+  if(!order||paymentStatusLabel(order.payment?.status)!=='Pago')return false;
+  const financials=order.financials||{};
+  if(financials.pendingCredited)return false;
+  const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean).map(String))];
+  if(!sellerIds.length)return false;
+  financials.pendingCreditedAt=new Date().toISOString();
+  financials.pendingCredited=true;
+  financials.sellers={...(financials.sellers||{})};
+  for(const sellerId of sellerIds){
+    const share=calculateSellerShare(order,sellerId);
+    const wallet=ensureWallet(db,sellerId);
+    wallet.pending=Number(wallet.pending||0)+share.net;
+    financials.sellers[sellerId]={...(financials.sellers[sellerId]||{}),...share};
+    addWalletTx(db,sellerId,'sale_pending',share.net,`Venda #${String(order.id).slice(-8)} aguardando entrega e proteção`,{orderId:order.id,gross:share.gross,commission:share.commission});
+    notify(db,sellerId,'wallet','Venda em saldo pendente',`Kz ${share.net.toLocaleString('pt-AO')} ficaram pendentes até à entrega e período de proteção.`,{orderId:order.id,amount:share.net});
+  }
+  order.financials=financials;
+  return true;
+}
+
+function startDeliveryProtection(db,order){
+  if(!order||order.status!=='Entregue')return false;
+  const now=Date.now();
+  const f=order.financials||{};
+  if(f.settled)return false;
+  const startedAt=f.protectionStartedAt||new Date(now).toISOString();
+  const until=f.protectionUntil||new Date(now+PROTECTION_WINDOW_MS).toISOString();
+  const changed=!f.protectionStartedAt||!f.protectionUntil;
+  order.financials={...f,protectionStartedAt:startedAt,protectionUntil:until,protectionMinutes:PROTECTION_MINUTES,protectionStatus:'Em proteção',disputeOpen:false};
+  if(paymentStatusLabel(order.payment?.status)==='Pago')addPendingForPaidOrder(db,order);
+  return changed;
+}
+
+function hasOpenDispute(db,orderId){
+  return db.disputes.some(d=>String(d.orderId)===String(orderId)&&['Aberta','Em análise'].includes(String(d.status||'')));
+}
+
 function settleDeliveredOrder(db,order){
   if(!order||order.status!=='Entregue'||order.financials?.settled)return false;
-  const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
-  order.financials={...(order.financials||{}),settled:true,settledAt:new Date().toISOString(),sellers:{}};
+  if(paymentStatusLabel(order.payment?.status)!=='Pago')return false;
+  if(hasOpenDispute(db,order.id))return false;
+  const f=order.financials||{};
+  if(f.protectionUntil&&Date.now()<Date.parse(f.protectionUntil))return false;
+  addPendingForPaidOrder(db,order);
+  const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean).map(String))];
+  if(!sellerIds.length)return false;
+  order.financials={...f,settled:true,settledAt:new Date().toISOString(),protectionStatus:'Concluída',sellers:{...(f.sellers||{})}};
   for(const sellerId of sellerIds){
     const share=calculateSellerShare(order,sellerId); const wallet=ensureWallet(db,sellerId);
     wallet.pending=Math.max(0,Number(wallet.pending||0)-share.net);
     wallet.available=Number(wallet.available||0)+share.net;
     wallet.totalEarned=Number(wallet.totalEarned||0)+share.net;
-    order.financials.sellers[sellerId]=share;
-    addWalletTx(db,sellerId,'sale_released',share.net,`Venda #${String(order.id).slice(-8)} libertada após entrega`,{orderId:order.id,gross:share.gross,commission:share.commission});
-    notify(db,sellerId,'wallet','Valor libertado',`Kz ${share.net.toLocaleString('pt-AO')} foram adicionados ao teu saldo disponível.`,{orderId:order.id,amount:share.net});
+    order.financials.sellers[sellerId]={...(order.financials.sellers[sellerId]||{}),...share};
+    addWalletTx(db,sellerId,'sale_released',share.net,`Venda #${String(order.id).slice(-8)} libertada após 30 minutos de proteção`,{orderId:order.id,gross:share.gross,commission:share.commission,protectionUntil:f.protectionUntil||null});
+    notify(db,sellerId,'wallet','Valor libertado',`Kz ${share.net.toLocaleString('pt-AO')} foram adicionados ao teu saldo disponível após o período de proteção.`,{orderId:order.id,amount:share.net});
   }
+  return true;
+}
+
+function processProtectionReleases(db){
+  let changed=false;
+  for(const order of db.orders){
+    if(order.status!=='Entregue'||order.financials?.settled)continue;
+    if(paymentStatusLabel(order.payment?.status)!=='Pago')continue;
+    if(!order.financials?.protectionUntil)continue;
+    if(Date.now()<Date.parse(order.financials.protectionUntil))continue;
+    if(hasOpenDispute(db,order.id)){order.financials={...(order.financials||{}),protectionStatus:'Bloqueada por disputa',disputeOpen:true};changed=true;continue;}
+    if(settleDeliveredOrder(db,order))changed=true;
+  }
+  if(changed)write(db);
+  return changed;
+}
+
+function refundPendingOrder(db,order,reason='Pagamento reembolsado'){
+  if(!order)return false;
+  const f=order.financials||{};
+  if(f.refunded)return false;
+  const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean).map(String))];
+  for(const sellerId of sellerIds){
+    const share=calculateSellerShare(order,sellerId);
+    const wallet=ensureWallet(db,sellerId);
+    if(f.pendingCredited){
+      wallet.pending=Math.max(0,Number(wallet.pending||0)-share.net);
+      addWalletTx(db,sellerId,'sale_refunded',-share.net,reason,{orderId:order.id,gross:share.gross,commission:share.commission});
+    }
+  }
+  order.financials={...f,refunded:true,refundedAt:new Date().toISOString(),protectionStatus:'Reembolsada'};
   return true;
 }
 
@@ -887,8 +958,9 @@ const server=http.createServer(async(req,res)=>{
     if(!rateLimit(req, u.pathname.startsWith('/api/login')?'login':u.pathname.startsWith('/api/register')?'register':'api', u.pathname.startsWith('/api/login')?12:u.pathname.startsWith('/api/register')?8:120, 60000)) return json(res,429,{error:'Muitas solicitações. Tenta novamente em instantes.'});
     const currentUser=await auth(db,req);
     if(currentUser && isBlocked(db,currentUser.id)) return json(res,403,{error:'A tua conta está temporariamente bloqueada.'});
-    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'1.9.4',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
-    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'1.9.4',supabase:!!(supabaseAuth&&supabaseAdmin)});
+    processProtectionReleases(db);
+    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'2.0.0',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
+    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'2.0.0',supabase:!!(supabaseAuth&&supabaseAdmin)});
 
     if(u.pathname==='/api/register'&&req.method==='POST'){
       if(!supabaseAdmin || !supabaseAuth) return json(res,503,{error:'Supabase não está configurado no servidor.'});
@@ -1337,8 +1409,8 @@ const server=http.createServer(async(req,res)=>{
       try{
         const orders=await getSupabaseOrdersForBuyer(user.id,db);
         for(const order of orders)await mirrorOrderToLegacy(db,order);
-        write(db);
-        return json(res,200,orders);
+        processProtectionReleases(db);
+        return json(res,200,orders.map(order=>({...order,financials:db.orders.find(o=>String(o.id)===String(order.id))?.financials||order.financials||null})));
       }catch(e){
         console.error('Erro ao carregar pedidos Supabase:',e.message||e);
         return json(res,500,{error:e.message||'Não foi possível carregar os pedidos.'});
@@ -1395,10 +1467,18 @@ const server=http.createServer(async(req,res)=>{
         if(!allowed.includes(next))return json(res,400,{error:'Estado de pagamento inválido.'});
         if(next==='Pago'&&paymentStatusLabel(order.payment?.status)==='Reembolsado')return json(res,409,{error:'Um pagamento reembolsado não pode voltar a pago.'});
         if(next==='Reembolsado'&&paymentStatusLabel(order.payment?.status)!=='Pago')return json(res,409,{error:'Só é possível reembolsar um pagamento confirmado.'});
+        if(next==='Reembolsado'&&order.financials?.settled)return json(res,409,{error:'Esta venda já foi liberada para a carteira do vendedor e não pode ser reembolsada por este fluxo.'});
         const updated=await updateSupabasePayment(id,next,b.reference,db);
         if(!updated)return json(res,404,{error:'Pedido não encontrado.'});
+        const legacyOrder=db.orders.find(o=>String(o.id)===String(id));
+        if(legacyOrder){
+          legacyOrder.payment=updated.payment;
+          if(next==='Pago')addPendingForPaidOrder(db,legacyOrder);
+          if(next==='Reembolsado')refundPendingOrder(db,legacyOrder,'Pagamento reembolsado pelo Kuanza Line');
+          if(next==='Pago'&&legacyOrder.status==='Entregue')startDeliveryProtection(db,legacyOrder);
+        }
         notify(db,updated.userId,'payment','Estado do pagamento',`O pagamento do pedido #${String(id).slice(-8)} está agora: ${next}.`,{orderId:id,status:next});
-        write(db);return json(res,200,{orderId:id,payment:publicPayment(updated)});
+        write(db);return json(res,200,{orderId:id,payment:publicPayment(updated),financials:legacyOrder?.financials||null});
       }catch(e){return json(res,500,{error:e.message||'Não foi possível atualizar o pagamento.'});}
     }
 
@@ -1456,9 +1536,44 @@ const server=http.createServer(async(req,res)=>{
       const sellerId=Array.isArray(order.items)&&order.items[0]?.sellerId||null;
       const dispute={id:'DSP-'+Date.now().toString().slice(-7),orderId,userId:user.id,sellerId,reason,description,status:'Aberta',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
       db.disputes.unshift(dispute);
+      order.financials={...(order.financials||{}),disputeOpen:true,protectionStatus:order.status==='Entregue'?'Bloqueada por disputa':(order.financials?.protectionStatus||'')};
       user.complaints=Number(user.complaints||0)+1;
       if(sellerId)notify(db,sellerId,'dispute','Nova reclamação',`Existe uma reclamação no pedido #${String(orderId).slice(-8)}.`,{orderId,disputeId:dispute.id});
       write(db);return json(res,201,dispute);
+    }
+
+    const disputeRoute=u.pathname.match(/^\/api\/disputes\/([^/]+)$/);
+    if(disputeRoute&&req.method==='PATCH'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});
+      const dispute=db.disputes.find(d=>String(d.id)===decodeURIComponent(disputeRoute[1]));
+      if(!dispute)return json(res,404,{error:'Reclamação não encontrada.'});
+      const b=await body(req,64*1024);
+      const status=String(b.status||'').trim();
+      const decision=String(b.decision||'').trim();
+      if(!['Aberta','Em análise','Resolvida','Rejeitada'].includes(status))return json(res,400,{error:'Estado da reclamação inválido.'});
+      if(status==='Resolvida'&&!['release','refund'].includes(decision))return json(res,400,{error:'Indica a decisão: release ou refund.'});
+      const order=db.orders.find(o=>String(o.id)===String(dispute.orderId));
+      dispute.status=status;dispute.adminNote=String(b.adminNote||'').trim().slice(0,1000);dispute.updatedAt=new Date().toISOString();
+      if(order&&status==='Resolvida'){
+        if(decision==='release'){
+          dispute.decision='release';
+          order.financials={...(order.financials||{}),disputeOpen:false,protectionStatus:'Resolvida — valor libertado'};
+          if(order.status==='Entregue'&&paymentStatusLabel(order.payment?.status)==='Pago'){
+            const f=order.financials||{};order.financials={...f,protectionUntil:new Date().toISOString()};settleDeliveredOrder(db,order);
+          }
+        }else{
+          dispute.decision='refund';
+          order.financials={...(order.financials||{}),disputeOpen:false};
+          refundPendingOrder(db,order,'Venda reembolsada após resolução de disputa');
+          try{await updateSupabasePayment(order.id,'Reembolsado',undefined,db);}catch(e){return json(res,500,{error:e.message||'Não foi possível marcar o pagamento como reembolsado.'});}
+          order.payment={...(order.payment||{}),status:'Reembolsado'};
+        }
+      }else if(order&&['Rejeitada'].includes(status)){
+        order.financials={...(order.financials||{}),disputeOpen:false,protectionStatus:order.status==='Entregue'?'Em proteção':'Normal'};
+      }
+      audit(db,req,user.id,'dispute_updated',{disputeId:dispute.id,orderId:dispute.orderId,status,decision});
+      write(db);return json(res,200,{dispute,order:order||null});
     }
 
     // V1.3 seller dashboard
@@ -1538,7 +1653,8 @@ const server=http.createServer(async(req,res)=>{
         const order=db.orders.find(o=>String(o.id)===String(id))||updated;
         order.items=updated.items;
         if(previous!==next){
-          if(next==='Entregue')settleDeliveredOrder(db,order);
+          if(next==='Entregue'){startDeliveryProtection(db,order);}
+          if(next==='Entregue'&&paymentStatusLabel(order.payment?.status)==='Pago')addPendingForPaidOrder(db,order);
           if(next==='Cancelado'&&!order.financials?.cancelled){
             const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
             order.financials={...(order.financials||{}),cancelled:true,cancelledAt:new Date().toISOString()};
@@ -1651,6 +1767,9 @@ const server=http.createServer(async(req,res)=>{
   }catch(e){console.error(e);if(!res.headersSent)json(res,500,{error:e.message||'Erro interno'});}
 });
 
-const PORT=Number(process.env.PORT||3000);server.listen(PORT,'0.0.0.0',()=>console.log(`Kuanza Line API running on port ${PORT} | Supabase Auth enabled: ${!!(supabaseAuth&&supabaseAdmin)}`));
+const PORT=Number(process.env.PORT||3000);
+server.listen(PORT,'0.0.0.0',()=>console.log(`Kuanza Line API running on port ${PORT} | Supabase Auth enabled: ${!!(supabaseAuth&&supabaseAdmin)} | Protection: ${PROTECTION_MINUTES} min`));
+const protectionWorker=setInterval(()=>{try{processProtectionReleases(ensureDB(read()));}catch(e){console.error('Worker de proteção financeira:',e.message||e);}},15000);
+protectionWorker.unref();
 function shutdown(signal){console.log(`Received ${signal}; shutting down Kuanza Line API.`);server.close(()=>process.exit(0));setTimeout(()=>process.exit(1),10000).unref();}
 process.on('SIGTERM',()=>shutdown('SIGTERM'));process.on('SIGINT',()=>shutdown('SIGINT'));
