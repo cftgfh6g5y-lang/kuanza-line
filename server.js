@@ -950,44 +950,86 @@ async function startDeliveryProtection(db,order){
 }
 
 function hasOpenDispute(db,orderId){
-  return db.disputes.some(d=>String(d.orderId)===String(orderId)&&['Aberta','Em análise'].includes(String(d.status||'')));
+  return Array.isArray(db.disputes)&&db.disputes.some(d=>String(d.orderId)===String(orderId)&&['Aberta','Em análise'].includes(String(d.status||'')));
+}
+
+async function hasOpenDisputeSupabase(orderId){
+  if(!supabaseAdmin)return false;
+  const {data,error}=await supabaseAdmin.from('disputes').select('id,status').eq('order_id',String(orderId)).in('status',['Aberta','Em análise']).limit(1);
+  if(error)throw new Error('Não foi possível verificar reclamações do pedido: '+error.message);
+  return Array.isArray(data)&&data.length>0;
 }
 
 async function settleDeliveredOrder(db,order){
   if(!order||order.status!=='Entregue'||order.financials?.settled)return false;
   if(paymentStatusLabel(order.payment?.status)!=='Pago')return false;
-  if(hasOpenDispute(db,order.id))return false;
+  if(await hasOpenDisputeSupabase(order.id))return false;
   const f=order.financials||{};
   if(f.protectionUntil&&Date.now()<Date.parse(f.protectionUntil))return false;
-  const claim=await supabaseAdmin.from('order_financials').update({settlement_claimed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('order_id',String(order.id)).eq('settled',false).is('settlement_claimed_at',null).select('order_id').maybeSingle();
-  if(claim.error)throw new Error('Não foi possível reservar a liquidação financeira: '+claim.error.message);
-  if(!claim.data)return false;
-  await addPendingForPaidOrder(db,order);
   const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean).map(String))];
   if(!sellerIds.length)return false;
-  order.financials={...f,settled:true,settledAt:new Date().toISOString(),protectionStatus:'Concluída',sellers:{...(f.sellers||{})}};
-  await upsertOrderFinancials(order.id,{settled:true,settled_at:order.financials.settledAt,protection_status:'Concluída',sellers:order.financials.sellers});
-  for(const sellerId of sellerIds){
-    const share=calculateSellerShare(order,sellerId); const wallet=await ensureWallet(db,sellerId);
-    await updateWalletSupabase(sellerId,{pending:-share.net}); wallet.pending=Math.max(0,Number(wallet.pending||0)-share.net);
-    await updateWalletSupabase(sellerId,{available:share.net,totalEarned:share.net}); wallet.available=Number(wallet.available||0)+share.net;
-    wallet.totalEarned=Number(wallet.totalEarned||0)+share.net;
-    order.financials.sellers[sellerId]={...(order.financials.sellers[sellerId]||{}),...share};
-    await addWalletTx(db,sellerId,'sale_released',share.net,`Venda #${String(order.id).slice(-8)} libertada após 30 minutos de proteção`,{orderId:order.id,gross:share.gross,commission:share.commission,protectionUntil:f.protectionUntil||null});
-    notify(db,sellerId,'wallet','Valor libertado',`Kz ${share.net.toLocaleString('pt-AO')} foram adicionados ao teu saldo disponível após o período de proteção.`,{orderId:order.id,amount:share.net});
+  const nowIso=new Date().toISOString();
+  const claim=await supabaseAdmin.from('order_financials').update({settlement_claimed_at:nowIso,updated_at:nowIso}).eq('order_id',String(order.id)).eq('settled',false).is('settlement_claimed_at',null).select('order_id').maybeSingle();
+  if(claim.error)throw new Error('Não foi possível reservar a liquidação financeira: '+claim.error.message);
+  if(!claim.data)return false;
+  try{
+    await addPendingForPaidOrder(db,order);
+    order.financials={...f,sellers:{...(f.sellers||{})}};
+    for(const sellerId of sellerIds){
+      const share=calculateSellerShare(order,sellerId);
+      const wallet=await ensureWallet(db,sellerId);
+      await updateWalletSupabase(sellerId,{pending:-share.net,available:share.net,totalEarned:share.net});
+      wallet.pending=Math.max(0,Number(wallet.pending||0)-share.net);
+      wallet.available=Number(wallet.available||0)+share.net;
+      wallet.totalEarned=Number(wallet.totalEarned||0)+share.net;
+      order.financials.sellers[sellerId]={...(order.financials.sellers[sellerId]||{}),...share};
+      await addWalletTx(db,sellerId,'sale_released',share.net,`Venda #${String(order.id).slice(-8)} libertada após 30 minutos de proteção`,{orderId:order.id,gross:share.gross,commission:share.commission,protectionUntil:f.protectionUntil||null});
+      notify(db,sellerId,'wallet','Valor libertado',`Kz ${share.net.toLocaleString('pt-AO')} foram adicionados ao teu saldo disponível após o período de proteção.`,{orderId:order.id,amount:share.net});
+    }
+    const settledAt=new Date().toISOString();
+    order.financials={...order.financials,settled:true,settledAt,protectionStatus:'Concluída'};
+    await upsertOrderFinancials(order.id,{settled:true,settled_at:settledAt,protection_status:'Concluída',settlement_claimed_at:nowIso,sellers:order.financials.sellers});
+    return true;
+  }catch(error){
+    try{
+      await supabaseAdmin.from('order_financials').update({settlement_claimed_at:null,updated_at:new Date().toISOString()}).eq('order_id',String(order.id)).eq('settled',false);
+    }catch(resetError){
+      console.error('Não foi possível libertar a reserva de liquidação após falha:',resetError.message||resetError);
+    }
+    throw error;
   }
-  return true;
 }
 
 async function processProtectionReleases(db){
+  if(!supabaseAdmin)return false;
   let changed=false;
-  for(const order of db.orders){
-    if(order.status!=='Entregue'||order.financials?.settled)continue;
-    if(paymentStatusLabel(order.payment?.status)!=='Pago')continue;
-    if(!order.financials?.protectionUntil)continue;
-    if(Date.now()<Date.parse(order.financials.protectionUntil))continue;
-    if(hasOpenDispute(db,order.id)){order.financials={...(order.financials||{}),protectionStatus:'Bloqueada por disputa',disputeOpen:true};changed=true;continue;}
-    if(await settleDeliveredOrder(db,order))changed=true;
+  const nowIso=new Date().toISOString();
+  const {data:financialRows,error:financialError}=await supabaseAdmin
+    .from('order_financials')
+    .select('order_id,protection_until,settled,settlement_claimed_at,refunded,cancelled')
+    .eq('settled',false)
+    .eq('refunded',false)
+    .eq('cancelled',false)
+    .not('protection_until','is',null)
+    .lte('protection_until',nowIso);
+  if(financialError)throw new Error('Não foi possível carregar proteções financeiras expiradas: '+financialError.message);
+  for(const row of financialRows||[]){
+    try{
+      if(row.settlement_claimed_at)continue;
+      const order=await getSupabaseOrderForId(String(row.order_id),db);
+      if(!order)continue;
+      await mirrorOrderToLegacy(db,order);
+      if(order.status!=='Entregue'||paymentStatusLabel(order.payment?.status)!=='Pago')continue;
+      if(await hasOpenDisputeSupabase(order.id)){
+        await upsertOrderFinancials(order.id,{protection_status:'Bloqueada por disputa',dispute_open:true});
+        order.financials={...(order.financials||{}),protectionStatus:'Bloqueada por disputa',disputeOpen:true};
+        changed=true;
+        continue;
+      }
+      if(await settleDeliveredOrder(db,order))changed=true;
+    }catch(error){
+      console.error(`Falha ao processar liberação do pedido #${String(row.order_id).slice(-8)}:`,error.message||error);
+    }
   }
   if(changed)write(db);
   return changed;
@@ -1002,7 +1044,7 @@ async function refundPendingOrder(db,order,reason='Pagamento reembolsado'){
     const share=calculateSellerShare(order,sellerId);
     const wallet=await ensureWallet(db,sellerId);
     if(f.pendingCredited){
-      await updateWalletSupabase(sellerId,{pending:-share.net}); wallet.pending=Math.max(0,Number(wallet.pending||0)-share.net);
+      await updateWalletSupabase(sid,{pending:-share.net}); wallet.pending=Math.max(0,Number(wallet.pending||0)-share.net);
       await addWalletTx(db,sellerId,'sale_refunded',-share.net,reason,{orderId:order.id,gross:share.gross,commission:share.commission});
     }
   }
@@ -1028,8 +1070,8 @@ const server=http.createServer(async(req,res)=>{
     const currentUser=await auth(db,req);
     if(currentUser && isBlocked(db,currentUser.id)) return json(res,403,{error:'A tua conta está temporariamente bloqueada.'});
     await processProtectionReleases(db);
-    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'2.0.1',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
-    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'2.0.1',supabase:!!(supabaseAuth&&supabaseAdmin)});
+    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'2.0.3',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
+    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'2.0.3',supabase:!!(supabaseAuth&&supabaseAdmin)});
 
     if(u.pathname==='/api/register'&&req.method==='POST'){
       if(!supabaseAdmin || !supabaseAuth) return json(res,503,{error:'Supabase não está configurado no servidor.'});
