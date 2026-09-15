@@ -36,22 +36,53 @@ const supabaseAdmin =
       })
     : null;
 
+// ============================================================
+// USERS/PROFILES — SUPABASE ONLY
+// No user identity is stored in db.json.
+// ============================================================
+const profileCache = new Map();
+function cacheUserProfile(user){
+  if(user?.id) profileCache.set(String(user.id), user);
+  return user;
+}
+function cachedUser(userId){return profileCache.get(String(userId))||null;}
+async function getSupabaseUserById(userId){
+  const id=String(userId||'').trim();
+  if(!id||!supabaseAdmin)return null;
+  const cached=cachedUser(id);
+  if(cached)return cached;
+  const {data:auData,error:auError}=await supabaseAdmin.auth.admin.getUserById(id);
+  if(auError||!auData?.user)return null;
+  const au=auData.user;
+  const {data:p,error}=await supabaseAdmin.from('profiles').select('id,full_name,phone,avatar_url,role,verified,score,created_at,updated_at').eq('id',id).maybeSingle();
+  if(error)throw new Error('Não foi possível carregar o perfil do utilizador: '+error.message);
+  const profile=p||{};
+  const permanent=await supabaseAdmin.from('admin_users').select('user_id').eq('user_id',id).eq('active',true).maybeSingle();
+  const role=permanent.data?'admin':(['buyer','seller'].includes(String(profile.role))?String(profile.role):'buyer');
+  return cacheUserProfile({id,name:String(profile.full_name||au.user_metadata?.full_name||au.user_metadata?.name||au.email?.split('@')[0]||'Utilizador'),email:String(au.email||''),role,score:Number(profile.score||50),verified:!!profile.verified,avatar:String(profile.avatar_url||''),phone:String(profile.phone||''),createdAt:profile.created_at||au.created_at||new Date().toISOString()});
+}
+
 const demoProducts = [
   {id:'p1',name:'iPhone 13 128GB',price:450000,cat:'Eletrónicos',emoji:'📱',seller:'Beni Store',sellerId:'demo1',verified:true,rating:4.9,description:'iPhone 13 128GB em excelente estado.',photos:[]},
   {id:'p2',name:'Smart TV 43"',price:320000,cat:'Eletrónicos',emoji:'📺',seller:'Casa Digital',sellerId:'demo2',verified:true,rating:4.8,description:'Smart TV 43 polegadas, imagem nítida e excelente para entretenimento.',photos:[]},
   {id:'p3',name:'Conjunto Streetwear',price:45000,cat:'Moda',emoji:'👕',seller:'Style AO',sellerId:'demo3',verified:true,rating:4.7,description:'Conjunto streetwear moderno.',photos:[]}
 ];
 
-if (!fs.existsSync(DB)) fs.writeFileSync(DB, JSON.stringify({users:[],stores:[],products:demoProducts,orders:[],sessions:[],favorites:[],carts:[],conversations:[],messages:[],reviews:[],notifications:[],disputes:[],wallets:[],walletTransactions:[],deliveries:[],securityEvents:[],reports:[],blockedUsers:[]}, null, 2));
+if (!fs.existsSync(DB)) fs.writeFileSync(DB, JSON.stringify({stores:[],products:demoProducts,orders:[],sessions:[],favorites:[],carts:[],conversations:[],messages:[],reviews:[],notifications:[],disputes:[],wallets:[],walletTransactions:[],deliveries:[],securityEvents:[],reports:[],blockedUsers:[]}, null, 2));
 
 function read(){return JSON.parse(fs.readFileSync(DB,'utf8'));}
 function write(d){fs.writeFileSync(DB,JSON.stringify(d,null,2));}
 function ensureDB(db){
-  for(const k of ['users','stores','products','orders','sessions','favorites','carts','conversations','messages','reviews','notifications','disputes','wallets','walletTransactions','deliveries','securityEvents','reports','blockedUsers']) if(!Array.isArray(db[k])) db[k]=[];
+  for(const k of ['stores','products','orders','sessions','favorites','carts','conversations','messages','reviews','notifications','disputes','wallets','walletTransactions','deliveries','securityEvents','reports','blockedUsers']) if(!Array.isArray(db[k])) db[k]=[];
   for(const p of db.products){ if(!Array.isArray(p.photos)) p.photos=[]; if(!p.description) p.description='Produto disponível na Kuanza Line.'; }
   return db;
 }
 const ALLOWED_ORIGIN=String(process.env.KUANZA_ALLOWED_ORIGIN||'https://kuanza-line.onrender.com').trim();
+const KUANZA_PAYMENT_BENEFICIARY=String(process.env.KUANZA_PAYMENT_BENEFICIARY||'Kuanza Line').trim();
+const KUANZA_PAYMENT_BANK=String(process.env.KUANZA_PAYMENT_BANK||'').trim();
+const KUANZA_PAYMENT_ACCOUNT=String(process.env.KUANZA_PAYMENT_ACCOUNT||'').trim();
+const KUANZA_PAYMENT_IBAN=String(process.env.KUANZA_PAYMENT_IBAN||'').trim();
+const KUANZA_PAYMENT_ENTITY=String(process.env.KUANZA_PAYMENT_ENTITY||'').trim();
 function json(res,code,data){const origin=ALLOWED_ORIGIN||'*';res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'Content-Type,Authorization','Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'strict-origin-when-cross-origin','Permissions-Policy':'camera=(),microphone=(),geolocation=(self)','Cache-Control':'no-store'});res.end(JSON.stringify(data));}
 function body(req,max=8*1024*1024){return new Promise((resolve,reject)=>{let s='',size=0;req.on('data',c=>{size+=c.length;if(size>max){reject(new Error('Dados demasiado grandes.'));req.destroy();return;}s+=c});req.on('end',()=>{try{resolve(s?JSON.parse(s):{})}catch(e){reject(new Error('JSON inválido.'))}});req.on('error',reject)})}
 function token(){return crypto.randomBytes(24).toString('hex');}
@@ -88,7 +119,7 @@ async function migrateFavoritesAndCart(db){
   }catch(e){console.error('Migração inicial de favoritos/carrinho:',e.message||e);}
 }
 
-async function auth(db,req){
+async function auth(req){
   const accessToken=(req.headers.authorization||'').replace('Bearer ','').trim();
   if(!accessToken || !supabaseAuth) return null;
 
@@ -138,13 +169,7 @@ async function auth(db,req){
     createdAt:p.created_at||au.created_at||new Date().toISOString()
   };
 
-  // Compatibility mirror for the current marketplace modules.
-  // Supabase Auth/Profile remains the source of truth for identity.
-  const i=db.users.findIndex(x=>String(x.id)===String(user.id));
-  if(i>=0) db.users[i]={...db.users[i],...user};
-  else db.users.push(user);
-
-  return user;
+  return cacheUserProfile(user);
 }
 function calculateScore(db,u){
   if(!u)return 0;
@@ -152,7 +177,7 @@ function calculateScore(db,u){
   const reviews=db.reviews.filter(r=>r.sellerId===u.id);
   const avg=reviews.length?reviews.reduce((a,r)=>a+Number(r.rating||0),0)/reviews.length:0;
   const cancellations=db.orders.filter(o=>o.sellerId===u.id&&o.status==='Cancelado').length;
-  const complaints=Number(u.complaints||0);
+  const complaints=Array.isArray(db.reports)?db.reports.filter(r=>r.targetType==='user'&&String(r.targetId)===String(u.id)).length:Number(u.complaints||0);
   const response=Number(u.responseTimeMinutes||0);
   let score=50;
   score+=Math.min(25,completed*3);
@@ -169,7 +194,7 @@ function scoreLabel(score){if(score>=90)return'Excelente';if(score>=75)return'Bo
 function publicUser(u,db){if(!u)return null;const completedOrders=db.orders.filter(o=>o.status==='Concluído'&&((o.userId===u.id)|| (Array.isArray(o.items)&&o.items.some(i=>i.sellerId===u.id||i.seller===u.name)))).length;const receivedReviews=db.reviews.filter(r=>r.sellerId===u.id).length;const cancelledOrders=db.orders.filter(o=>o.userId===u.id&&o.status==='Cancelado').length;const score=calculateScore(db,u);return{id:u.id,name:u.name,email:u.email,role:u.role,score,scoreLabel:scoreLabel(score),avatar:u.avatar||'',verified:!!u.verified,completedOrders,receivedReviews,cancelledOrders};}
 function getStore(db,ownerId){return db.stores.find(x=>x.ownerId===ownerId)||null;}
 function publicProduct(db,p){
-  const seller=db.users.find(u=>String(u.id)===String(p.sellerId));
+  const seller=cachedUser(p.sellerId);
   const store=getStore(db,p.sellerId);
   return {
     ...p,
@@ -446,7 +471,9 @@ async function supabaseOrdersToPublic(rows,db){
       payment:{
         method:String(row.payment_method||''),
         status:String(row.payment_status||'Pendente'),
-        reference:row.payment_reference||null
+        reference:row.payment_reference||null,
+        internalReference:(()=>{const h=Array.isArray(row.status_history)?row.status_history:[];const x=h.find(v=>v&&v.paymentInternalReference);return String(x?.paymentInternalReference||'').trim()||null;})(),
+        instructions:null
       },
       delivery:{
         method:String(row.delivery_method||'delivery'),
@@ -462,6 +489,7 @@ async function supabaseOrdersToPublic(rows,db){
       ...(financials?{financials}:legacy?.financials?{financials:legacy.financials}:{}),
     });
   }
+  for(const order of out){ if(order.payment)order.payment.instructions=paymentInstructions(order); }
   return out;
 }
 
@@ -500,40 +528,35 @@ async function createSupabaseOrder(db,user,b){
   if(!supabaseAdmin)throw new Error('Supabase não está configurado no servidor.');
   const rawItems=Array.isArray(b.items)?b.items:[];
   if(!rawItems.length)return {error:'O carrinho está vazio.'};
-
   const requestedIds=[...new Set(rawItems.map(raw=>String(raw.productId||raw.id||'').trim()).filter(Boolean))];
   if(!requestedIds.length)return {error:'Nenhum produto válido no carrinho.'};
-
   const {data:products,error:productsError}=await supabaseAdmin
     .from('products')
     .select('id,seller_id,store_id,category_id,name,price,stock,status,description,created_at,updated_at')
     .in('id',requestedIds);
   if(productsError)throw new Error('Não foi possível consultar os produtos para o pedido: '+productsError.message);
-
   const productMap=new Map((products||[]).map(p=>[String(p.id),p]));
-  const items=[];
+  const requestedByProduct=new Map();
   let subtotal=0;
   for(const raw of rawItems){
     const productId=String(raw.productId||raw.id||'').trim();
     const product=productMap.get(productId);
-    if(!product)continue;
-    if(String(product.status||'active')!=='active')continue;
+    if(!product||String(product.status||'active')!=='active')continue;
     const quantity=Math.max(1,Math.min(99,Math.floor(Number(raw.quantity||raw.qty||1))));
-    if(Number(product.stock||0)>0&&quantity>Number(product.stock))return {error:`Quantidade superior ao stock disponível para ${product.name}.`};
+    requestedByProduct.set(productId,(requestedByProduct.get(productId)||0)+quantity);
+  }
+  const items=[];
+  for(const [productId,quantity] of requestedByProduct.entries()){
+    const product=productMap.get(productId);
+    if(!product)continue;
+    const available=Number(product.stock||0);
+    if(available<quantity)return {error:`Stock insuficiente para ${product.name}. Disponível: ${available}.`};
     const unitPrice=Number(product.price||0);
     const itemTotal=unitPrice*quantity;
     subtotal+=itemTotal;
-    items.push({
-      product_id:String(product.id),
-      seller_id:product.seller_id?String(product.seller_id):null,
-      product_name:String(product.name||'Produto'),
-      unit_price:unitPrice,
-      quantity,
-      total:itemTotal
-    });
+    items.push({product_id:String(product.id),seller_id:product.seller_id?String(product.seller_id):null,product_name:String(product.name||'Produto'),unit_price:unitPrice,quantity,total:itemTotal});
   }
   if(!items.length)return {error:'Nenhum produto válido no carrinho.'};
-
   const paymentMethods=['multicaixa_express','bank_transfer','card'];
   const deliveryMethods=['delivery','pickup'];
   const paymentMethod=String(b.paymentMethod||'');
@@ -544,48 +567,56 @@ async function createSupabaseOrder(db,user,b){
   if(!paymentMethods.includes(paymentMethod))return {error:'Método de pagamento inválido.'};
   if(!deliveryMethods.includes(deliveryMethod))return {error:'Forma de entrega inválida.'};
   if(!deliveryAddress)return {error:'Indica a morada ou ponto de entrega.'};
-
   const deliveryFee=deliveryMethod==='delivery'?1500:0;
   const grandTotal=subtotal+deliveryFee;
   const now=new Date().toISOString();
-  const statusHistory=[{status:'Pendente',at:now}];
-  const {data:createdOrder,error:orderError}=await supabaseAdmin
-    .from('orders')
-    .insert({
-      buyer_id:String(user.id),
-      status:'Pendente',
-      subtotal,
-      delivery_fee:deliveryFee,
-      total:grandTotal,
-      delivery_method:deliveryMethod,
-      recipient_name:recipient,
-      recipient_phone:phone,
-      delivery_address:deliveryAddress,
-      payment_method:paymentMethod,
-      payment_status:'Pendente',
-      payment_reference:null,
-      status_history:statusHistory
-    })
-    .select('id,buyer_id,status,subtotal,delivery_fee,total,delivery_method,recipient_name,recipient_phone,delivery_address,payment_method,payment_status,payment_reference,status_history,created_at,updated_at')
-    .single();
+  const internalReference=generateKuanzaPaymentReference();
+  const statusHistory=[{status:'Pendente',at:now},{paymentInternalReference:internalReference,at:now}];
+  const {data:createdOrder,error:orderError}=await supabaseAdmin.from('orders').insert({
+    buyer_id:String(user.id),status:'Pendente',subtotal,delivery_fee:deliveryFee,total:grandTotal,
+    delivery_method:deliveryMethod,recipient_name:recipient,recipient_phone:phone,delivery_address:deliveryAddress,
+    payment_method:paymentMethod,payment_status:'Pendente',payment_reference:null,status_history:statusHistory
+  }).select('id,buyer_id,status,subtotal,delivery_fee,total,delivery_method,recipient_name,recipient_phone,delivery_address,payment_method,payment_status,payment_reference,status_history,created_at,updated_at').single();
   if(orderError)throw new Error('Não foi possível criar o pedido no Supabase: '+orderError.message);
-
   const orderId=String(createdOrder.id);
   const {error:itemsError}=await supabaseAdmin.from('order_items').insert(items.map(item=>({...item,order_id:orderId})));
-  if(itemsError){
+  if(itemsError){await supabaseAdmin.from('orders').delete().eq('id',orderId);throw new Error('Não foi possível guardar os itens do pedido: '+itemsError.message);}
+
+  // Optimistic compare-and-swap stock reservation. Each update succeeds only
+  // if the stock value read immediately before the order still matches.
+  const reservations=[];
+  try{
+    for(const item of items.slice().sort((a,b)=>String(a.product_id).localeCompare(String(b.product_id)))){
+      const product=productMap.get(String(item.product_id));
+      const before=Number(product.stock||0);
+      const after=before-Number(item.quantity||0);
+      const {data:changed,error:stockError}=await supabaseAdmin.from('products').update({stock:after,status:after===0?'inactive':String(product.status||'active'),updated_at:new Date().toISOString()}).eq('id',String(item.product_id)).eq('stock',before).select('id,stock,status').maybeSingle();
+      if(stockError)throw new Error('Não foi possível reservar o stock para '+item.product_name+': '+stockError.message);
+      if(!changed)throw new Error(`O stock de ${item.product_name} acabou de mudar. Atualiza a página e tenta novamente.`);
+      reservations.push({productId:String(item.product_id),before,after});
+    }
+  }catch(e){
+    for(const r of reservations.slice().reverse()){
+      await supabaseAdmin.from('products').update({stock:r.before,status:'active',updated_at:new Date().toISOString()}).eq('id',r.productId).eq('stock',r.after);
+    }
+    await supabaseAdmin.from('order_items').delete().eq('order_id',orderId);
     await supabaseAdmin.from('orders').delete().eq('id',orderId);
-    throw new Error('Não foi possível guardar os itens do pedido: '+itemsError.message);
+    throw e;
   }
 
   const order=(await supabaseOrdersToPublic([createdOrder],db))[0];
-  await mirrorOrderToLegacy(db,order);
-  await ensureDeliveryForOrder(db,order);
+  if(order){
+    order.payment=order.payment||{};
+    order.payment.internalReference=internalReference;
+    order.payment.instructions=paymentInstructions(order);
+    await mirrorOrderToLegacy(db,order);
+    await ensureDeliveryForOrder(db,order);
+  }
   const sellerIds=[...new Set(items.map(i=>i.seller_id).filter(Boolean).map(String))];
   for(const sid of sellerIds)notify(db,sid,'sale','Novo pedido',`Recebeste um novo pedido #${String(order.id).slice(-8)}.`,{orderId:order.id});
   write(db);
   return {order};
 }
-
 async function updateSupabaseOrderStatus(orderId,next,db){
   if(!supabaseAdmin)throw new Error('Supabase não está configurado no servidor.');
   const current=await getSupabaseOrderForId(orderId,db);
@@ -671,12 +702,38 @@ const ORDER_TRANSITIONS={
 function canTransition(map,current,next){return current===next||((map[current]||[]).includes(next));}
 
 function paymentStatusLabel(status){return PAYMENT_STATUSES.includes(String(status||''))?String(status):'Pendente';}
+function generateKuanzaPaymentReference(){
+  const d=new Date();
+  const stamp=d.toISOString().slice(0,10).replace(/-/g,'');
+  const random=crypto.randomBytes(3).toString('hex').toUpperCase();
+  return `KL-${stamp}-${random}`;
+}
+function internalPaymentReference(order){
+  const history=Array.isArray(order?.statusHistory)?order.statusHistory:[];
+  const item=history.find(x=>x&&x.paymentInternalReference);
+  return String(item?.paymentInternalReference||'').trim()||null;
+}
+function paymentInstructions(order){
+  const total=Number(order?.total||0);
+  return {
+    beneficiary:KUANZA_PAYMENT_BENEFICIARY,
+    bank:KUANZA_PAYMENT_BANK||null,
+    account:KUANZA_PAYMENT_ACCOUNT||null,
+    iban:KUANZA_PAYMENT_IBAN||null,
+    entity:KUANZA_PAYMENT_ENTITY||null,
+    internalReference:internalPaymentReference(order),
+    amount:total,
+    configured:!!(KUANZA_PAYMENT_BANK&&KUANZA_PAYMENT_ACCOUNT)
+  };
+}
 function publicPayment(order){
   if(!order)return null;
   return {
     method:String(order.payment?.method||''),
     status:paymentStatusLabel(order.payment?.status),
-    reference:order.payment?.reference||null
+    reference:order.payment?.reference||null,
+    internalReference:internalPaymentReference(order),
+    instructions:paymentInstructions(order)
   };
 }
 async function updateSupabasePayment(orderId,nextStatus,reference,db){
@@ -1060,14 +1117,6 @@ async function refundPendingOrder(db,order,reason='Pagamento reembolsado'){
   return true;
 }
 
-async function releaseReservedStockForOrder(db,orderId,reason='Stock libertado'){
-  if(!supabaseAdmin||!orderId)throw new Error('Supabase não está configurado no servidor.');
-  const result=await supabaseAdmin.rpc('kuanza_release_order_stock',{p_order_id:String(orderId),p_reason:String(reason)});
-  if(result.error)throw new Error('Não foi possível libertar o stock reservado: '+result.error.message);
-  const data=result.data||{};
-  return {released:data.released===true,alreadyReleased:data.already_released===true,items:data.items||[],orderId:String(orderId)};
-}
-
 const rateBuckets=new Map();
 function rateLimit(req,key,limit=60,windowMs=60000){const now=Date.now();const id=key+'|'+(req.socket.remoteAddress||'unknown');const a=rateBuckets.get(id)||[];const fresh=a.filter(t=>now-t<windowMs);fresh.push(now);rateBuckets.set(id,fresh);return fresh.length<=limit;}
 function audit(db,req,userId,event,meta={}){if(!Array.isArray(db.securityEvents))db.securityEvents=[];db.securityEvents.unshift({id:crypto.randomUUID(),userId:userId||null,event,ip:req.socket.remoteAddress||'unknown',at:new Date().toISOString(),meta});if(db.securityEvents.length>1000)db.securityEvents=db.securityEvents.slice(0,1000);}
@@ -1082,7 +1131,7 @@ const server=http.createServer(async(req,res)=>{
     if(!globalThis.__kuanzaDeliveryMigrationStarted){globalThis.__kuanzaDeliveryMigrationStarted=true;migrateDeliveriesToSupabase(db);}
     if(!globalThis.__kuanzaFinancialMigrationStarted){globalThis.__kuanzaFinancialMigrationStarted=true;migrateFinancialsToSupabase(db);}
     if(!rateLimit(req, u.pathname.startsWith('/api/login')?'login':u.pathname.startsWith('/api/register')?'register':'api', u.pathname.startsWith('/api/login')?12:u.pathname.startsWith('/api/register')?8:120, 60000)) return json(res,429,{error:'Muitas solicitações. Tenta novamente em instantes.'});
-    const currentUser=await auth(db,req);
+    const currentUser=await auth(req);
     if(currentUser && isBlocked(db,currentUser.id)) return json(res,403,{error:'A tua conta está temporariamente bloqueada.'});
     await processProtectionReleases(db);
     if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'2.0.4.2',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
@@ -1137,10 +1186,7 @@ const server=http.createServer(async(req,res)=>{
         return json(res,201,{ok:true,user:{id:uid,name,email,role,score:50,verified:false},token:null,requiresEmailConfirmation:true,message:'Conta criada. Confirma o teu email para iniciar sessão.'});
       }
 
-      const user={id:uid,name,email,role,score:50,verified:false,avatar:'',createdAt:new Date().toISOString()};
-      const i=db.users.findIndex(x=>x.id===uid);
-      if(i>=0)db.users[i]={...db.users[i],...user}; else db.users.push(user);
-      write(db);
+      const user=cacheUserProfile({id:uid,name,email,role,score:50,verified:false,avatar:'',createdAt:new Date().toISOString()});
       audit(db,req,uid,'supabase_register',{role});
       write(db);
       return json(res,201,{token:session.access_token,user:publicUser(user,db)});
@@ -1160,9 +1206,9 @@ const server=http.createServer(async(req,res)=>{
       write(db);
       return json(res,200,{token:data.session.access_token,user:publicUser(user,db)});
     }
-    if(u.pathname==='/api/me'&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Não autenticado.'});const pu=publicUser(user,db);return json(res,200,{...pu,user:pu});}
+    if(u.pathname==='/api/me'&&req.method==='GET'){const user=await auth(req);if(!user)return json(res,401,{error:'Não autenticado.'});const pu=publicUser(user,db);return json(res,200,{...pu,user:pu});}
     if(u.pathname==='/api/me/score'&&req.method==='GET'){
-      const user=await auth(db,req); if(!user)return json(res,401,{error:'Não autenticado.'});
+      const user=await auth(req); if(!user)return json(res,401,{error:'Não autenticado.'});
       const completed=db.orders.filter(o=>o.status==='Concluído'&&Array.isArray(o.items)&&o.items.some(i=>i.sellerId===user.id||i.seller===user.name)).length;
       const reviews=db.reviews.filter(r=>r.sellerId===user.id);
       const avg=reviews.length?reviews.reduce((a,r)=>a+Number(r.rating||0),0)/reviews.length:0;
@@ -1173,28 +1219,32 @@ const server=http.createServer(async(req,res)=>{
       return json(res,200,{score,scoreLabel:scoreLabel(score),reviewCount:reviews.length,averageRating:Number(avg.toFixed(2)),factors});
     }
     if(u.pathname==='/api/me/role'&&req.method==='PATCH'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Não autenticado.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Não autenticado.'});
       if(!supabaseAuth)return json(res,503,{error:'Supabase não está configurado no servidor.'});
       const b=await body(req);
-      if(!['buyer','seller'].includes(b.role))return json(res,400,{error:'Tipo de conta inválido.'});
+      if(user.role==='admin')return json(res,403,{error:'A conta de administrador não pode mudar para comprador ou vendedor.'});
+       if(!['buyer','seller'].includes(b.role))return json(res,400,{error:'Tipo de conta inválido.'});
 
-      if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
-      if(user.role==='admin')return json(res,403,{error:'O tipo de conta de administrador não pode ser alterado.'});
+      // A alteração do próprio perfil é feita com o token do utilizador.
+      // Assim a política RLS profiles_update_own aplica-se corretamente:
+      // auth.uid() = id.
+      const accessToken=(req.headers.authorization||'').replace('Bearer ','').trim();
+      if(!accessToken)return json(res,401,{error:'Sessão inválida.'});
 
-      // O token já foi validado por auth() acima. A escrita é feita pelo
-      // service_role no servidor, evitando depender de uma política RLS
-      // específica para UPDATE do perfil. O servidor continua a validar
-      // estritamente que a mudança é apenas buyer <-> seller.
-      const { data: updatedProfile, error }=await supabaseAdmin
+      const supabaseUser=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
+        global:{headers:{Authorization:`Bearer ${accessToken}`}},
+        auth:{persistSession:false,autoRefreshToken:false}
+      });
+
+      const { data: updatedProfile, error }=await supabaseUser
         .from('profiles')
-        .update({role:String(b.role),updated_at:new Date().toISOString()})
+        .update({role:b.role})
         .eq('id',user.id)
         .select('id,full_name,phone,avatar_url,role,verified,score,created_at,updated_at')
         .maybeSingle();
 
       if(error)return json(res,403,{error:error.message||'Não foi possível mudar o tipo de conta.'});
-      if(!updatedProfile)return json(res,403,{error:'O teu perfil não foi atualizado.'});
-      if(String(updatedProfile.role)!==String(b.role))return json(res,409,{error:'O servidor não confirmou a mudança do tipo de conta.'});
+      if(!updatedProfile)return json(res,403,{error:'O teu perfil não foi atualizado. Verifica as permissões da tua conta.'});
 
       user.role=String(updatedProfile.role||b.role);
       user.name=String(updatedProfile.full_name||user.name||'Utilizador');
@@ -1203,8 +1253,7 @@ const server=http.createServer(async(req,res)=>{
       user.verified=!!updatedProfile.verified;
       user.score=Number(updatedProfile.score||user.score||50);
 
-      const i=db.users.findIndex(x=>x.id===user.id);
-      if(i>=0)db.users[i]={...db.users[i],...user};else db.users.push(user);
+      cacheUserProfile(user);
       audit(db,req,user.id,'role_changed',{role:user.role});write(db);
       const pu=publicUser(user,db);return json(res,200,{...pu,user:pu,ok:true});
     }
@@ -1242,7 +1291,7 @@ const server=http.createServer(async(req,res)=>{
 
     if(u.pathname==='/api/stores'&&(req.method==='POST'||req.method==='PATCH')){
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
       const b=await body(req,6*1024*1024);
       const {data:existing,error:findError}=await supabaseAdmin.from('stores').select('id,owner_id,name,slug,description,logo_url,location,phone,verified,created_at,updated_at').eq('owner_id',user.id).maybeSingle();
@@ -1330,7 +1379,7 @@ const server=http.createServer(async(req,res)=>{
 
     if(u.pathname==='/api/products'&&req.method==='POST'){
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
-      const user=await auth(db,req);
+      const user=await auth(req);
       if(!user)return json(res,401,{error:'Inicia sessão para publicar.'});
       if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor antes de publicar.'});
       const b=await body(req,10*1024*1024);
@@ -1343,6 +1392,7 @@ const server=http.createServer(async(req,res)=>{
       const condition=String(b.condition||'Usado').trim();
       const location=String(b.location||'').trim();
       if(!name||price<=0||!categoryValue)return json(res,400,{error:'Preenche nome, preço e categoria.'});
+      if(stock<1)return json(res,400,{error:'Indica pelo menos 1 unidade de stock.'});
       if(!validPhotos(photos))return json(res,400,{error:'O produto precisa de pelo menos 5 fotos reais. Podes adicionar até 10.'});
       if(description.length<15)return json(res,400,{error:'A descrição é obrigatória e deve ter pelo menos 15 caracteres.'});
       if(description.length>5000)return json(res,400,{error:'A descrição é demasiado longa.'});
@@ -1386,7 +1436,7 @@ const server=http.createServer(async(req,res)=>{
 
     if(pm&&req.method==='PATCH'){
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
-      const user=await auth(db,req);
+      const user=await auth(req);
       if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(user.role!=='seller')return json(res,403,{error:'Apenas vendedores podem editar produtos.'});
       const id=decodeURIComponent(pm[1]);
@@ -1413,7 +1463,8 @@ const server=http.createServer(async(req,res)=>{
       if(location.length>200)return json(res,400,{error:'A localização deve ter no máximo 200 caracteres.'});
       const category=await supabaseCategory(categoryValue);
       if(!category)return json(res,400,{error:'Categoria não encontrada ou inativa.'});
-      const patch={name,price,category_id:category.id,description,stock,status,updated_at:new Date().toISOString()};
+      const effectiveStatus=stock===0?'inactive':status;
+      const patch={name,price,category_id:category.id,description,stock,status:effectiveStatus,updated_at:new Date().toISOString()};
       if(b.slug!==undefined)patch.slug=slugify(b.slug)||productSlug(name);
       else if(!existing.slug)patch.slug=productSlug(name);
       const {data:p,error}=await supabaseAdmin.from('products').update(patch).eq('id',id).eq('seller_id',user.id).select('id,seller_id,store_id,category_id,name,slug,description,price,stock,status,views,created_at,updated_at').single();
@@ -1433,7 +1484,7 @@ const server=http.createServer(async(req,res)=>{
 
     const fav=u.pathname.match(/^\/api\/favorites\/([^/]+)$/);
     if(u.pathname==='/api/favorites'&&req.method==='GET'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
       const {data:rows,error}=await supabaseAdmin.from('favorites').select('product_id,created_at').eq('user_id',user.id).order('created_at',{ascending:false});
       if(error)return json(res,500,{error:'Não foi possível carregar os favoritos.',details:error.message});
@@ -1449,7 +1500,7 @@ const server=http.createServer(async(req,res)=>{
       for(const p of out)mirrorProductToLegacy(db,p);write(db);return json(res,200,out);
     }
     if(fav&&req.method==='POST'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
       const productId=decodeURIComponent(fav[1]);
       const {data:product,error:pe}=await supabaseAdmin.from('products').select('id').eq('id',productId).maybeSingle();
@@ -1460,7 +1511,7 @@ const server=http.createServer(async(req,res)=>{
       return json(res,201,{ok:true});
     }
     if(fav&&req.method==='DELETE'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
       const productId=decodeURIComponent(fav[1]);
       const {error}=await supabaseAdmin.from('favorites').delete().eq('user_id',user.id).eq('product_id',productId);
@@ -1470,7 +1521,7 @@ const server=http.createServer(async(req,res)=>{
 
     const cartItem=u.pathname.match(/^\/api\/cart\/([^/]+)$/);
     if(u.pathname==='/api/cart'&&req.method==='GET'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
       const {data:rows,error}=await supabaseAdmin.from('cart_items').select('id,product_id,quantity,created_at').eq('user_id',user.id).order('created_at',{ascending:true});
       if(error)return json(res,500,{error:'Não foi possível carregar o carrinho.',details:error.message});
@@ -1488,7 +1539,7 @@ const server=http.createServer(async(req,res)=>{
       for(const item of out)mirrorProductToLegacy(db,item.product);write(db);return json(res,200,out);
     }
     if(u.pathname==='/api/cart'&&req.method==='POST'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
       const b=await body(req);const productId=String(b.productId||'').trim();
       const {data:p,error:pe}=await supabaseAdmin.from('products').select('id,stock,status').eq('id',productId).maybeSingle();
@@ -1507,7 +1558,7 @@ const server=http.createServer(async(req,res)=>{
       return json(res,201,{ok:true,id:result.data.id,productId:productId,qty:Number(result.data.quantity),quantity:Number(result.data.quantity)});
     }
     if(cartItem&&req.method==='DELETE'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
       const productId=decodeURIComponent(cartItem[1]);
       const {error}=await supabaseAdmin.from('cart_items').delete().eq('user_id',user.id).eq('product_id',productId);
@@ -1516,7 +1567,7 @@ const server=http.createServer(async(req,res)=>{
     }
 
     if(u.pathname==='/api/orders'&&req.method==='POST'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão para comprar.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão para comprar.'});
       try{
         const b=await body(req);
         const result=await createSupabaseOrder(db,user,b);
@@ -1528,7 +1579,7 @@ const server=http.createServer(async(req,res)=>{
       }
     }
     if(u.pathname==='/api/orders'&&req.method==='GET'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão para ver pedidos.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão para ver pedidos.'});
       try{
         const orders=await getSupabaseOrdersForBuyer(user.id,db);
         for(const order of orders)await mirrorOrderToLegacy(db,order);
@@ -1545,7 +1596,7 @@ const server=http.createServer(async(req,res)=>{
     // Lista pagamentos de toda a plataforma para administradores.
     // ============================================================
     if(u.pathname==='/api/admin/payments'&&req.method==='GET'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(!adminOnly(user))return json(res,403,{error:'Apenas administradores podem gerir pagamentos.'});
       try{
         if(!supabaseAdmin)throw new Error('Supabase não está configurado no servidor.');
@@ -1573,17 +1624,17 @@ const server=http.createServer(async(req,res)=>{
     // ============================================================
     const paymentRoute=u.pathname.match(/^\/api\/orders\/([^/]+)\/payment$/);
     if(paymentRoute&&req.method==='GET'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       try{
         const order=await getSupabaseOrderForId(decodeURIComponent(paymentRoute[1]),db);
         if(!order)return json(res,404,{error:'Pedido não encontrado.'});
         const sellerIds=[...new Set((order.items||[]).map(i=>String(i.sellerId||'')).filter(Boolean))];
         if(order.userId!==user.id&&!sellerIds.includes(String(user.id))&&!adminOnly(user))return json(res,403,{error:'Sem permissão.'});
-        return json(res,200,{orderId:order.id,total:order.total,payment:publicPayment(order)});
+        return json(res,200,{orderId:order.id,total:order.total,payment:publicPayment(order),paymentInstructions:paymentInstructions(order)});
       }catch(e){return json(res,500,{error:e.message||'Não foi possível carregar o pagamento.'});}
     }
     if(paymentRoute&&req.method==='POST'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       try{
         const id=decodeURIComponent(paymentRoute[1]);
         const order=await getSupabaseOrderForId(id,db);
@@ -1592,18 +1643,18 @@ const server=http.createServer(async(req,res)=>{
         if(!PAYMENT_METHODS.includes(String(order.payment?.method||'')))return json(res,400,{error:'Método de pagamento inválido.'});
         if(['Pago','Reembolsado'].includes(paymentStatusLabel(order.payment?.status)))return json(res,409,{error:'Este pagamento não pode ser enviado novamente.'});
         const b=await body(req,64*1024);
-        const reference=String(b.reference||'').trim().slice(0,120);
+        const reference=String(b.reference||b.bankReference||b.bankPaymentReference||'').trim().slice(0,120);
         if(reference.length<3)return json(res,400,{error:'Indica a referência do pagamento.'});
         const updated=await updateSupabasePayment(id,'Aguardando confirmação',reference,db);
         if(!updated)return json(res,404,{error:'Pedido não encontrado.'});
         notify(db,user.id,'payment','Pagamento enviado','A referência do pagamento foi enviada e aguarda confirmação.',{orderId:id,status:'Aguardando confirmação'});
         const sellerIds=[...new Set((updated.items||[]).map(i=>String(i.sellerId||'')).filter(Boolean))];
         for(const sid of sellerIds)notify(db,sid,'payment','Pagamento enviado',`O pagamento do pedido #${String(id).slice(-8)} aguarda confirmação.`,{orderId:id,status:'Aguardando confirmação'});
-        write(db);return json(res,200,{orderId:id,payment:publicPayment(updated)});
+        write(db);return json(res,200,{orderId:id,payment:publicPayment(updated),paymentInstructions:paymentInstructions(updated)});
       }catch(e){return json(res,500,{error:e.message||'Não foi possível enviar o pagamento.'});}
     }
     if(paymentRoute&&req.method==='PATCH'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(!adminOnly(user))return json(res,403,{error:'Apenas administradores podem gerir pagamentos.'});
       try{
         const id=decodeURIComponent(paymentRoute[1]);
@@ -1631,9 +1682,6 @@ const server=http.createServer(async(req,res)=>{
             if(next==='Pago')await addPendingForPaidOrder(db,legacyOrder);
             if(next==='Pago'&&legacyOrder.status==='Entregue')await startDeliveryProtection(db,legacyOrder);
           }
-          if(['Falhou','Cancelado'].includes(next)){
-            await releaseReservedStockForOrder(db,id,`Pagamento ${next.toLowerCase()}`);
-          }
         }
         if(!updated)return json(res,404,{error:'Pedido não encontrado.'});
         audit(db,req,user.id,'payment_updated',{orderId:id,from:currentStatus,to:next});
@@ -1644,31 +1692,31 @@ const server=http.createServer(async(req,res)=>{
 
     // Kuanza Score V1.2: avaliações reais de compradores sobre vendedores/produtos.
     if(u.pathname==='/api/notifications'&&req.method==='GET'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       const list=db.notifications.filter(n=>n.userId===user.id).slice(0,50);
       return json(res,200,{items:list,unread:list.filter(n=>!n.read).length});
     }
     const nr=u.pathname.match(/^\/api\/notifications\/([^/]+)\/read$/);
     if(nr&&req.method==='PATCH'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       const n=db.notifications.find(x=>x.id===nr[1]&&x.userId===user.id);
       if(!n)return json(res,404,{error:'Notificação não encontrada.'});
       n.read=true;write(db);return json(res,200,n);
     }
     if(u.pathname==='/api/notifications/read-all'&&req.method==='PATCH'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       db.notifications.filter(n=>n.userId===user.id).forEach(n=>n.read=true);write(db);return json(res,200,{ok:true});
     }
     if(u.pathname==='/api/wallet'&&req.method==='GET'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       const summary=await walletSummary(db,user.id);return json(res,200,summary);
     }
     if(u.pathname==='/api/wallet/transactions'&&req.method==='GET'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       return json(res,200,(await getWalletSummary(user.id)).transactions);
     }
     if(u.pathname==='/api/wallet/withdraw'&&req.method==='POST'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       const b=await body(req);const amount=Math.floor(Number(b.amount||0));
       if(amount<=0)return json(res,400,{error:'Valor de levantamento inválido.'});
       if(amount<1000)return json(res,400,{error:'O levantamento mínimo é Kz 1.000.'});
@@ -1685,7 +1733,7 @@ const server=http.createServer(async(req,res)=>{
       }catch(e){return json(res,400,{error:e.message||'Não foi possível criar o levantamento.'});}
     }
     if(u.pathname==='/api/admin/withdrawals'&&req.method==='GET'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});
       const status=String(u.query.status||'').trim();
       let q=supabaseAdmin.from('withdrawals').select('*').order('requested_at',{ascending:false}).limit(200);
@@ -1695,7 +1743,7 @@ const server=http.createServer(async(req,res)=>{
     }
     const withdrawalRoute=u.pathname.match(/^\/api\/admin\/withdrawals\/([^/]+)$/);
     if(withdrawalRoute&&req.method==='PATCH'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});
       const id=decodeURIComponent(withdrawalRoute[1]); const b=await body(req,64*1024); const next=String(b.status||'').trim();
       if(!['Em análise','Aprovado','Pago','Rejeitado'].includes(next))return json(res,400,{error:'Estado de levantamento inválido.'});
@@ -1707,11 +1755,11 @@ const server=http.createServer(async(req,res)=>{
       }catch(e){return json(res,409,{error:e.message||'Não foi possível atualizar o levantamento.'});}
     }
     if(u.pathname==='/api/disputes'&&req.method==='GET'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       const {data,error}=await supabaseAdmin.from('disputes').select('*').or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`).order('created_at',{ascending:false});if(error)return json(res,500,{error:error.message});return json(res,200,(data||[]).map(d=>({id:String(d.legacy_id||d.id),orderId:String(d.order_id),userId:String(d.buyer_id),sellerId:d.seller_id?String(d.seller_id):null,reason:d.reason,description:d.description,status:d.status,decision:d.decision||undefined,adminNote:d.admin_note||undefined,createdAt:d.created_at,updatedAt:d.updated_at})));
     }
     if(u.pathname==='/api/disputes'&&req.method==='POST'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       const b=await body(req);const orderId=String(b.orderId||'');const order=await getSupabaseOrderForId(orderId,db);if(order&&String(order.userId)!==String(user.id))return json(res,404,{error:'Pedido não encontrado.'});
       if(!order)return json(res,404,{error:'Pedido não encontrado.'});
       const reason=String(b.reason||'').trim();
@@ -1731,7 +1779,7 @@ const server=http.createServer(async(req,res)=>{
 
     const disputeRoute=u.pathname.match(/^\/api\/disputes\/([^/]+)$/);
     if(disputeRoute&&req.method==='PATCH'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});
       const dispute=db.disputes.find(d=>String(d.id)===decodeURIComponent(disputeRoute[1]));
       if(!dispute)return json(res,404,{error:'Reclamação não encontrada.'});
@@ -1765,7 +1813,7 @@ const server=http.createServer(async(req,res)=>{
 
     // V1.3 seller dashboard
     if(u.pathname==='/api/seller/dashboard'&&req.method==='GET'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
       const period=['7','30','90','all'].includes(String(u.query.period||''))?String(u.query.period):'30';
       const cutoff=period==='all'?0:Date.now()-Number(period)*86400000;
@@ -1793,7 +1841,7 @@ const server=http.createServer(async(req,res)=>{
     }
 
     if(u.pathname==='/api/seller/orders'&&req.method==='GET'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
       try{
         if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
@@ -1822,7 +1870,7 @@ const server=http.createServer(async(req,res)=>{
     }
 
     if(u.pathname.startsWith('/api/seller/orders/')&&req.method==='PATCH'){
-      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
       const id=decodeURIComponent(u.pathname.split('/').pop()||'');
       try{
@@ -1856,9 +1904,6 @@ const server=http.createServer(async(req,res)=>{
             await upsertOrderFinancials(order.id,{cancelled:true,cancelled_at:new Date().toISOString(),protection_status:'Cancelada'});
             order.financials={...(order.financials||{}),cancelled:true,cancelledAt:new Date().toISOString(),protectionStatus:'Cancelada'};
           }
-          if(next==='Cancelado'){
-            await releaseReservedStockForOrder(db,order.id,'Pedido cancelado');
-          }
           notify(db,order.userId,'order','Pedido atualizado',`O pedido #${String(order.id).slice(-8)} está agora: ${next}.`,{orderId:order.id,status:next});
           const delivery=await ensureDeliveryForOrder(db,order); const ds=deliveryStatusFromOrderStatus(next);
           if(delivery&&delivery.status!==ds){
@@ -1873,7 +1918,7 @@ const server=http.createServer(async(req,res)=>{
     }
 
     if(u.pathname==='/api/deliveries'&&req.method==='GET'){
-      const user=await auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req); if(!user)return json(res,401,{error:'Inicia sessão.'});
       try{
         const {data,error}=await supabaseAdmin.from('deliveries').select('*').or(`buyer_id.eq.${user.id},seller_ids.cs.{${user.id}}`).order('created_at',{ascending:false}).limit(100);
         if(error)throw new Error(error.message);
@@ -1882,7 +1927,7 @@ const server=http.createServer(async(req,res)=>{
     }
 
     if(u.pathname.startsWith('/api/deliveries/')&&req.method==='GET'){
-      const user=await auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req); if(!user)return json(res,401,{error:'Inicia sessão.'});
       const id=decodeURIComponent(u.pathname.split('/').pop()||'');
       try{
         const d=await getSupabaseDeliveryForId(id); if(!d)return json(res,404,{error:'Entrega não encontrada.'});
@@ -1892,7 +1937,7 @@ const server=http.createServer(async(req,res)=>{
     }
 
     if(u.pathname.startsWith('/api/deliveries/')&&req.method==='PATCH'){
-      const user=await auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão.'});
+      const user=await auth(req); if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(user.role!=='seller')return json(res,403,{error:'Apenas vendedores podem atualizar a entrega.'});
       const id=decodeURIComponent(u.pathname.split('/').pop()||'');
       const b=await body(req); const allowed=['A preparar','Recolhida','Em trânsito','Chegou à zona','Entregue','Cancelada']; const next=String(b.status||'');
@@ -1919,11 +1964,12 @@ const server=http.createServer(async(req,res)=>{
     if(u.pathname==='/api/reviews'&&req.method==='GET'){
       const productId=String(u.query.productId||''); const sellerId=String(u.query.sellerId||'');
       let list=db.reviews.slice(); if(productId)list=list.filter(r=>r.productId===productId); if(sellerId)list=list.filter(r=>r.sellerId===sellerId);
-      list=list.map(r=>({...r,buyerName:(db.users.find(x=>x.id===r.buyerId)||{}).name||'Utilizador'})).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+      const buyerIds=[...new Set(list.map(r=>String(r.buyerId||'')).filter(Boolean))];for(const buyerId of buyerIds){try{await getSupabaseUserById(buyerId);}catch(_){}}
+      list=list.map(r=>({...r,buyerName:cachedUser(r.buyerId)?.name||'Utilizador'})).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
       return json(res,200,list);
     }
     if(u.pathname==='/api/reviews'&&req.method==='POST'){
-      const user=await auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão para avaliar.'});
+      const user=await auth(req); if(!user)return json(res,401,{error:'Inicia sessão para avaliar.'});
       const b=await body(req); const productId=String(b.productId||''); const product=db.products.find(x=>x.id===productId);
       if(!product)return json(res,404,{error:'Produto não encontrado.'});
       if(product.sellerId===user.id)return json(res,400,{error:'Não podes avaliar o teu próprio produto.'});
@@ -1931,23 +1977,23 @@ const server=http.createServer(async(req,res)=>{
       if(db.reviews.some(r=>r.productId===productId&&r.buyerId===user.id))return json(res,409,{error:'Já avalieste este produto.'});
       const comment=String(b.comment||'').trim().slice(0,500);
       const review={id:crypto.randomUUID(),productId,sellerId:product.sellerId,buyerId:user.id,rating,comment,createdAt:new Date().toISOString()};
-      db.reviews.unshift(review); const seller=db.users.find(x=>x.id===product.sellerId); if(seller){seller.score=calculateScore(db,seller);notify(db,seller.id,'review','Nova avaliação',`Recebeste uma nova avaliação de ${review.rating} estrelas.`,{productId:product.id,rating:review.rating});} write(db);
+      db.reviews.unshift(review); const seller=await getSupabaseUserById(product.sellerId); if(seller){seller.score=calculateScore(db,seller);cacheUserProfile(seller);notify(db,seller.id,'review','Nova avaliação',`Recebeste uma nova avaliação de ${review.rating} estrelas.`,{productId:product.id,rating:review.rating});} write(db);
       return json(res,201,{...review,buyerName:user.name,sellerScore:seller?calculateScore(db,seller):null});
     }
 
     // Security & moderation.
-    if(u.pathname==='/api/reports'&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});return json(res,200,adminOnly(user)?db.reports.slice(0,200):db.reports.filter(r=>r.reporterId===user.id).slice(0,100));}
-    if(u.pathname==='/api/reports'&&req.method==='POST'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const b=await body(req,256*1024);const targetType=String(b.targetType||'user');if(!['user','product','order','conversation'].includes(targetType))return json(res,400,{error:'Tipo de denúncia inválido.'});const targetId=String(b.targetId||'').trim();const reason=String(b.reason||'').trim().slice(0,120);const description=String(b.description||'').trim().slice(0,1000);if(!targetId||!reason)return json(res,400,{error:'Indica o alvo e o motivo da denúncia.'});const r={id:'REP-'+crypto.randomUUID(),reporterId:user.id,targetType,targetId,reason,description,status:'Aberta',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};db.reports.unshift(r);if(targetType==='user'){const t=db.users.find(x=>x.id===targetId);if(t)t.complaints=Number(t.complaints||0)+1;}audit(db,req,user.id,'report_created',{reportId:r.id,targetType,targetId});write(db);return json(res,201,r);}
-    const rr=u.pathname.match(/^\/api\/reports\/([^/]+)$/);if(rr&&req.method==='PATCH'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});const r=db.reports.find(x=>x.id===decodeURIComponent(rr[1]));if(!r)return json(res,404,{error:'Denúncia não encontrada.'});const b=await body(req,64*1024);const allowed=['Aberta','Em análise','Resolvida','Rejeitada'];if(!allowed.includes(String(b.status||'')))return json(res,400,{error:'Estado inválido.'});r.status=String(b.status);r.adminNote=String(b.adminNote||'').trim().slice(0,1000);r.updatedAt=new Date().toISOString();audit(db,req,user.id,'report_updated',{reportId:r.id,status:r.status});write(db);return json(res,200,r);}
-    if(u.pathname==='/api/admin/security'&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});return json(res,200,{events:db.securityEvents.slice(0,200),reports:db.reports.slice(0,200),blockedUsers:db.blockedUsers.slice(0,200)});}
-    if(u.pathname==='/api/admin/block'&&req.method==='POST'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});const b=await body(req,64*1024);const targetId=String(b.userId||'').trim();if(!targetId||targetId===user.id)return json(res,400,{error:'Utilizador inválido.'});if(!db.users.some(x=>x.id===targetId))return json(res,404,{error:'Utilizador não encontrado.'});let bl=db.blockedUsers.find(x=>x.userId===targetId);if(!bl){bl={id:'BLK-'+crypto.randomUUID(),userId:targetId,active:true,reason:String(b.reason||'').trim().slice(0,500),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};db.blockedUsers.push(bl);}else{bl.active=b.active!==false;bl.reason=String(b.reason||bl.reason||'').trim().slice(0,500);bl.updatedAt=new Date().toISOString();}audit(db,req,user.id,bl.active?'user_blocked':'user_unblocked',{userId:targetId,reason:bl.reason});write(db);return json(res,200,bl);}
+    if(u.pathname==='/api/reports'&&req.method==='GET'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});return json(res,200,adminOnly(user)?db.reports.slice(0,200):db.reports.filter(r=>r.reporterId===user.id).slice(0,100));}
+    if(u.pathname==='/api/reports'&&req.method==='POST'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});const b=await body(req,256*1024);const targetType=String(b.targetType||'user');if(!['user','product','order','conversation'].includes(targetType))return json(res,400,{error:'Tipo de denúncia inválido.'});const targetId=String(b.targetId||'').trim();const reason=String(b.reason||'').trim().slice(0,120);const description=String(b.description||'').trim().slice(0,1000);if(!targetId||!reason)return json(res,400,{error:'Indica o alvo e o motivo da denúncia.'});const r={id:'REP-'+crypto.randomUUID(),reporterId:user.id,targetType,targetId,reason,description,status:'Aberta',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};db.reports.unshift(r);audit(db,req,user.id,'report_created',{reportId:r.id,targetType,targetId});write(db);return json(res,201,r);}
+    const rr=u.pathname.match(/^\/api\/reports\/([^/]+)$/);if(rr&&req.method==='PATCH'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});const r=db.reports.find(x=>x.id===decodeURIComponent(rr[1]));if(!r)return json(res,404,{error:'Denúncia não encontrada.'});const b=await body(req,64*1024);const allowed=['Aberta','Em análise','Resolvida','Rejeitada'];if(!allowed.includes(String(b.status||'')))return json(res,400,{error:'Estado inválido.'});r.status=String(b.status);r.adminNote=String(b.adminNote||'').trim().slice(0,1000);r.updatedAt=new Date().toISOString();audit(db,req,user.id,'report_updated',{reportId:r.id,status:r.status});write(db);return json(res,200,r);}
+    if(u.pathname==='/api/admin/security'&&req.method==='GET'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});return json(res,200,{events:db.securityEvents.slice(0,200),reports:db.reports.slice(0,200),blockedUsers:db.blockedUsers.slice(0,200)});}
+    if(u.pathname==='/api/admin/block'&&req.method==='POST'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});const b=await body(req,64*1024);const targetId=String(b.userId||'').trim();if(!targetId||targetId===user.id)return json(res,400,{error:'Utilizador inválido.'});const targetUser=await getSupabaseUserById(targetId);if(!targetUser)return json(res,404,{error:'Utilizador não encontrado.'});let bl=db.blockedUsers.find(x=>x.userId===targetId);if(!bl){bl={id:'BLK-'+crypto.randomUUID(),userId:targetId,active:true,reason:String(b.reason||'').trim().slice(0,500),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};db.blockedUsers.push(bl);}else{bl.active=b.active!==false;bl.reason=String(b.reason||bl.reason||'').trim().slice(0,500);bl.updatedAt=new Date().toISOString();}audit(db,req,user.id,bl.active?'user_blocked':'user_unblocked',{userId:targetId,reason:bl.reason});write(db);return json(res,200,bl);}
 
     // Chat: one private conversation between a buyer and seller, linked optionally to a product.
-    if(u.pathname==='/api/conversations'&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const list=db.conversations.filter(c=>c.participants.includes(user.id)).map(c=>{const otherId=c.participants.find(id=>id!==user.id);const other=db.users.find(x=>x.id===otherId);const last=db.messages.filter(m=>m.conversationId===c.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))[0];const product=c.productId?db.products.find(p=>p.id===c.productId):null;return {...c,other:publicUser(other,db),otherName:other?.name||other?.full_name||'',lastMessage:last||null,lastMessageText:last?(last.type==='offer'?`Proposta: Kz ${Number(last.amount||0).toLocaleString('pt-AO')}`:(last.text||'')):'',product:product?publicProduct(db,product):null,productName:product?.name||'Conversa Kuanza Line'};}).sort((a,b)=>new Date(b.lastMessage?.createdAt||b.createdAt)-new Date(a.lastMessage?.createdAt||a.createdAt));return json(res,200,list);}
-    if(u.pathname==='/api/conversations'&&req.method==='POST'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const b=await body(req);const sellerId=String(b.sellerId||'');if(!sellerId||sellerId===user.id)return json(res,400,{error:'Vendedor inválido.'});const seller=db.users.find(x=>x.id===sellerId);if(!seller)return json(res,404,{error:'Vendedor não encontrado.'});const key=conversationKey(user.id,sellerId);let c=db.conversations.find(x=>x.key===key&&String(x.productId||'')===String(b.productId||''));if(!c){c={id:crypto.randomUUID(),key,participants:[user.id,sellerId],productId:b.productId||null,createdAt:new Date().toISOString()};db.conversations.push(c);write(db);}return json(res,201,c);}
+    if(u.pathname==='/api/conversations'&&req.method==='GET'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});const conversations=db.conversations.filter(c=>c.participants.includes(user.id));const otherIds=[...new Set(conversations.map(c=>c.participants.find(id=>id!==user.id)).filter(Boolean))];for(const otherId of otherIds){try{await getSupabaseUserById(otherId);}catch(_){}}const list=conversations.map(c=>{const otherId=c.participants.find(id=>id!==user.id);const other=cachedUser(otherId);const last=db.messages.filter(m=>m.conversationId===c.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))[0];const product=c.productId?db.products.find(p=>p.id===c.productId):null;return {...c,other:publicUser(other,db),otherName:other?.name||other?.full_name||'',lastMessage:last||null,lastMessageText:last?(last.type==='offer'?`Proposta: Kz ${Number(last.amount||0).toLocaleString('pt-AO')}`:(last.text||'')):'',product:product?publicProduct(db,product):null,productName:product?.name||'Conversa Kuanza Line'};}).sort((a,b)=>new Date(b.lastMessage?.createdAt||b.createdAt)-new Date(a.lastMessage?.createdAt||a.createdAt));return json(res,200,list);}
+    if(u.pathname==='/api/conversations'&&req.method==='POST'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});const b=await body(req);const sellerId=String(b.sellerId||'');if(!sellerId||sellerId===user.id)return json(res,400,{error:'Vendedor inválido.'});const seller=await getSupabaseUserById(sellerId);if(!seller)return json(res,404,{error:'Vendedor não encontrado.'});const key=conversationKey(user.id,sellerId);let c=db.conversations.find(x=>x.key===key&&String(x.productId||'')===String(b.productId||''));if(!c){c={id:crypto.randomUUID(),key,participants:[user.id,sellerId],productId:b.productId||null,createdAt:new Date().toISOString()};db.conversations.push(c);write(db);}return json(res,201,c);}
     const conv=u.pathname.match(/^\/api\/conversations\/([^/]+)$/);
-    if(conv&&req.method==='GET'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const c=db.conversations.find(x=>x.id===conv[1]&&x.participants.includes(user.id));if(!c)return json(res,404,{error:'Conversa não encontrada.'});const other=db.users.find(x=>x.id===c.participants.find(id=>id!==user.id));const product=c.productId?db.products.find(p=>p.id===c.productId):null;const messages=db.messages.filter(m=>m.conversationId===c.id).sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));return json(res,200,{conversation:{...c,other:publicUser(other,db),otherName:other?.name||other?.full_name||'',product:product?publicProduct(db,product):null,productName:product?.name||'Conversa Kuanza Line'},messages});}
-    if(conv&&req.method==='POST'){const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});const c=db.conversations.find(x=>x.id===conv[1]&&x.participants.includes(user.id));if(!c)return json(res,404,{error:'Conversa não encontrada.'});const b=await body(req);const text=String(b.text||'').trim();const type=b.type==='offer'?'offer':'text';if(!text&&type==='text')return json(res,400,{error:'Escreve uma mensagem.'});if(type==='offer'&&(!Number(b.amount)||Number(b.amount)<=0))return json(res,400,{error:'Valor da oferta inválido.'});const m={id:crypto.randomUUID(),conversationId:c.id,senderId:user.id,type,text:text||('Oferta de '+Number(b.amount)+' Kz'),amount:type==='offer'?Number(b.amount):null,createdAt:new Date().toISOString()};db.messages.push(m);const recipient=c.participants.find(id=>id!==user.id);if(recipient)notify(db,recipient,'message','Nova mensagem',type==='offer'?`Recebeste uma proposta de ${Number(b.amount).toLocaleString('pt-PT')} Kz.`:'Recebeste uma nova mensagem.',{conversationId:c.id});write(db);return json(res,201,m);}
+    if(conv&&req.method==='GET'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});const c=db.conversations.find(x=>x.id===conv[1]&&x.participants.includes(user.id));if(!c)return json(res,404,{error:'Conversa não encontrada.'});const other=await getSupabaseUserById(c.participants.find(id=>id!==user.id));const product=c.productId?db.products.find(p=>p.id===c.productId):null;const messages=db.messages.filter(m=>m.conversationId===c.id).sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));return json(res,200,{conversation:{...c,other:publicUser(other,db),otherName:other?.name||other?.full_name||'',product:product?publicProduct(db,product):null,productName:product?.name||'Conversa Kuanza Line'},messages});}
+    if(conv&&req.method==='POST'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});const c=db.conversations.find(x=>x.id===conv[1]&&x.participants.includes(user.id));if(!c)return json(res,404,{error:'Conversa não encontrada.'});const b=await body(req);const text=String(b.text||'').trim();const type=b.type==='offer'?'offer':'text';if(!text&&type==='text')return json(res,400,{error:'Escreve uma mensagem.'});if(type==='offer'&&(!Number(b.amount)||Number(b.amount)<=0))return json(res,400,{error:'Valor da oferta inválido.'});const m={id:crypto.randomUUID(),conversationId:c.id,senderId:user.id,type,text:text||('Oferta de '+Number(b.amount)+' Kz'),amount:type==='offer'?Number(b.amount):null,createdAt:new Date().toISOString()};db.messages.push(m);const recipient=c.participants.find(id=>id!==user.id);if(recipient)notify(db,recipient,'message','Nova mensagem',type==='offer'?`Recebeste uma proposta de ${Number(b.amount).toLocaleString('pt-PT')} Kz.`:'Recebeste uma nova mensagem.',{conversationId:c.id});write(db);return json(res,201,m);}
 
     const file=path.join(PUBLIC,u.pathname==='/'?'index.html':u.pathname.replace(/^\//,''));
     if(!file.startsWith(PUBLIC)||!fs.existsSync(file)||fs.statSync(file).isDirectory())return json(res,404,{error:'Not found'});
