@@ -113,24 +113,11 @@ async function auth(db,req){
   }
 
   const p=profile||{};
-  let permanentAdmin=false;
-  if(supabaseAdmin){
-    try{
-      const {data:adminRow,error:adminError}=await supabaseAdmin
-        .from('admin_users')
-        .select('user_id,active')
-        .eq('user_id',au.id)
-        .eq('active',true)
-        .maybeSingle();
-      if(!adminError&&adminRow)permanentAdmin=true;
-    }catch(e){}
-  }
-  const effectiveRole=permanentAdmin?'admin':(['buyer','seller','admin'].includes(p.role)?p.role:'buyer');
   const user={
     id:au.id,
     name:String(p.full_name||au.user_metadata?.full_name||au.user_metadata?.name||au.email?.split('@')[0]||'Utilizador'),
     email:String(au.email||''),
-    role:effectiveRole,
+    role:['buyer','seller','admin'].includes(p.role)?p.role:'buyer',
     score:Number(p.score||50),
     verified:!!p.verified,
     avatar:String(p.avatar_url||''),
@@ -1077,8 +1064,8 @@ const server=http.createServer(async(req,res)=>{
     const currentUser=await auth(db,req);
     if(currentUser && isBlocked(db,currentUser.id)) return json(res,403,{error:'A tua conta está temporariamente bloqueada.'});
     await processProtectionReleases(db);
-    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'2.0.4',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
-    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'2.0.4',supabase:!!(supabaseAuth&&supabaseAdmin)});
+    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'2.0.4.1',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
+    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'2.0.4.1',supabase:!!(supabaseAuth&&supabaseAdmin)});
 
     if(u.pathname==='/api/register'&&req.method==='POST'){
       if(!supabaseAdmin || !supabaseAuth) return json(res,503,{error:'Supabase não está configurado no servidor.'});
@@ -1168,7 +1155,6 @@ const server=http.createServer(async(req,res)=>{
       const user=await auth(db,req);if(!user)return json(res,401,{error:'Não autenticado.'});
       if(!supabaseAuth)return json(res,503,{error:'Supabase não está configurado no servidor.'});
       const b=await body(req);
-      if(user.role==='admin')return json(res,403,{error:'Contas administrativas não podem alternar entre comprador e vendedor.'});
       if(!['buyer','seller'].includes(b.role))return json(res,400,{error:'Tipo de conta inválido.'});
 
       // A alteração do próprio perfil é feita com o token do utilizador.
@@ -1827,13 +1813,20 @@ const server=http.createServer(async(req,res)=>{
         if(!Object.prototype.hasOwnProperty.call(ORDER_TRANSITIONS,previous))return json(res,409,{error:'Estado atual do pedido inválido.'});
         if(!canTransition(ORDER_TRANSITIONS,previous,next))return json(res,409,{error:`Transição de pedido inválida: ${previous} → ${next}.`});
         if(next==='Cancelado'&&['Entregue','Cancelado'].includes(previous))return json(res,409,{error:'Este pedido já não pode ser cancelado.'});
-        const updated=await updateSupabaseOrderStatus(id,next,db);
+        let updated;
+        if(next==='Entregue'){
+          const delivery=await ensureDeliveryForOrder(db,current);
+          if(!delivery)return json(res,409,{error:'Não foi possível localizar a entrega deste pedido.'});
+          const atomic=await supabaseAdmin.rpc('kuanza_deliver_and_complete_order',{p_delivery_id:String(delivery.id)});
+          if(atomic.error)throw new Error(atomic.error.message);
+          updated=await getSupabaseOrderForId(id,db);
+        }else{
+          updated=await updateSupabaseOrderStatus(id,next,db);
+        }
         if(!updated)return json(res,404,{error:'Pedido não encontrado.'});
         await mirrorOrderToLegacy(db,updated);
         const order=db.orders.find(o=>String(o.id)===String(id))||updated; order.items=updated.items;
         if(previous!==next){
-          if(next==='Entregue')await startDeliveryProtection(db,order);
-          if(next==='Entregue'&&paymentStatusLabel(order.payment?.status)==='Pago')await addPendingForPaidOrder(db,order);
           if(next==='Cancelado'&&paymentStatusLabel(order.payment?.status)==='Pago'&&!order.financials?.settled){
             await refundPendingOrder(db,order,'Venda cancelada pelo vendedor');
             const refreshed=await getSupabaseOrderForId(order.id,db);
@@ -1883,18 +1876,16 @@ const server=http.createServer(async(req,res)=>{
       try{
         const current=await getSupabaseDeliveryForId(id); if(!current)return json(res,404,{error:'Entrega não encontrada.'});
         const p=publicDelivery(current); if(!p.sellerIds.includes(String(user.id)))return json(res,403,{error:'Sem permissão.'});
-        const previous=p.status; const updated=await updateSupabaseDeliveryStatus(id,next); if(!updated)return json(res,404,{error:'Entrega não encontrada.'});
-        const order=await getSupabaseOrderForId(updated.orderId,db);
-        if(order&&next==='Entregue'&&order.status!=='Entregue'){
-          const updatedOrder=await updateSupabaseOrderStatus(updated.orderId,'Entregue',db);
-          if(updatedOrder){
-            await mirrorOrderToLegacy(db,updatedOrder);
-            const legacy=db.orders.find(o=>String(o.id)===String(updatedOrder.id))||updatedOrder;
-            legacy.items=updatedOrder.items;legacy.status=updatedOrder.status;legacy.statusHistory=updatedOrder.statusHistory;legacy.updatedAt=updatedOrder.updatedAt;
-            await startDeliveryProtection(db,legacy);
-             await processProtectionReleases(db);
-          }
+        const previous=p.status;
+        let updated;
+        if(next==='Entregue'){
+          const atomic=await supabaseAdmin.rpc('kuanza_deliver_and_complete_order',{p_delivery_id:String(id)});
+          if(atomic.error)throw new Error(atomic.error.message);
+          updated=publicDelivery((await getSupabaseDeliveryForId(id)));
+        }else{
+          updated=await updateSupabaseDeliveryStatus(id,next);
         }
+        if(!updated)return json(res,404,{error:'Entrega não encontrada.'});
         if(previous!==next&&updated.buyerId)notify(db,updated.buyerId,'delivery','Estado da entrega',`A entrega do pedido #${String(updated.orderId).slice(-8)} está agora: ${next}.`,{orderId:updated.orderId,deliveryId:updated.id,status:next});
         const i=db.deliveries.findIndex(x=>String(x.id)===String(updated.id)); if(i>=0)db.deliveries[i]=updated;else db.deliveries.unshift(updated);
         write(db); return json(res,200,updated);
