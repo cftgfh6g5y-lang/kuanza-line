@@ -36,32 +36,6 @@ const supabaseAdmin =
       })
     : null;
 
-// ============================================================
-// USERS/PROFILES — SUPABASE ONLY
-// No user identity is stored in db.json.
-// ============================================================
-const profileCache = new Map();
-function cacheUserProfile(user){
-  if(user?.id) profileCache.set(String(user.id), user);
-  return user;
-}
-function cachedUser(userId){return profileCache.get(String(userId))||null;}
-async function getSupabaseUserById(userId){
-  const id=String(userId||'').trim();
-  if(!id||!supabaseAdmin)return null;
-  const cached=cachedUser(id);
-  if(cached)return cached;
-  const {data:auData,error:auError}=await supabaseAdmin.auth.admin.getUserById(id);
-  if(auError||!auData?.user)return null;
-  const au=auData.user;
-  const {data:p,error}=await supabaseAdmin.from('profiles').select('id,full_name,phone,avatar_url,role,verified,score,created_at,updated_at').eq('id',id).maybeSingle();
-  if(error)throw new Error('Não foi possível carregar o perfil do utilizador: '+error.message);
-  const profile=p||{};
-  const permanent=await supabaseAdmin.from('admin_users').select('user_id').eq('user_id',id).eq('active',true).maybeSingle();
-  const role=permanent.data?'admin':(['buyer','seller'].includes(String(profile.role))?String(profile.role):'buyer');
-  return cacheUserProfile({id,name:String(profile.full_name||au.user_metadata?.full_name||au.user_metadata?.name||au.email?.split('@')[0]||'Utilizador'),email:String(au.email||''),role,score:Number(profile.score||50),verified:!!profile.verified,avatar:String(profile.avatar_url||''),phone:String(profile.phone||''),createdAt:profile.created_at||au.created_at||new Date().toISOString()});
-}
-
 const demoProducts = [
   {id:'p1',name:'iPhone 13 128GB',price:450000,cat:'Eletrónicos',emoji:'📱',seller:'Beni Store',sellerId:'demo1',verified:true,rating:4.9,description:'iPhone 13 128GB em excelente estado.',photos:[]},
   {id:'p2',name:'Smart TV 43"',price:320000,cat:'Eletrónicos',emoji:'📺',seller:'Casa Digital',sellerId:'demo2',verified:true,rating:4.8,description:'Smart TV 43 polegadas, imagem nítida e excelente para entretenimento.',photos:[]},
@@ -119,8 +93,9 @@ async function migrateFavoritesAndCart(db){
   }catch(e){console.error('Migração inicial de favoritos/carrinho:',e.message||e);}
 }
 
-async function auth(req){
-  const accessToken=(req.headers.authorization||'').replace('Bearer ','').trim();
+async function auth(req={}){
+  const headers=req&&req.headers&&typeof req.headers==='object'?req.headers:{};
+  const accessToken=String(headers.authorization||'').replace(/^Bearer\s+/i,'').trim();
   if(!accessToken || !supabaseAuth) return null;
 
   const { data, error } = await supabaseAuth.auth.getUser(accessToken);
@@ -169,7 +144,24 @@ async function auth(req){
     createdAt:p.created_at||au.created_at||new Date().toISOString()
   };
 
-  return cacheUserProfile(user);
+  // Users/Profile/Auth migration: Supabase Auth + profiles are now the only
+  // source of truth for identity. No user is written to db.json.
+  return user;
+}
+async function getProfileById(userId){
+  if(!supabaseAdmin||!userId)return null;
+  const {data,error}=await supabaseAdmin.from('profiles').select('id,full_name,phone,avatar_url,role,verified,score,created_at,updated_at').eq('id',String(userId)).maybeSingle();
+  if(error)throw new Error('Não foi possível carregar o perfil: '+error.message);
+  return data||null;
+}
+function profileToUser(profile){
+  if(!profile)return null;
+  return {id:String(profile.id),name:String(profile.full_name||'Utilizador'),email:'',role:['buyer','seller','admin'].includes(profile.role)?profile.role:'buyer',score:Number(profile.score||50),verified:!!profile.verified,avatar:String(profile.avatar_url||''),phone:String(profile.phone||''),createdAt:profile.created_at||new Date().toISOString()};
+}
+async function getPublicUserById(userId,db){
+  const profile=await getProfileById(userId);
+  if(!profile)return null;
+  return publicUser(profileToUser(profile),db);
 }
 function calculateScore(db,u){
   if(!u)return 0;
@@ -177,7 +169,7 @@ function calculateScore(db,u){
   const reviews=db.reviews.filter(r=>r.sellerId===u.id);
   const avg=reviews.length?reviews.reduce((a,r)=>a+Number(r.rating||0),0)/reviews.length:0;
   const cancellations=db.orders.filter(o=>o.sellerId===u.id&&o.status==='Cancelado').length;
-  const complaints=Array.isArray(db.reports)?db.reports.filter(r=>r.targetType==='user'&&String(r.targetId)===String(u.id)).length:Number(u.complaints||0);
+  const complaints=Array.isArray(db.reports)?db.reports.filter(r=>r.targetType==='user'&&String(r.targetId)===String(u.id)&&r.status!=='Rejeitada').length:0;
   const response=Number(u.responseTimeMinutes||0);
   let score=50;
   score+=Math.min(25,completed*3);
@@ -194,16 +186,15 @@ function scoreLabel(score){if(score>=90)return'Excelente';if(score>=75)return'Bo
 function publicUser(u,db){if(!u)return null;const completedOrders=db.orders.filter(o=>o.status==='Concluído'&&((o.userId===u.id)|| (Array.isArray(o.items)&&o.items.some(i=>i.sellerId===u.id||i.seller===u.name)))).length;const receivedReviews=db.reviews.filter(r=>r.sellerId===u.id).length;const cancelledOrders=db.orders.filter(o=>o.userId===u.id&&o.status==='Cancelado').length;const score=calculateScore(db,u);return{id:u.id,name:u.name,email:u.email,role:u.role,score,scoreLabel:scoreLabel(score),avatar:u.avatar||'',verified:!!u.verified,completedOrders,receivedReviews,cancelledOrders};}
 function getStore(db,ownerId){return db.stores.find(x=>x.ownerId===ownerId)||null;}
 function publicProduct(db,p){
-  const seller=cachedUser(p.sellerId);
   const store=getStore(db,p.sellerId);
   return {
     ...p,
-    seller:seller?seller.name:(p.seller||'Vendedor'),
-    verified:seller?!!seller.verified:!!p.verified,
+    seller:String(p.seller||'Vendedor'),
+    verified:!!p.verified,
     rating:Number(p.rating||5),
-    score:seller?calculateScore(db,seller):Number(p.score||100),
-    storeName:store?.name||p.seller||'Loja',
-    storeLogo:store?.logo||store?.logoUrl||'',
+    score:Number(p.score||50),
+    storeName:store?.name||p.storeName||p.seller||'Loja',
+    storeLogo:store?.logo||store?.logoUrl||p.storeLogo||'',
     photos:Array.isArray(p.photos)?p.photos:[]
   };
 }
@@ -1186,7 +1177,7 @@ const server=http.createServer(async(req,res)=>{
         return json(res,201,{ok:true,user:{id:uid,name,email,role,score:50,verified:false},token:null,requiresEmailConfirmation:true,message:'Conta criada. Confirma o teu email para iniciar sessão.'});
       }
 
-      const user=cacheUserProfile({id:uid,name,email,role,score:50,verified:false,avatar:'',createdAt:new Date().toISOString()});
+      const user={id:uid,name,email,role,score:50,verified:false,avatar:'',createdAt:new Date().toISOString()};
       audit(db,req,uid,'supabase_register',{role});
       write(db);
       return json(res,201,{token:session.access_token,user:publicUser(user,db)});
@@ -1200,7 +1191,7 @@ const server=http.createServer(async(req,res)=>{
       if(!email||!password)return json(res,400,{error:'Preenche email e palavra-passe.'});
       const { data, error } = await supabaseAuth.auth.signInWithPassword({email,password});
       if(error || !data?.session) return json(res,401,{error:'Email ou palavra-passe incorretos.'});
-      const user=await auth(db,{headers:{authorization:`Bearer ${data.session.access_token}`}});
+      const user=await auth({headers:{authorization:`Bearer ${data.session.access_token}`}});
       if(!user)return json(res,401,{error:'Não foi possível carregar o teu perfil.'});
       audit(db,req,user.id,'supabase_login');
       write(db);
@@ -1222,8 +1213,7 @@ const server=http.createServer(async(req,res)=>{
       const user=await auth(req);if(!user)return json(res,401,{error:'Não autenticado.'});
       if(!supabaseAuth)return json(res,503,{error:'Supabase não está configurado no servidor.'});
       const b=await body(req);
-      if(user.role==='admin')return json(res,403,{error:'A conta de administrador não pode mudar para comprador ou vendedor.'});
-       if(!['buyer','seller'].includes(b.role))return json(res,400,{error:'Tipo de conta inválido.'});
+      if(!['buyer','seller'].includes(b.role))return json(res,400,{error:'Tipo de conta inválido.'});
 
       // A alteração do próprio perfil é feita com o token do utilizador.
       // Assim a política RLS profiles_update_own aplica-se corretamente:
@@ -1253,7 +1243,6 @@ const server=http.createServer(async(req,res)=>{
       user.verified=!!updatedProfile.verified;
       user.score=Number(updatedProfile.score||user.score||50);
 
-      cacheUserProfile(user);
       audit(db,req,user.id,'role_changed',{role:user.role});write(db);
       const pu=publicUser(user,db);return json(res,200,{...pu,user:pu,ok:true});
     }
@@ -1964,8 +1953,10 @@ const server=http.createServer(async(req,res)=>{
     if(u.pathname==='/api/reviews'&&req.method==='GET'){
       const productId=String(u.query.productId||''); const sellerId=String(u.query.sellerId||'');
       let list=db.reviews.slice(); if(productId)list=list.filter(r=>r.productId===productId); if(sellerId)list=list.filter(r=>r.sellerId===sellerId);
-      const buyerIds=[...new Set(list.map(r=>String(r.buyerId||'')).filter(Boolean))];for(const buyerId of buyerIds){try{await getSupabaseUserById(buyerId);}catch(_){}}
-      list=list.map(r=>({...r,buyerName:cachedUser(r.buyerId)?.name||'Utilizador'})).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+      const buyerIds=[...new Set(list.map(r=>String(r.buyerId||'')).filter(Boolean))];
+      const buyerProfiles=new Map();
+      if(supabaseAdmin&&buyerIds.length){const {data:profiles,error}=await supabaseAdmin.from('profiles').select('id,full_name').in('id',buyerIds);if(error)return json(res,500,{error:'Não foi possível carregar os autores das avaliações.',details:error.message});for(const p of profiles||[])buyerProfiles.set(String(p.id),p);}
+      list=list.map(r=>({...r,buyerName:String(buyerProfiles.get(String(r.buyerId))?.full_name||'Utilizador')})).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
       return json(res,200,list);
     }
     if(u.pathname==='/api/reviews'&&req.method==='POST'){
@@ -1977,8 +1968,17 @@ const server=http.createServer(async(req,res)=>{
       if(db.reviews.some(r=>r.productId===productId&&r.buyerId===user.id))return json(res,409,{error:'Já avalieste este produto.'});
       const comment=String(b.comment||'').trim().slice(0,500);
       const review={id:crypto.randomUUID(),productId,sellerId:product.sellerId,buyerId:user.id,rating,comment,createdAt:new Date().toISOString()};
-      db.reviews.unshift(review); const seller=await getSupabaseUserById(product.sellerId); if(seller){seller.score=calculateScore(db,seller);cacheUserProfile(seller);notify(db,seller.id,'review','Nova avaliação',`Recebeste uma nova avaliação de ${review.rating} estrelas.`,{productId:product.id,rating:review.rating});} write(db);
-      return json(res,201,{...review,buyerName:user.name,sellerScore:seller?calculateScore(db,seller):null});
+      db.reviews.unshift(review);
+      const sellerProfile=await getProfileById(product.sellerId);
+      const seller=sellerProfile?profileToUser(sellerProfile):null;
+      let sellerScore=null;
+      if(seller){
+        sellerScore=calculateScore(db,seller);
+        if(supabaseAdmin){const {error:scoreError}=await supabaseAdmin.from('profiles').update({score:sellerScore,updated_at:new Date().toISOString()}).eq('id',seller.id);if(scoreError)return json(res,500,{error:'A avaliação foi guardada, mas não foi possível atualizar a pontuação do vendedor.',details:scoreError.message});}
+        notify(db,seller.id,'review','Nova avaliação',`Recebeste uma nova avaliação de ${review.rating} estrelas.`,{productId:product.id,rating:review.rating});
+      }
+      write(db);
+      return json(res,201,{...review,buyerName:user.name,sellerScore});
     }
 
     // Security & moderation.
@@ -1986,13 +1986,13 @@ const server=http.createServer(async(req,res)=>{
     if(u.pathname==='/api/reports'&&req.method==='POST'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});const b=await body(req,256*1024);const targetType=String(b.targetType||'user');if(!['user','product','order','conversation'].includes(targetType))return json(res,400,{error:'Tipo de denúncia inválido.'});const targetId=String(b.targetId||'').trim();const reason=String(b.reason||'').trim().slice(0,120);const description=String(b.description||'').trim().slice(0,1000);if(!targetId||!reason)return json(res,400,{error:'Indica o alvo e o motivo da denúncia.'});const r={id:'REP-'+crypto.randomUUID(),reporterId:user.id,targetType,targetId,reason,description,status:'Aberta',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};db.reports.unshift(r);audit(db,req,user.id,'report_created',{reportId:r.id,targetType,targetId});write(db);return json(res,201,r);}
     const rr=u.pathname.match(/^\/api\/reports\/([^/]+)$/);if(rr&&req.method==='PATCH'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});const r=db.reports.find(x=>x.id===decodeURIComponent(rr[1]));if(!r)return json(res,404,{error:'Denúncia não encontrada.'});const b=await body(req,64*1024);const allowed=['Aberta','Em análise','Resolvida','Rejeitada'];if(!allowed.includes(String(b.status||'')))return json(res,400,{error:'Estado inválido.'});r.status=String(b.status);r.adminNote=String(b.adminNote||'').trim().slice(0,1000);r.updatedAt=new Date().toISOString();audit(db,req,user.id,'report_updated',{reportId:r.id,status:r.status});write(db);return json(res,200,r);}
     if(u.pathname==='/api/admin/security'&&req.method==='GET'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});return json(res,200,{events:db.securityEvents.slice(0,200),reports:db.reports.slice(0,200),blockedUsers:db.blockedUsers.slice(0,200)});}
-    if(u.pathname==='/api/admin/block'&&req.method==='POST'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});const b=await body(req,64*1024);const targetId=String(b.userId||'').trim();if(!targetId||targetId===user.id)return json(res,400,{error:'Utilizador inválido.'});const targetUser=await getSupabaseUserById(targetId);if(!targetUser)return json(res,404,{error:'Utilizador não encontrado.'});let bl=db.blockedUsers.find(x=>x.userId===targetId);if(!bl){bl={id:'BLK-'+crypto.randomUUID(),userId:targetId,active:true,reason:String(b.reason||'').trim().slice(0,500),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};db.blockedUsers.push(bl);}else{bl.active=b.active!==false;bl.reason=String(b.reason||bl.reason||'').trim().slice(0,500);bl.updatedAt=new Date().toISOString();}audit(db,req,user.id,bl.active?'user_blocked':'user_unblocked',{userId:targetId,reason:bl.reason});write(db);return json(res,200,bl);}
+    if(u.pathname==='/api/admin/block'&&req.method==='POST'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});const b=await body(req,64*1024);const targetId=String(b.userId||'').trim();if(!targetId||targetId===user.id)return json(res,400,{error:'Utilizador inválido.'});const targetProfile=await getProfileById(targetId);if(!targetProfile)return json(res,404,{error:'Utilizador não encontrado.'});let bl=db.blockedUsers.find(x=>x.userId===targetId);if(!bl){bl={id:'BLK-'+crypto.randomUUID(),userId:targetId,active:true,reason:String(b.reason||'').trim().slice(0,500),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};db.blockedUsers.push(bl);}else{bl.active=b.active!==false;bl.reason=String(b.reason||bl.reason||'').trim().slice(0,500);bl.updatedAt=new Date().toISOString();}audit(db,req,user.id,bl.active?'user_blocked':'user_unblocked',{userId:targetId,reason:bl.reason});write(db);return json(res,200,bl);}
 
     // Chat: one private conversation between a buyer and seller, linked optionally to a product.
-    if(u.pathname==='/api/conversations'&&req.method==='GET'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});const conversations=db.conversations.filter(c=>c.participants.includes(user.id));const otherIds=[...new Set(conversations.map(c=>c.participants.find(id=>id!==user.id)).filter(Boolean))];for(const otherId of otherIds){try{await getSupabaseUserById(otherId);}catch(_){}}const list=conversations.map(c=>{const otherId=c.participants.find(id=>id!==user.id);const other=cachedUser(otherId);const last=db.messages.filter(m=>m.conversationId===c.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))[0];const product=c.productId?db.products.find(p=>p.id===c.productId):null;return {...c,other:publicUser(other,db),otherName:other?.name||other?.full_name||'',lastMessage:last||null,lastMessageText:last?(last.type==='offer'?`Proposta: Kz ${Number(last.amount||0).toLocaleString('pt-AO')}`:(last.text||'')):'',product:product?publicProduct(db,product):null,productName:product?.name||'Conversa Kuanza Line'};}).sort((a,b)=>new Date(b.lastMessage?.createdAt||b.createdAt)-new Date(a.lastMessage?.createdAt||a.createdAt));return json(res,200,list);}
-    if(u.pathname==='/api/conversations'&&req.method==='POST'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});const b=await body(req);const sellerId=String(b.sellerId||'');if(!sellerId||sellerId===user.id)return json(res,400,{error:'Vendedor inválido.'});const seller=await getSupabaseUserById(sellerId);if(!seller)return json(res,404,{error:'Vendedor não encontrado.'});const key=conversationKey(user.id,sellerId);let c=db.conversations.find(x=>x.key===key&&String(x.productId||'')===String(b.productId||''));if(!c){c={id:crypto.randomUUID(),key,participants:[user.id,sellerId],productId:b.productId||null,createdAt:new Date().toISOString()};db.conversations.push(c);write(db);}return json(res,201,c);}
+    if(u.pathname==='/api/conversations'&&req.method==='GET'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});const rawList=db.conversations.filter(c=>c.participants.includes(user.id));const list=[];for(const c of rawList){const otherId=c.participants.find(id=>id!==user.id);const otherProfile=await getProfileById(otherId);const other=otherProfile?profileToUser(otherProfile):null;const last=db.messages.filter(m=>m.conversationId===c.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))[0];const product=c.productId?db.products.find(p=>p.id===c.productId):null;list.push({...c,other:other?publicUser(other,db):null,otherName:other?.name||'',lastMessage:last||null,lastMessageText:last?(last.type==='offer'?`Proposta: Kz ${Number(last.amount||0).toLocaleString('pt-AO')}`:(last.text||'')):'',product:product?publicProduct(db,product):null,productName:product?.name||'Conversa Kuanza Line'});}list.sort((a,b)=>new Date(b.lastMessage?.createdAt||b.createdAt)-new Date(a.lastMessage?.createdAt||a.createdAt));return json(res,200,list);}
+    if(u.pathname==='/api/conversations'&&req.method==='POST'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});const b=await body(req);const sellerId=String(b.sellerId||'');if(!sellerId||sellerId===user.id)return json(res,400,{error:'Vendedor inválido.'});const seller=await getProfileById(sellerId);if(!seller)return json(res,404,{error:'Vendedor não encontrado.'});const key=conversationKey(user.id,sellerId);let c=db.conversations.find(x=>x.key===key&&String(x.productId||'')===String(b.productId||''));if(!c){c={id:crypto.randomUUID(),key,participants:[user.id,sellerId],productId:b.productId||null,createdAt:new Date().toISOString()};db.conversations.push(c);write(db);}return json(res,201,c);}
     const conv=u.pathname.match(/^\/api\/conversations\/([^/]+)$/);
-    if(conv&&req.method==='GET'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});const c=db.conversations.find(x=>x.id===conv[1]&&x.participants.includes(user.id));if(!c)return json(res,404,{error:'Conversa não encontrada.'});const other=await getSupabaseUserById(c.participants.find(id=>id!==user.id));const product=c.productId?db.products.find(p=>p.id===c.productId):null;const messages=db.messages.filter(m=>m.conversationId===c.id).sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));return json(res,200,{conversation:{...c,other:publicUser(other,db),otherName:other?.name||other?.full_name||'',product:product?publicProduct(db,product):null,productName:product?.name||'Conversa Kuanza Line'},messages});}
+    if(conv&&req.method==='GET'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});const c=db.conversations.find(x=>x.id===conv[1]&&x.participants.includes(user.id));if(!c)return json(res,404,{error:'Conversa não encontrada.'});const otherProfile=await getProfileById(c.participants.find(id=>id!==user.id));const other=otherProfile?profileToUser(otherProfile):null;const product=c.productId?db.products.find(p=>p.id===c.productId):null;const messages=db.messages.filter(m=>m.conversationId===c.id).sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));return json(res,200,{conversation:{...c,other:other?publicUser(other,db):null,otherName:other?.name||'',product:product?publicProduct(db,product):null,productName:product?.name||'Conversa Kuanza Line'},messages});}
     if(conv&&req.method==='POST'){const user=await auth(req);if(!user)return json(res,401,{error:'Inicia sessão.'});const c=db.conversations.find(x=>x.id===conv[1]&&x.participants.includes(user.id));if(!c)return json(res,404,{error:'Conversa não encontrada.'});const b=await body(req);const text=String(b.text||'').trim();const type=b.type==='offer'?'offer':'text';if(!text&&type==='text')return json(res,400,{error:'Escreve uma mensagem.'});if(type==='offer'&&(!Number(b.amount)||Number(b.amount)<=0))return json(res,400,{error:'Valor da oferta inválido.'});const m={id:crypto.randomUUID(),conversationId:c.id,senderId:user.id,type,text:text||('Oferta de '+Number(b.amount)+' Kz'),amount:type==='offer'?Number(b.amount):null,createdAt:new Date().toISOString()};db.messages.push(m);const recipient=c.participants.find(id=>id!==user.id);if(recipient)notify(db,recipient,'message','Nova mensagem',type==='offer'?`Recebeste uma proposta de ${Number(b.amount).toLocaleString('pt-PT')} Kz.`:'Recebeste uma nova mensagem.',{conversationId:c.id});write(db);return json(res,201,m);}
 
     const file=path.join(PUBLIC,u.pathname==='/'?'index.html':u.pathname.replace(/^\//,''));
