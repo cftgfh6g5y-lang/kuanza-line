@@ -51,7 +51,7 @@ function ensureDB(db){
   for(const p of db.products){ if(!Array.isArray(p.photos)) p.photos=[]; if(!p.description) p.description='Produto disponível na Kuanza Line.'; }
   return db;
 }
-const ALLOWED_ORIGIN=String(process.env.KUANZA_ALLOWED_ORIGIN||'').trim();
+const ALLOWED_ORIGIN=String(process.env.KUANZA_ALLOWED_ORIGIN||'https://kuanza-line.onrender.com').trim();
 function json(res,code,data){const origin=ALLOWED_ORIGIN||'*';res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'Content-Type,Authorization','Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'strict-origin-when-cross-origin','Permissions-Policy':'camera=(),microphone=(),geolocation=(self)','Cache-Control':'no-store'});res.end(JSON.stringify(data));}
 function body(req,max=8*1024*1024){return new Promise((resolve,reject)=>{let s='',size=0;req.on('data',c=>{size+=c.length;if(size>max){reject(new Error('Dados demasiado grandes.'));req.destroy();return;}s+=c});req.on('end',()=>{try{resolve(s?JSON.parse(s):{})}catch(e){reject(new Error('JSON inválido.'))}});req.on('error',reject)})}
 function token(){return crypto.randomBytes(24).toString('hex');}
@@ -639,6 +639,24 @@ async function ensureWallet(db,userId){return await getWalletRow(userId);}
 async function walletSummary(db,userId){return await getWalletSummary(userId);}
 const PAYMENT_STATUSES=['Pendente','Aguardando confirmação','Pago','Falhou','Cancelado','Reembolsado'];
 const PAYMENT_METHODS=['multicaixa_express','bank_transfer','card'];
+const PAYMENT_TRANSITIONS={
+  'Pendente':['Aguardando confirmação','Cancelado','Falhou'],
+  'Aguardando confirmação':['Pago','Cancelado','Falhou'],
+  'Pago':['Reembolsado'],
+  'Falhou':[],
+  'Cancelado':[],
+  'Reembolsado':[]
+};
+const ORDER_TRANSITIONS={
+  'Pendente':['Confirmado','Cancelado'],
+  'Confirmado':['Em preparação','Cancelado'],
+  'Em preparação':['Enviado','Cancelado'],
+  'Enviado':['Entregue','Cancelado'],
+  'Entregue':[],
+  'Cancelado':[]
+};
+function canTransition(map,current,next){return current===next||((map[current]||[]).includes(next));}
+
 function paymentStatusLabel(status){return PAYMENT_STATUSES.includes(String(status||''))?String(status):'Pendente';}
 function publicPayment(order){
   if(!order)return null;
@@ -966,38 +984,21 @@ async function settleDeliveredOrder(db,order){
   if(await hasOpenDisputeSupabase(order.id))return false;
   const f=order.financials||{};
   if(f.protectionUntil&&Date.now()<Date.parse(f.protectionUntil))return false;
-  const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean).map(String))];
-  if(!sellerIds.length)return false;
-  const nowIso=new Date().toISOString();
-  const claim=await supabaseAdmin.from('order_financials').update({settlement_claimed_at:nowIso,updated_at:nowIso}).eq('order_id',String(order.id)).eq('settled',false).is('settlement_claimed_at',null).select('order_id').maybeSingle();
-  if(claim.error)throw new Error('Não foi possível reservar a liquidação financeira: '+claim.error.message);
-  if(!claim.data)return false;
-  try{
-    await addPendingForPaidOrder(db,order);
-    order.financials={...f,sellers:{...(f.sellers||{})}};
+  const result=await supabaseAdmin.rpc('kuanza_settle_order',{p_order_id:String(order.id)});
+  if(result.error)throw new Error('Não foi possível liquidar financeiramente o pedido: '+result.error.message);
+  const data=result.data;
+  if(!data||data.settled!==true)return false;
+  const financial=await getOrderFinancials(order.id);
+  order.financials=financial||{...f,settled:true,settledAt:new Date().toISOString(),protectionStatus:'Concluída'};
+  if(Array.isArray(order.items)){
+    const sellerIds=[...new Set(order.items.map(i=>i.sellerId).filter(Boolean).map(String))];
     for(const sellerId of sellerIds){
       const share=calculateSellerShare(order,sellerId);
-      const wallet=await ensureWallet(db,sellerId);
-      await updateWalletSupabase(sellerId,{pending:-share.net,available:share.net,totalEarned:share.net});
-      wallet.pending=Math.max(0,Number(wallet.pending||0)-share.net);
-      wallet.available=Number(wallet.available||0)+share.net;
-      wallet.totalEarned=Number(wallet.totalEarned||0)+share.net;
-      order.financials.sellers[sellerId]={...(order.financials.sellers[sellerId]||{}),...share};
-      await addWalletTx(db,sellerId,'sale_released',share.net,`Venda #${String(order.id).slice(-8)} libertada após 30 minutos de proteção`,{orderId:order.id,gross:share.gross,commission:share.commission,protectionUntil:f.protectionUntil||null});
+      order.financials.sellers={...(order.financials.sellers||{}),[sellerId]:{...(order.financials.sellers?.[sellerId]||{}),...share}};
       notify(db,sellerId,'wallet','Valor libertado',`Kz ${share.net.toLocaleString('pt-AO')} foram adicionados ao teu saldo disponível após o período de proteção.`,{orderId:order.id,amount:share.net});
     }
-    const settledAt=new Date().toISOString();
-    order.financials={...order.financials,settled:true,settledAt,protectionStatus:'Concluída'};
-    await upsertOrderFinancials(order.id,{settled:true,settled_at:settledAt,protection_status:'Concluída',settlement_claimed_at:nowIso,sellers:order.financials.sellers});
-    return true;
-  }catch(error){
-    try{
-      await supabaseAdmin.from('order_financials').update({settlement_claimed_at:null,updated_at:new Date().toISOString()}).eq('order_id',String(order.id)).eq('settled',false);
-    }catch(resetError){
-      console.error('Não foi possível libertar a reserva de liquidação após falha:',resetError.message||resetError);
-    }
-    throw error;
   }
+  return true;
 }
 
 async function processProtectionReleases(db){
@@ -1036,20 +1037,13 @@ async function processProtectionReleases(db){
 }
 
 async function refundPendingOrder(db,order,reason='Pagamento reembolsado'){
-  if(!order)return false;
-  const f=order.financials||{};
-  if(f.refunded)return false;
-  const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean).map(String))];
-  for(const sellerId of sellerIds){
-    const share=calculateSellerShare(order,sellerId);
-    const wallet=await ensureWallet(db,sellerId);
-    if(f.pendingCredited){
-      await updateWalletSupabase(sid,{pending:-share.net}); wallet.pending=Math.max(0,Number(wallet.pending||0)-share.net);
-      await addWalletTx(db,sellerId,'sale_refunded',-share.net,reason,{orderId:order.id,gross:share.gross,commission:share.commission});
-    }
-  }
-  order.financials={...f,refunded:true,refundedAt:new Date().toISOString(),protectionStatus:'Reembolsada'};
-  await upsertOrderFinancials(order.id,{refunded:true,refunded_at:order.financials.refundedAt,protection_status:'Reembolsada'});
+  if(!order||order.financials?.refunded)return false;
+  if(order.financials?.settled)return false;
+  const result=await supabaseAdmin.rpc('kuanza_refund_order',{p_order_id:String(order.id),p_reason:String(reason)});
+  if(result.error)throw new Error('Não foi possível reembolsar financeiramente o pedido: '+result.error.message);
+  if(!result.data||result.data.refunded!==true)return false;
+  const financial=await getOrderFinancials(order.id);
+  order.financials=financial||{...(order.financials||{}),refunded:true,refundedAt:new Date().toISOString(),protectionStatus:'Reembolsada'};
   return true;
 }
 
@@ -1070,8 +1064,8 @@ const server=http.createServer(async(req,res)=>{
     const currentUser=await auth(db,req);
     if(currentUser && isBlocked(db,currentUser.id)) return json(res,403,{error:'A tua conta está temporariamente bloqueada.'});
     await processProtectionReleases(db);
-    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'2.0.3',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
-    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'2.0.3',supabase:!!(supabaseAuth&&supabaseAdmin)});
+    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'2.0.4',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
+    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'2.0.4',supabase:!!(supabaseAuth&&supabaseAdmin)});
 
     if(u.pathname==='/api/register'&&req.method==='POST'){
       if(!supabaseAdmin || !supabaseAuth) return json(res,503,{error:'Supabase não está configurado no servidor.'});
@@ -1592,29 +1586,38 @@ const server=http.createServer(async(req,res)=>{
     }
     if(paymentRoute&&req.method==='PATCH'){
       const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
-      if(!adminOnly(user))return json(res,403,{error:'Apenas administradores podem confirmar pagamentos.'});
+      if(!adminOnly(user))return json(res,403,{error:'Apenas administradores podem gerir pagamentos.'});
       try{
         const id=decodeURIComponent(paymentRoute[1]);
         const order=await getSupabaseOrderForId(id,db);
         if(!order)return json(res,404,{error:'Pedido não encontrado.'});
         const b=await body(req,64*1024);
         const next=String(b.status||'').trim();
-        const allowed=['Pago','Falhou','Cancelado','Reembolsado'];
-        if(!allowed.includes(next))return json(res,400,{error:'Estado de pagamento inválido.'});
-        if(next==='Pago'&&paymentStatusLabel(order.payment?.status)==='Reembolsado')return json(res,409,{error:'Um pagamento reembolsado não pode voltar a pago.'});
-        if(next==='Reembolsado'&&paymentStatusLabel(order.payment?.status)!=='Pago')return json(res,409,{error:'Só é possível reembolsar um pagamento confirmado.'});
-        if(next==='Reembolsado'&&order.financials?.settled)return json(res,409,{error:'Esta venda já foi liberada para a carteira do vendedor e não pode ser reembolsada por este fluxo.'});
-        const updated=await updateSupabasePayment(id,next,b.reference,db);
-        if(!updated)return json(res,404,{error:'Pedido não encontrado.'});
+        if(!PAYMENT_STATUSES.includes(next))return json(res,400,{error:'Estado de pagamento inválido.'});
+        const currentStatus=paymentStatusLabel(order.payment?.status);
+        if(!canTransition(PAYMENT_TRANSITIONS,currentStatus,next))return json(res,409,{error:`Transição de pagamento inválida: ${currentStatus} → ${next}.`});
+        if(next==='Pago'&&(!order.payment?.method||!PAYMENT_METHODS.includes(String(order.payment.method))))return json(res,409,{error:'O método de pagamento do pedido é inválido.'});
+        if(next==='Pago'&&!String(b.reference??order.payment?.reference??'').trim())return json(res,409,{error:'É necessária uma referência de pagamento para confirmar.'});
+        if(next==='Reembolsado'&&order.financials?.settled)return json(res,409,{error:'Esta venda já foi liquidada e não pode ser reembolsada por este fluxo.'});
+        let updated=null;
         const legacyOrder=db.orders.find(o=>String(o.id)===String(id));
-        if(legacyOrder){
-          legacyOrder.payment=updated.payment;
-          if(next==='Pago')await addPendingForPaidOrder(db,legacyOrder);
-          if(next==='Reembolsado')await refundPendingOrder(db,legacyOrder,'Pagamento reembolsado pelo Kuanza Line');
-          if(next==='Pago'&&legacyOrder.status==='Entregue')await startDeliveryProtection(db,legacyOrder);
+        if(next==='Reembolsado'){
+          const target=legacyOrder||order;
+          await refundPendingOrder(db,target,'Pagamento reembolsado pelo Kuanza Line');
+          updated=await getSupabaseOrderForId(id,db);
+          if(legacyOrder)legacyOrder.payment=updated?.payment||{...(legacyOrder.payment||{}),status:'Reembolsado'};
+        }else{
+          updated=await updateSupabasePayment(id,next,b.reference,db);
+          if(legacyOrder){
+            legacyOrder.payment=updated.payment;
+            if(next==='Pago')await addPendingForPaidOrder(db,legacyOrder);
+            if(next==='Pago'&&legacyOrder.status==='Entregue')await startDeliveryProtection(db,legacyOrder);
+          }
         }
+        if(!updated)return json(res,404,{error:'Pedido não encontrado.'});
+        audit(db,req,user.id,'payment_updated',{orderId:id,from:currentStatus,to:next});
         notify(db,updated.userId,'payment','Estado do pagamento',`O pagamento do pedido #${String(id).slice(-8)} está agora: ${next}.`,{orderId:id,status:next});
-        write(db);return json(res,200,{orderId:id,payment:publicPayment(updated),financials:legacyOrder?.financials||null});
+        write(db);return json(res,200,{orderId:id,payment:publicPayment(updated),financials:legacyOrder?.financials||await getOrderFinancials(id)||null});
       }catch(e){return json(res,500,{error:e.message||'Não foi possível atualizar o pagamento.'});}
     }
 
@@ -1647,13 +1650,40 @@ const server=http.createServer(async(req,res)=>{
       const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       const b=await body(req);const amount=Math.floor(Number(b.amount||0));
       if(amount<=0)return json(res,400,{error:'Valor de levantamento inválido.'});
-      const wallet=await ensureWallet(db,user.id);
-      if(amount>wallet.available)return json(res,400,{error:'Saldo disponível insuficiente.'});
       if(amount<1000)return json(res,400,{error:'O levantamento mínimo é Kz 1.000.'});
-      wallet.available-=amount;wallet.totalWithdrawn=Number(wallet.totalWithdrawn||0)+amount;
-      const tx=await addWalletTx(db,user.id,'withdrawal_request',-amount,'Pedido de levantamento criado',{amount,status:'Pendente'});
-      notify(db,user.id,'wallet','Levantamento solicitado',`Pedido de levantamento de Kz ${amount.toLocaleString('pt-AO')} criado.`,{transactionId:tx.id,amount});
-      write(db);return json(res,201,{ok:true,status:'Pendente',amount,transaction:tx,wallet:await walletSummary(db,user.id)});
+      const method=String(b.method||'').trim().slice(0,50);
+      const accountReference=String(b.accountReference||b.account||'').trim().slice(0,200);
+      if(!method||!accountReference)return json(res,400,{error:'Indica o método e os dados da conta para o levantamento.'});
+      try{
+        const result=await supabaseAdmin.rpc('kuanza_create_withdrawal',{p_user_id:String(user.id),p_amount:amount,p_method:method,p_account_reference:accountReference});
+        if(result.error)throw new Error(result.error.message);
+        const data=result.data;
+        audit(db,req,user.id,'withdrawal_requested',{withdrawalId:data.id,amount});
+        notify(db,user.id,'wallet','Levantamento solicitado',`Pedido de levantamento de Kz ${amount.toLocaleString('pt-AO')} criado.`,{withdrawalId:data.id,amount});
+        write(db);return json(res,201,{ok:true,status:data.status,amount:Number(data.amount),withdrawal:data,wallet:await walletSummary(db,user.id)});
+      }catch(e){return json(res,400,{error:e.message||'Não foi possível criar o levantamento.'});}
+    }
+    if(u.pathname==='/api/admin/withdrawals'&&req.method==='GET'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});
+      const status=String(u.query.status||'').trim();
+      let q=supabaseAdmin.from('withdrawals').select('*').order('requested_at',{ascending:false}).limit(200);
+      if(status)q=q.eq('status',status);
+      const {data,error}=await q;if(error)return json(res,500,{error:error.message});
+      return json(res,200,data||[]);
+    }
+    const withdrawalRoute=u.pathname.match(/^\/api\/admin\/withdrawals\/([^/]+)$/);
+    if(withdrawalRoute&&req.method==='PATCH'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      if(!adminOnly(user))return json(res,403,{error:'Apenas administradores.'});
+      const id=decodeURIComponent(withdrawalRoute[1]); const b=await body(req,64*1024); const next=String(b.status||'').trim();
+      if(!['Em análise','Aprovado','Pago','Rejeitado'].includes(next))return json(res,400,{error:'Estado de levantamento inválido.'});
+      try{
+        const result=await supabaseAdmin.rpc('kuanza_process_withdrawal',{p_withdrawal_id:id,p_next_status:next,p_admin_note:String(b.adminNote||'').trim().slice(0,1000)});
+        if(result.error)throw new Error(result.error.message);
+        audit(db,req,user.id,'withdrawal_updated',{withdrawalId:id,status:next});
+        write(db);return json(res,200,result.data);
+      }catch(e){return json(res,409,{error:e.message||'Não foi possível atualizar o levantamento.'});}
     }
     if(u.pathname==='/api/disputes'&&req.method==='GET'){
       const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
@@ -1774,49 +1804,41 @@ const server=http.createServer(async(req,res)=>{
       const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(user.role!=='seller')return json(res,403,{error:'Muda a tua conta para Vendedor.'});
       const id=decodeURIComponent(u.pathname.split('/').pop()||'');
-      const allowed=['Pendente','Confirmado','Em preparação','Enviado','Entregue','Cancelado'];
       try{
         if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
         const current=await getSupabaseOrderForId(id,db);
         if(!current)return json(res,404,{error:'Pedido não encontrado.'});
         if(!current.items.some(i=>String(i.sellerId)===String(user.id)))return json(res,403,{error:'Este pedido não pertence às tuas vendas.'});
-        const b=await body(req);
-        if(!allowed.includes(String(b.status||'')))return json(res,400,{error:'Estado inválido.'});
-        const next=String(b.status);const previous=current.status;
+        const b=await body(req); const next=String(b.status||''); const previous=String(current.status||'Pendente');
+        if(!Object.prototype.hasOwnProperty.call(ORDER_TRANSITIONS,previous))return json(res,409,{error:'Estado atual do pedido inválido.'});
+        if(!canTransition(ORDER_TRANSITIONS,previous,next))return json(res,409,{error:`Transição de pedido inválida: ${previous} → ${next}.`});
+        if(next==='Cancelado'&&['Entregue','Cancelado'].includes(previous))return json(res,409,{error:'Este pedido já não pode ser cancelado.'});
         const updated=await updateSupabaseOrderStatus(id,next,db);
         if(!updated)return json(res,404,{error:'Pedido não encontrado.'});
         await mirrorOrderToLegacy(db,updated);
-        const order=db.orders.find(o=>String(o.id)===String(id))||updated;
-        order.items=updated.items;
+        const order=db.orders.find(o=>String(o.id)===String(id))||updated; order.items=updated.items;
         if(previous!==next){
-          if(next==='Entregue'){await startDeliveryProtection(db,order);}
+          if(next==='Entregue')await startDeliveryProtection(db,order);
           if(next==='Entregue'&&paymentStatusLabel(order.payment?.status)==='Pago')await addPendingForPaidOrder(db,order);
-          if(next==='Cancelado'&&!order.financials?.cancelled){
-            const sellerIds=[...new Set((order.items||[]).map(i=>i.sellerId).filter(Boolean))];
-            order.financials={...(order.financials||{}),cancelled:true,cancelledAt:new Date().toISOString()};
-            for(const sid of sellerIds){
-              const share=calculateSellerShare(order,sid);const wallet=await ensureWallet(db,sid);
-              await updateWalletSupabase(sellerId,{pending:-share.net}); wallet.pending=Math.max(0,Number(wallet.pending||0)-share.net);
-              await addWalletTx(db,sid,'sale_cancelled',-share.net,`Venda #${String(order.id).slice(-8)} cancelada`,{orderId:order.id,amount:share.net});
-            }
+          if(next==='Cancelado'&&paymentStatusLabel(order.payment?.status)==='Pago'&&!order.financials?.settled){
+            await refundPendingOrder(db,order,'Venda cancelada pelo vendedor');
+            const refreshed=await getSupabaseOrderForId(order.id,db);
+            order.payment=refreshed?.payment||{...(order.payment||{}),status:'Reembolsado'};
+          } else if(next==='Cancelado'&&!order.financials?.cancelled){
+            await upsertOrderFinancials(order.id,{cancelled:true,cancelled_at:new Date().toISOString(),protection_status:'Cancelada'});
+            order.financials={...(order.financials||{}),cancelled:true,cancelledAt:new Date().toISOString(),protectionStatus:'Cancelada'};
           }
           notify(db,order.userId,'order','Pedido atualizado',`O pedido #${String(order.id).slice(-8)} está agora: ${next}.`,{orderId:order.id,status:next});
           const delivery=await ensureDeliveryForOrder(db,order); const ds=deliveryStatusFromOrderStatus(next);
           if(delivery&&delivery.status!==ds){
             const updatedDelivery=await updateSupabaseDeliveryStatus(delivery.id,ds);
-            if(updatedDelivery){
-              const i=db.deliveries.findIndex(x=>String(x.id)===String(updatedDelivery.id));
-              if(i>=0)db.deliveries[i]=updatedDelivery;else db.deliveries.unshift(updatedDelivery);
-              notify(db,order.userId,'delivery','Entrega atualizada',`A entrega do pedido #${String(order.id).slice(-8)} está agora: ${ds}.`,{orderId:order.id,deliveryId:updatedDelivery.id,status:ds});
-            }
+            if(updatedDelivery){const i=db.deliveries.findIndex(x=>String(x.id)===String(updatedDelivery.id));if(i>=0)db.deliveries[i]=updatedDelivery;else db.deliveries.unshift(updatedDelivery);notify(db,order.userId,'delivery','Entrega atualizada',`A entrega do pedido #${String(order.id).slice(-8)} está agora: ${ds}.`,{orderId:order.id,deliveryId:updatedDelivery.id,status:ds});}
           }
         }
         order.status=updated.status;order.statusHistory=updated.statusHistory;order.updatedAt=updated.updatedAt;
+        audit(db,req,user.id,'seller_order_status_updated',{orderId:id,from:previous,to:next});
         write(db);return json(res,200,order);
-      }catch(e){
-        console.error('Erro ao atualizar pedido Supabase:',e.message||e);
-        return json(res,500,{error:e.message||'Não foi possível atualizar o pedido.'});
-      }
+      }catch(e){console.error('Erro ao atualizar pedido Supabase:',e.message||e);return json(res,500,{error:e.message||'Não foi possível atualizar o pedido.'});}
     }
 
     if(u.pathname==='/api/deliveries'&&req.method==='GET'){
