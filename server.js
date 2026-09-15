@@ -1487,6 +1487,31 @@ const server=http.createServer(async(req,res)=>{
     }
 
     // ============================================================
+    // ADMIN — GESTÃO DE PAGAMENTOS
+    // Lista pagamentos de toda a plataforma para administradores.
+    // ============================================================
+    if(u.pathname==='/api/admin/payments'&&req.method==='GET'){
+      const user=await auth(db,req);if(!user)return json(res,401,{error:'Inicia sessão.'});
+      if(!adminOnly(user))return json(res,403,{error:'Apenas administradores podem gerir pagamentos.'});
+      try{
+        if(!supabaseAdmin)throw new Error('Supabase não está configurado no servidor.');
+        const statusFilter=String(u.query.status||'').trim();
+        let query=supabaseAdmin
+          .from('orders')
+          .select('id,buyer_id,status,subtotal,delivery_fee,total,delivery_method,recipient_name,recipient_phone,delivery_address,payment_method,payment_status,payment_reference,status_history,created_at,updated_at')
+          .order('created_at',{ascending:false});
+        if(statusFilter)query=query.eq('payment_status',statusFilter);
+        const {data,error}=await query;
+        if(error)throw new Error('Não foi possível carregar os pagamentos: '+error.message);
+        const orders=await supabaseOrdersToPublic(data||[],db);
+        return json(res,200,orders);
+      }catch(e){
+        console.error('Erro ao carregar gestão de pagamentos:',e.message||e);
+        return json(res,500,{error:e.message||'Não foi possível carregar os pagamentos.'});
+      }
+    }
+
+    // ============================================================
     // PAGAMENTOS — SUPABASE SOURCE OF TRUTH
     // O pagamento pertence ao pedido. Nesta fase não existe provedor
     // automático: o comprador pode enviar uma referência e o admin
