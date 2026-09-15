@@ -2459,6 +2459,8 @@ function scoreText(score){
 }
 
 async function switchRole(){
+  if(me?.role==='admin'){toast('A conta administrativa não pode mudar de tipo.');return;}
+
 
   if(!token){
     toast('Inicia sessão primeiro.');
