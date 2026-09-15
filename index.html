@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#087443">
 <meta name="description" content="Kuanza Line — Compra. Vende. Confia.">
 <title>Kuanza Line</title>
-<!-- Kuanza Line Frontend 1.9.4 — pagamento + fotos corrigidos -->
+<!-- Kuanza Line Frontend 2.0.2 — gestão administrativa de pagamentos -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1197,6 +1197,10 @@ async function go(id){
     await loadDashboard();
   }
 
+  if(id === 'adminPayments'){
+    await loadAdminPayments();
+  }
+
   if(id === 'conversations'){
     await loadConversations();
   }
@@ -2318,6 +2322,19 @@ async function loadAccount(){
         : ''
       }
 
+      ${me.role === 'admin' ? `
+        <div class="card" style="border:1px solid #cfe7d8;background:#f5fbf7">
+          <div class="row">
+            <div>
+              <h3>🛡️ Administração</h3>
+              <p class="small mt">Gestão de pagamentos e confirmação de transações da plataforma.</p>
+            </div>
+            <span class="badge">ADMIN</span>
+          </div>
+          <button class="btn btn-primary btn-full mt" onclick="go('adminPayments')">💳 Gestão de pagamentos</button>
+        </div>
+      ` : ''}
+
       <div class="card">
 
         <h3>Mais opções</h3>
@@ -3201,6 +3218,90 @@ async function submitStore(){
   }catch(e){
     toast(e.message);
   }
+}
+
+async function loadAdminPayments(){
+  const root=document.getElementById('appContent');
+  if(!token){
+    root.innerHTML='<div class="page"><div class="empty">Inicia sessão para acessar a gestão de pagamentos.</div></div>';
+    return;
+  }
+  try{
+    const meData=await api('/api/me');
+    me=meData.user||meData;
+  }catch(e){}
+  if(me?.role!=='admin'){
+    root.innerHTML='<div class="page"><div class="empty">Sem permissão. Esta área é exclusiva para administradores.</div></div>';
+    return;
+  }
+  root.innerHTML=`
+    <div class="page">
+      <div class="section-title">
+        <h2>🛡️ Gestão de pagamentos</h2>
+        <button class="btn btn-secondary" style="width:auto;padding:8px 12px" onclick="loadAdminPayments()">Atualizar</button>
+      </div>
+      <div class="card" style="border:1px solid #dfe8e3;background:white">
+        <div class="small">Confirma pagamentos somente depois de validar a referência/comprovativo. O backend aplica as regras de segurança e autorização.</div>
+      </div>
+      <div class="filters mt">
+        <select id="adminPaymentFilter" onchange="loadAdminPaymentList()">
+          <option value="Aguardando confirmação" selected>Aguardando confirmação</option>
+          <option value="Pendente">Pendente</option>
+          <option value="Pago">Pagos</option>
+          <option value="Falhou">Falhados</option>
+          <option value="Cancelado">Cancelados</option>
+          <option value="Reembolsado">Reembolsados</option>
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div id="adminPaymentsList" class="mt"><div class="empty">A carregar pagamentos...</div></div>
+    </div>`;
+  await loadAdminPaymentList();
+}
+
+async function loadAdminPaymentList(){
+  const target=document.getElementById('adminPaymentsList');
+  if(!target)return;
+  const status=document.getElementById('adminPaymentFilter')?.value||'';
+  try{
+    const qs=status?'?status='+encodeURIComponent(status):'';
+    const list=await api('/api/admin/payments'+qs);
+    const orders=Array.isArray(list)?list:[];
+    if(!orders.length){target.innerHTML='<div class="empty">Nenhum pagamento encontrado neste estado.</div>';return;}
+    target.innerHTML=orders.map(order=>{
+      const payment=order.payment||{};
+      const statusLabel=payment.status||'Pendente';
+      const method=payment.method==='multicaixa_express'?'Multicaixa Express':payment.method==='bank_transfer'?'Transferência bancária':payment.method==='card'?'Cartão':payment.method||'Não definido';
+      const reference=payment.reference||'Sem referência';
+      const actions=statusLabel==='Aguardando confirmação'?`
+        <div class="quick-grid mt">
+          <button class="quick" onclick="adminUpdatePayment('${esc(order.id)}','Pago')"><span class="emoji">✅</span>Confirmar<small>Marcar como pago</small></button>
+          <button class="quick" onclick="adminUpdatePayment('${esc(order.id)}','Falhou')"><span class="emoji">❌</span>Recusar<small>Pagamento falhado</small></button>
+          <button class="quick" onclick="adminUpdatePayment('${esc(order.id)}','Cancelado')"><span class="emoji">🚫</span>Cancelar<small>Cancelar pagamento</small></button>
+        </div>`:statusLabel==='Pago'?`
+        <button class="btn btn-secondary btn-full mt" onclick="adminUpdatePayment('${esc(order.id)}','Reembolsado')">↩️ Reembolsar pagamento</button>`:'';
+      return `<div class="card mb" style="padding:14px;border:1px solid #e1e8e4">
+        <div class="row"><div><strong>Pedido #${esc(String(order.id).slice(-8))}</strong><div class="small mt">${esc(new Date(order.createdAt||Date.now()).toLocaleString('pt-PT'))}</div></div><span class="badge">${esc(statusLabel)}</span></div>
+        <div class="stats mt">
+          <div class="stat"><strong>${money(order.total)}</strong><small>Total</small></div>
+          <div class="stat"><strong>${esc(method)}</strong><small>Método</small></div>
+        </div>
+        <div class="notification mt"><div><strong>Referência</strong></div><div class="small mt" style="word-break:break-all">${esc(reference)}</div></div>
+        <div class="small mt">Pedido: <strong>${esc(order.status||'Pendente')}</strong> · Destinatário: ${esc(order.delivery?.recipient||'—')}</div>
+        ${actions}
+      </div>`;
+    }).join('');
+  }catch(e){target.innerHTML=`<div class="empty">${esc(e.message||'Não foi possível carregar os pagamentos.')}</div>`;}
+}
+
+async function adminUpdatePayment(orderId,status){
+  const labels={Pago:'confirmar este pagamento',Falhou:'marcar este pagamento como falhado',Cancelado:'cancelar este pagamento',Reembolsado:'reembolsar este pagamento'};
+  if(!confirm('Tens certeza que queres '+(labels[status]||'alterar este pagamento')+'?'))return;
+  try{
+    await api('/api/orders/'+encodeURIComponent(orderId)+'/payment',{method:'PATCH',body:JSON.stringify({status})});
+    toast(status==='Pago'?'Pagamento confirmado ✓':status==='Reembolsado'?'Pagamento reembolsado ✓':'Pagamento atualizado ✓');
+    await loadAdminPaymentList();
+  }catch(e){toast(e.message||'Não foi possível atualizar o pagamento.');}
 }
 
 async function loadDashboard(){
