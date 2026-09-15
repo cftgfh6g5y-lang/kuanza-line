@@ -52,11 +52,6 @@ function ensureDB(db){
   return db;
 }
 const ALLOWED_ORIGIN=String(process.env.KUANZA_ALLOWED_ORIGIN||'https://kuanza-line.onrender.com').trim();
-const KUANZA_PAYMENT_BENEFICIARY=String(process.env.KUANZA_PAYMENT_BENEFICIARY||'Kuanza Line').trim();
-const KUANZA_PAYMENT_BANK=String(process.env.KUANZA_PAYMENT_BANK||'').trim();
-const KUANZA_PAYMENT_ACCOUNT=String(process.env.KUANZA_PAYMENT_ACCOUNT||'').trim();
-const KUANZA_PAYMENT_IBAN=String(process.env.KUANZA_PAYMENT_IBAN||'').trim();
-const KUANZA_PAYMENT_ENTITY=String(process.env.KUANZA_PAYMENT_ENTITY||'').trim();
 function json(res,code,data){const origin=ALLOWED_ORIGIN||'*';res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'Content-Type,Authorization','Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'strict-origin-when-cross-origin','Permissions-Policy':'camera=(),microphone=(),geolocation=(self)','Cache-Control':'no-store'});res.end(JSON.stringify(data));}
 function body(req,max=8*1024*1024){return new Promise((resolve,reject)=>{let s='',size=0;req.on('data',c=>{size+=c.length;if(size>max){reject(new Error('Dados demasiado grandes.'));req.destroy();return;}s+=c});req.on('end',()=>{try{resolve(s?JSON.parse(s):{})}catch(e){reject(new Error('JSON inválido.'))}});req.on('error',reject)})}
 function token(){return crypto.randomBytes(24).toString('hex');}
@@ -451,9 +446,7 @@ async function supabaseOrdersToPublic(rows,db){
       payment:{
         method:String(row.payment_method||''),
         status:String(row.payment_status||'Pendente'),
-        reference:row.payment_reference||null,
-        internalReference:(()=>{const h=Array.isArray(row.status_history)?row.status_history:[];const x=h.find(v=>v&&v.paymentInternalReference);return String(x?.paymentInternalReference||'').trim()||null;})(),
-        instructions:null
+        reference:row.payment_reference||null
       },
       delivery:{
         method:String(row.delivery_method||'delivery'),
@@ -469,7 +462,6 @@ async function supabaseOrdersToPublic(rows,db){
       ...(financials?{financials}:legacy?.financials?{financials:legacy.financials}:{}),
     });
   }
-  for(const order of out){ if(order.payment)order.payment.instructions=paymentInstructions(order); }
   return out;
 }
 
@@ -508,35 +500,40 @@ async function createSupabaseOrder(db,user,b){
   if(!supabaseAdmin)throw new Error('Supabase não está configurado no servidor.');
   const rawItems=Array.isArray(b.items)?b.items:[];
   if(!rawItems.length)return {error:'O carrinho está vazio.'};
+
   const requestedIds=[...new Set(rawItems.map(raw=>String(raw.productId||raw.id||'').trim()).filter(Boolean))];
   if(!requestedIds.length)return {error:'Nenhum produto válido no carrinho.'};
+
   const {data:products,error:productsError}=await supabaseAdmin
     .from('products')
     .select('id,seller_id,store_id,category_id,name,price,stock,status,description,created_at,updated_at')
     .in('id',requestedIds);
   if(productsError)throw new Error('Não foi possível consultar os produtos para o pedido: '+productsError.message);
+
   const productMap=new Map((products||[]).map(p=>[String(p.id),p]));
-  const requestedByProduct=new Map();
+  const items=[];
   let subtotal=0;
   for(const raw of rawItems){
     const productId=String(raw.productId||raw.id||'').trim();
     const product=productMap.get(productId);
-    if(!product||String(product.status||'active')!=='active')continue;
-    const quantity=Math.max(1,Math.min(99,Math.floor(Number(raw.quantity||raw.qty||1))));
-    requestedByProduct.set(productId,(requestedByProduct.get(productId)||0)+quantity);
-  }
-  const items=[];
-  for(const [productId,quantity] of requestedByProduct.entries()){
-    const product=productMap.get(productId);
     if(!product)continue;
-    const available=Number(product.stock||0);
-    if(available<quantity)return {error:`Stock insuficiente para ${product.name}. Disponível: ${available}.`};
+    if(String(product.status||'active')!=='active')continue;
+    const quantity=Math.max(1,Math.min(99,Math.floor(Number(raw.quantity||raw.qty||1))));
+    if(Number(product.stock||0)>0&&quantity>Number(product.stock))return {error:`Quantidade superior ao stock disponível para ${product.name}.`};
     const unitPrice=Number(product.price||0);
     const itemTotal=unitPrice*quantity;
     subtotal+=itemTotal;
-    items.push({product_id:String(product.id),seller_id:product.seller_id?String(product.seller_id):null,product_name:String(product.name||'Produto'),unit_price:unitPrice,quantity,total:itemTotal});
+    items.push({
+      product_id:String(product.id),
+      seller_id:product.seller_id?String(product.seller_id):null,
+      product_name:String(product.name||'Produto'),
+      unit_price:unitPrice,
+      quantity,
+      total:itemTotal
+    });
   }
   if(!items.length)return {error:'Nenhum produto válido no carrinho.'};
+
   const paymentMethods=['multicaixa_express','bank_transfer','card'];
   const deliveryMethods=['delivery','pickup'];
   const paymentMethod=String(b.paymentMethod||'');
@@ -547,56 +544,48 @@ async function createSupabaseOrder(db,user,b){
   if(!paymentMethods.includes(paymentMethod))return {error:'Método de pagamento inválido.'};
   if(!deliveryMethods.includes(deliveryMethod))return {error:'Forma de entrega inválida.'};
   if(!deliveryAddress)return {error:'Indica a morada ou ponto de entrega.'};
+
   const deliveryFee=deliveryMethod==='delivery'?1500:0;
   const grandTotal=subtotal+deliveryFee;
   const now=new Date().toISOString();
-  const internalReference=generateKuanzaPaymentReference();
-  const statusHistory=[{status:'Pendente',at:now},{paymentInternalReference:internalReference,at:now}];
-  const {data:createdOrder,error:orderError}=await supabaseAdmin.from('orders').insert({
-    buyer_id:String(user.id),status:'Pendente',subtotal,delivery_fee:deliveryFee,total:grandTotal,
-    delivery_method:deliveryMethod,recipient_name:recipient,recipient_phone:phone,delivery_address:deliveryAddress,
-    payment_method:paymentMethod,payment_status:'Pendente',payment_reference:null,status_history:statusHistory
-  }).select('id,buyer_id,status,subtotal,delivery_fee,total,delivery_method,recipient_name,recipient_phone,delivery_address,payment_method,payment_status,payment_reference,status_history,created_at,updated_at').single();
+  const statusHistory=[{status:'Pendente',at:now}];
+  const {data:createdOrder,error:orderError}=await supabaseAdmin
+    .from('orders')
+    .insert({
+      buyer_id:String(user.id),
+      status:'Pendente',
+      subtotal,
+      delivery_fee:deliveryFee,
+      total:grandTotal,
+      delivery_method:deliveryMethod,
+      recipient_name:recipient,
+      recipient_phone:phone,
+      delivery_address:deliveryAddress,
+      payment_method:paymentMethod,
+      payment_status:'Pendente',
+      payment_reference:null,
+      status_history:statusHistory
+    })
+    .select('id,buyer_id,status,subtotal,delivery_fee,total,delivery_method,recipient_name,recipient_phone,delivery_address,payment_method,payment_status,payment_reference,status_history,created_at,updated_at')
+    .single();
   if(orderError)throw new Error('Não foi possível criar o pedido no Supabase: '+orderError.message);
+
   const orderId=String(createdOrder.id);
   const {error:itemsError}=await supabaseAdmin.from('order_items').insert(items.map(item=>({...item,order_id:orderId})));
-  if(itemsError){await supabaseAdmin.from('orders').delete().eq('id',orderId);throw new Error('Não foi possível guardar os itens do pedido: '+itemsError.message);}
-
-  // Optimistic compare-and-swap stock reservation. Each update succeeds only
-  // if the stock value read immediately before the order still matches.
-  const reservations=[];
-  try{
-    for(const item of items.slice().sort((a,b)=>String(a.product_id).localeCompare(String(b.product_id)))){
-      const product=productMap.get(String(item.product_id));
-      const before=Number(product.stock||0);
-      const after=before-Number(item.quantity||0);
-      const {data:changed,error:stockError}=await supabaseAdmin.from('products').update({stock:after,status:after===0?'inactive':String(product.status||'active'),updated_at:new Date().toISOString()}).eq('id',String(item.product_id)).eq('stock',before).select('id,stock,status').maybeSingle();
-      if(stockError)throw new Error('Não foi possível reservar o stock para '+item.product_name+': '+stockError.message);
-      if(!changed)throw new Error(`O stock de ${item.product_name} acabou de mudar. Atualiza a página e tenta novamente.`);
-      reservations.push({productId:String(item.product_id),before,after});
-    }
-  }catch(e){
-    for(const r of reservations.slice().reverse()){
-      await supabaseAdmin.from('products').update({stock:r.before,status:'active',updated_at:new Date().toISOString()}).eq('id',r.productId).eq('stock',r.after);
-    }
-    await supabaseAdmin.from('order_items').delete().eq('order_id',orderId);
+  if(itemsError){
     await supabaseAdmin.from('orders').delete().eq('id',orderId);
-    throw e;
+    throw new Error('Não foi possível guardar os itens do pedido: '+itemsError.message);
   }
 
   const order=(await supabaseOrdersToPublic([createdOrder],db))[0];
-  if(order){
-    order.payment=order.payment||{};
-    order.payment.internalReference=internalReference;
-    order.payment.instructions=paymentInstructions(order);
-    await mirrorOrderToLegacy(db,order);
-    await ensureDeliveryForOrder(db,order);
-  }
+  await mirrorOrderToLegacy(db,order);
+  await ensureDeliveryForOrder(db,order);
   const sellerIds=[...new Set(items.map(i=>i.seller_id).filter(Boolean).map(String))];
   for(const sid of sellerIds)notify(db,sid,'sale','Novo pedido',`Recebeste um novo pedido #${String(order.id).slice(-8)}.`,{orderId:order.id});
   write(db);
   return {order};
 }
+
 async function updateSupabaseOrderStatus(orderId,next,db){
   if(!supabaseAdmin)throw new Error('Supabase não está configurado no servidor.');
   const current=await getSupabaseOrderForId(orderId,db);
@@ -682,38 +671,12 @@ const ORDER_TRANSITIONS={
 function canTransition(map,current,next){return current===next||((map[current]||[]).includes(next));}
 
 function paymentStatusLabel(status){return PAYMENT_STATUSES.includes(String(status||''))?String(status):'Pendente';}
-function generateKuanzaPaymentReference(){
-  const d=new Date();
-  const stamp=d.toISOString().slice(0,10).replace(/-/g,'');
-  const random=crypto.randomBytes(3).toString('hex').toUpperCase();
-  return `KL-${stamp}-${random}`;
-}
-function internalPaymentReference(order){
-  const history=Array.isArray(order?.statusHistory)?order.statusHistory:[];
-  const item=history.find(x=>x&&x.paymentInternalReference);
-  return String(item?.paymentInternalReference||'').trim()||null;
-}
-function paymentInstructions(order){
-  const total=Number(order?.total||0);
-  return {
-    beneficiary:KUANZA_PAYMENT_BENEFICIARY,
-    bank:KUANZA_PAYMENT_BANK||null,
-    account:KUANZA_PAYMENT_ACCOUNT||null,
-    iban:KUANZA_PAYMENT_IBAN||null,
-    entity:KUANZA_PAYMENT_ENTITY||null,
-    internalReference:internalPaymentReference(order),
-    amount:total,
-    configured:!!(KUANZA_PAYMENT_BANK&&KUANZA_PAYMENT_ACCOUNT)
-  };
-}
 function publicPayment(order){
   if(!order)return null;
   return {
     method:String(order.payment?.method||''),
     status:paymentStatusLabel(order.payment?.status),
-    reference:order.payment?.reference||null,
-    internalReference:internalPaymentReference(order),
-    instructions:paymentInstructions(order)
+    reference:order.payment?.reference||null
   };
 }
 async function updateSupabasePayment(orderId,nextStatus,reference,db){
@@ -1097,6 +1060,14 @@ async function refundPendingOrder(db,order,reason='Pagamento reembolsado'){
   return true;
 }
 
+async function releaseReservedStockForOrder(db,orderId,reason='Stock libertado'){
+  if(!supabaseAdmin||!orderId)throw new Error('Supabase não está configurado no servidor.');
+  const result=await supabaseAdmin.rpc('kuanza_release_order_stock',{p_order_id:String(orderId),p_reason:String(reason)});
+  if(result.error)throw new Error('Não foi possível libertar o stock reservado: '+result.error.message);
+  const data=result.data||{};
+  return {released:data.released===true,alreadyReleased:data.already_released===true,items:data.items||[],orderId:String(orderId)};
+}
+
 const rateBuckets=new Map();
 function rateLimit(req,key,limit=60,windowMs=60000){const now=Date.now();const id=key+'|'+(req.socket.remoteAddress||'unknown');const a=rateBuckets.get(id)||[];const fresh=a.filter(t=>now-t<windowMs);fresh.push(now);rateBuckets.set(id,fresh);return fresh.length<=limit;}
 function audit(db,req,userId,event,meta={}){if(!Array.isArray(db.securityEvents))db.securityEvents=[];db.securityEvents.unshift({id:crypto.randomUUID(),userId:userId||null,event,ip:req.socket.remoteAddress||'unknown',at:new Date().toISOString(),meta});if(db.securityEvents.length>1000)db.securityEvents=db.securityEvents.slice(0,1000);}
@@ -1207,26 +1178,23 @@ const server=http.createServer(async(req,res)=>{
       const b=await body(req);
       if(!['buyer','seller'].includes(b.role))return json(res,400,{error:'Tipo de conta inválido.'});
 
-      // A alteração do próprio perfil é feita com o token do utilizador.
-      // Assim a política RLS profiles_update_own aplica-se corretamente:
-      // auth.uid() = id.
-      const accessToken=(req.headers.authorization||'').replace('Bearer ','').trim();
-      if(!accessToken)return json(res,401,{error:'Sessão inválida.'});
+      if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
+      if(user.role==='admin')return json(res,403,{error:'O tipo de conta de administrador não pode ser alterado.'});
 
-      const supabaseUser=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
-        global:{headers:{Authorization:`Bearer ${accessToken}`}},
-        auth:{persistSession:false,autoRefreshToken:false}
-      });
-
-      const { data: updatedProfile, error }=await supabaseUser
+      // O token já foi validado por auth() acima. A escrita é feita pelo
+      // service_role no servidor, evitando depender de uma política RLS
+      // específica para UPDATE do perfil. O servidor continua a validar
+      // estritamente que a mudança é apenas buyer <-> seller.
+      const { data: updatedProfile, error }=await supabaseAdmin
         .from('profiles')
-        .update({role:b.role})
+        .update({role:String(b.role),updated_at:new Date().toISOString()})
         .eq('id',user.id)
         .select('id,full_name,phone,avatar_url,role,verified,score,created_at,updated_at')
         .maybeSingle();
 
       if(error)return json(res,403,{error:error.message||'Não foi possível mudar o tipo de conta.'});
-      if(!updatedProfile)return json(res,403,{error:'O teu perfil não foi atualizado. Verifica as permissões da tua conta.'});
+      if(!updatedProfile)return json(res,403,{error:'O teu perfil não foi atualizado.'});
+      if(String(updatedProfile.role)!==String(b.role))return json(res,409,{error:'O servidor não confirmou a mudança do tipo de conta.'});
 
       user.role=String(updatedProfile.role||b.role);
       user.name=String(updatedProfile.full_name||user.name||'Utilizador');
@@ -1375,7 +1343,6 @@ const server=http.createServer(async(req,res)=>{
       const condition=String(b.condition||'Usado').trim();
       const location=String(b.location||'').trim();
       if(!name||price<=0||!categoryValue)return json(res,400,{error:'Preenche nome, preço e categoria.'});
-      if(stock<1)return json(res,400,{error:'Indica pelo menos 1 unidade de stock.'});
       if(!validPhotos(photos))return json(res,400,{error:'O produto precisa de pelo menos 5 fotos reais. Podes adicionar até 10.'});
       if(description.length<15)return json(res,400,{error:'A descrição é obrigatória e deve ter pelo menos 15 caracteres.'});
       if(description.length>5000)return json(res,400,{error:'A descrição é demasiado longa.'});
@@ -1446,8 +1413,7 @@ const server=http.createServer(async(req,res)=>{
       if(location.length>200)return json(res,400,{error:'A localização deve ter no máximo 200 caracteres.'});
       const category=await supabaseCategory(categoryValue);
       if(!category)return json(res,400,{error:'Categoria não encontrada ou inativa.'});
-      const effectiveStatus=stock===0?'inactive':status;
-      const patch={name,price,category_id:category.id,description,stock,status:effectiveStatus,updated_at:new Date().toISOString()};
+      const patch={name,price,category_id:category.id,description,stock,status,updated_at:new Date().toISOString()};
       if(b.slug!==undefined)patch.slug=slugify(b.slug)||productSlug(name);
       else if(!existing.slug)patch.slug=productSlug(name);
       const {data:p,error}=await supabaseAdmin.from('products').update(patch).eq('id',id).eq('seller_id',user.id).select('id,seller_id,store_id,category_id,name,slug,description,price,stock,status,views,created_at,updated_at').single();
@@ -1613,7 +1579,7 @@ const server=http.createServer(async(req,res)=>{
         if(!order)return json(res,404,{error:'Pedido não encontrado.'});
         const sellerIds=[...new Set((order.items||[]).map(i=>String(i.sellerId||'')).filter(Boolean))];
         if(order.userId!==user.id&&!sellerIds.includes(String(user.id))&&!adminOnly(user))return json(res,403,{error:'Sem permissão.'});
-        return json(res,200,{orderId:order.id,total:order.total,payment:publicPayment(order),paymentInstructions:paymentInstructions(order)});
+        return json(res,200,{orderId:order.id,total:order.total,payment:publicPayment(order)});
       }catch(e){return json(res,500,{error:e.message||'Não foi possível carregar o pagamento.'});}
     }
     if(paymentRoute&&req.method==='POST'){
@@ -1626,14 +1592,14 @@ const server=http.createServer(async(req,res)=>{
         if(!PAYMENT_METHODS.includes(String(order.payment?.method||'')))return json(res,400,{error:'Método de pagamento inválido.'});
         if(['Pago','Reembolsado'].includes(paymentStatusLabel(order.payment?.status)))return json(res,409,{error:'Este pagamento não pode ser enviado novamente.'});
         const b=await body(req,64*1024);
-        const reference=String(b.reference||b.bankReference||b.bankPaymentReference||'').trim().slice(0,120);
+        const reference=String(b.reference||'').trim().slice(0,120);
         if(reference.length<3)return json(res,400,{error:'Indica a referência do pagamento.'});
         const updated=await updateSupabasePayment(id,'Aguardando confirmação',reference,db);
         if(!updated)return json(res,404,{error:'Pedido não encontrado.'});
         notify(db,user.id,'payment','Pagamento enviado','A referência do pagamento foi enviada e aguarda confirmação.',{orderId:id,status:'Aguardando confirmação'});
         const sellerIds=[...new Set((updated.items||[]).map(i=>String(i.sellerId||'')).filter(Boolean))];
         for(const sid of sellerIds)notify(db,sid,'payment','Pagamento enviado',`O pagamento do pedido #${String(id).slice(-8)} aguarda confirmação.`,{orderId:id,status:'Aguardando confirmação'});
-        write(db);return json(res,200,{orderId:id,payment:publicPayment(updated),paymentInstructions:paymentInstructions(updated)});
+        write(db);return json(res,200,{orderId:id,payment:publicPayment(updated)});
       }catch(e){return json(res,500,{error:e.message||'Não foi possível enviar o pagamento.'});}
     }
     if(paymentRoute&&req.method==='PATCH'){
@@ -1664,6 +1630,9 @@ const server=http.createServer(async(req,res)=>{
             legacyOrder.payment=updated.payment;
             if(next==='Pago')await addPendingForPaidOrder(db,legacyOrder);
             if(next==='Pago'&&legacyOrder.status==='Entregue')await startDeliveryProtection(db,legacyOrder);
+          }
+          if(['Falhou','Cancelado'].includes(next)){
+            await releaseReservedStockForOrder(db,id,`Pagamento ${next.toLowerCase()}`);
           }
         }
         if(!updated)return json(res,404,{error:'Pedido não encontrado.'});
@@ -1886,6 +1855,9 @@ const server=http.createServer(async(req,res)=>{
           } else if(next==='Cancelado'&&!order.financials?.cancelled){
             await upsertOrderFinancials(order.id,{cancelled:true,cancelled_at:new Date().toISOString(),protection_status:'Cancelada'});
             order.financials={...(order.financials||{}),cancelled:true,cancelledAt:new Date().toISOString(),protectionStatus:'Cancelada'};
+          }
+          if(next==='Cancelado'){
+            await releaseReservedStockForOrder(db,order.id,'Pedido cancelado');
           }
           notify(db,order.userId,'order','Pedido atualizado',`O pedido #${String(order.id).slice(-8)} está agora: ${next}.`,{orderId:order.id,status:next});
           const delivery=await ensureDeliveryForOrder(db,order); const ds=deliveryStatusFromOrderStatus(next);
