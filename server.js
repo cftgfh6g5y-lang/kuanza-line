@@ -113,11 +113,24 @@ async function auth(db,req){
   }
 
   const p=profile||{};
+  let permanentAdmin=false;
+  if(supabaseAdmin){
+    try{
+      const {data:adminRow,error:adminError}=await supabaseAdmin
+        .from('admin_users')
+        .select('user_id,active')
+        .eq('user_id',au.id)
+        .eq('active',true)
+        .maybeSingle();
+      if(!adminError&&adminRow)permanentAdmin=true;
+    }catch(e){}
+  }
+  const effectiveRole=permanentAdmin?'admin':(['buyer','seller','admin'].includes(p.role)?p.role:'buyer');
   const user={
     id:au.id,
     name:String(p.full_name||au.user_metadata?.full_name||au.user_metadata?.name||au.email?.split('@')[0]||'Utilizador'),
     email:String(au.email||''),
-    role:['buyer','seller','admin'].includes(p.role)?p.role:'buyer',
+    role:effectiveRole,
     score:Number(p.score||50),
     verified:!!p.verified,
     avatar:String(p.avatar_url||''),
@@ -1155,6 +1168,7 @@ const server=http.createServer(async(req,res)=>{
       const user=await auth(db,req);if(!user)return json(res,401,{error:'Não autenticado.'});
       if(!supabaseAuth)return json(res,503,{error:'Supabase não está configurado no servidor.'});
       const b=await body(req);
+      if(user.role==='admin')return json(res,403,{error:'Contas administrativas não podem alternar entre comprador e vendedor.'});
       if(!['buyer','seller'].includes(b.role))return json(res,400,{error:'Tipo de conta inválido.'});
 
       // A alteração do próprio perfil é feita com o token do utilizador.
