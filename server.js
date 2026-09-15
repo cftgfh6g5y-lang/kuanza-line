@@ -113,11 +113,24 @@ async function auth(db,req){
   }
 
   const p=profile||{};
+  let permanentAdmin=false;
+  if(supabaseAdmin){
+    try{
+      const {data:adminRow,error:adminError}=await supabaseAdmin
+        .from('admin_users')
+        .select('user_id,active')
+        .eq('user_id',au.id)
+        .eq('active',true)
+        .maybeSingle();
+      if(!adminError&&adminRow)permanentAdmin=true;
+    }catch(e){}
+  }
+  const effectiveRole=permanentAdmin?'admin':(['buyer','seller','admin'].includes(p.role)?p.role:'buyer');
   const user={
     id:au.id,
     name:String(p.full_name||au.user_metadata?.full_name||au.user_metadata?.name||au.email?.split('@')[0]||'Utilizador'),
     email:String(au.email||''),
-    role:['buyer','seller','admin'].includes(p.role)?p.role:'buyer',
+    role:effectiveRole,
     score:Number(p.score||50),
     verified:!!p.verified,
     avatar:String(p.avatar_url||''),
@@ -1064,8 +1077,8 @@ const server=http.createServer(async(req,res)=>{
     const currentUser=await auth(db,req);
     if(currentUser && isBlocked(db,currentUser.id)) return json(res,403,{error:'A tua conta está temporariamente bloqueada.'});
     await processProtectionReleases(db);
-    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'2.0.4.1',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
-    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'2.0.4.1',supabase:!!(supabaseAuth&&supabaseAdmin)});
+    if(u.pathname==='/api/health') return json(res,200,{ok:true,service:'Kuanza Line API',version:'2.0.4.2',status:'healthy',supabase:!!(supabaseAuth&&supabaseAdmin),timestamp:new Date().toISOString()});
+    if(u.pathname==='/api/ready') return json(res,200,{ok:true,ready:fs.existsSync(DB),database:fs.existsSync(DB)?'ready':'missing',version:'2.0.4.2',supabase:!!(supabaseAuth&&supabaseAdmin)});
 
     if(u.pathname==='/api/register'&&req.method==='POST'){
       if(!supabaseAdmin || !supabaseAuth) return json(res,503,{error:'Supabase não está configurado no servidor.'});
