@@ -2459,8 +2459,6 @@ function scoreText(score){
 }
 
 async function switchRole(){
-  if(me?.role==='admin'){toast('A conta administrativa não pode mudar de tipo.');return;}
-
 
   if(!token){
     toast('Inicia sessão primeiro.');
@@ -3247,7 +3245,7 @@ async function loadAdminPayments(){
       </div>
       <div class="filters mt">
         <select id="adminPaymentFilter" onchange="loadAdminPaymentList()">
-          <option value="Aguardando confirmação" selected>Aguardando confirmação</option>
+          <option value="" selected>Todos</option>
           <option value="Pendente">Pendente</option>
           <option value="Pago">Pagos</option>
           <option value="Falhou">Falhados</option>
