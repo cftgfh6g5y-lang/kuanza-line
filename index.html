@@ -1075,6 +1075,9 @@ const API = location.origin;
 
 let token = localStorage.getItem('kuanza_token') || '';
 let me = null;
+// Compatibilidade: algumas versões anteriores do perfil usavam `userProfile`.
+// Mantemos este alias ligado ao estado atual `me` para evitar ReferenceError.
+Object.defineProperty(window,'userProfile',{configurable:true,get:()=>me,set:(value)=>{me=value;}});
 let products = [];
 let cart = JSON.parse(localStorage.getItem('kuanza_cart') || '[]');
 let favorites = JSON.parse(localStorage.getItem('kuanza_favorites') || '[]');
