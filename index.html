@@ -432,6 +432,19 @@ img{
   font-size:25px;
 }
 
+.avatar img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  border-radius:inherit;
+  display:block;
+}
+
+.profile-edit-btn{
+  margin-left:auto;
+  flex:0 0 auto;
+}
+
 .profile-info h2{
   font-family:Poppins,sans-serif;
   font-size:20px;
@@ -2177,19 +2190,21 @@ async function loadAccount(){
         <div class="profile-head">
 
           <div class="avatar">
-            ${(me.name || me.email || 'K').charAt(0).toUpperCase()}
+            ${me.avatar ? `<img src="${esc(me.avatar)}" alt="Foto de perfil">` : esc((me.name || me.email || 'K').charAt(0).toUpperCase())}
           </div>
 
           <div class="profile-info">
 
             <h2>${esc(me.name || 'Utilizador')}</h2>
 
-            <p>${esc(me.email || '')}</p>
+            <p>${esc(me.email || 'E-mail não disponível')}</p>
 
             <div class="mt">
               <span class="badge">
-                ${me.role === 'seller' ? '🏪 Vendedor' : '🛒 Comprador'}
+                ${me.role === 'admin' ? '🛡️ Administrador' : (me.role === 'seller' ? '🏪 Vendedor' : '🛒 Comprador')}
               </span>
+
+              ${me.phone ? `<span class="badge">☎ ${esc(me.phone)}</span>` : ''}
 
               ${
                 me.verified
@@ -2199,6 +2214,8 @@ async function loadAccount(){
             </div>
 
           </div>
+
+          <button class="btn btn-secondary profile-edit-btn" onclick="openProfileEdit()">✏️ Editar</button>
 
         </div>
 
@@ -2264,6 +2281,7 @@ async function loadAccount(){
         <div id="walletContent"><div class="small">A carregar carteira...</div></div>
       </div>
 
+      ${me.role !== 'admin' ? `
       <div class="card">
 
         <h3>Tipo de conta</h3>
@@ -2280,6 +2298,13 @@ async function loadAccount(){
         </button>
 
       </div>
+      ` : `
+      <div class="card" style="border:1px solid #cfe7d8;background:#f5fbf7">
+        <h3>Tipo de conta</h3>
+        <p class="small">Esta conta tem privilégios administrativos da plataforma.</p>
+        <div class="mt"><span class="badge">🛡️ Administrador</span></div>
+      </div>
+      `}
 
       ${
         me.role === 'seller'
@@ -2369,6 +2394,72 @@ async function loadAccount(){
 
     </div>
   `;
+}
+
+async function openProfileEdit(){
+  if(!me||!token){toast('Inicia sessão primeiro.');return;}
+  openModal(`
+    <div class="modal-head"><h3>👤 Editar perfil</h3><button class="close" onclick="closeModal()">✕</button></div>
+    <div class="form">
+      <div>
+        <label>Foto de perfil</label>
+        <input id="profileAvatarFile" type="file" accept="image/jpeg,image/png,image/webp" onchange="previewProfilePhoto(this)">
+        <div id="profileAvatarPreview" class="mt" style="display:flex;justify-content:center">
+          <div class="avatar" style="width:88px;height:88px">${me.avatar?`<img src="${esc(me.avatar)}" alt="Foto">`:esc((me.name||'K').charAt(0).toUpperCase())}</div>
+        </div>
+        <div class="small mt">JPG, PNG ou WebP · máximo 2 MB.</div>
+      </div>
+      <div>
+        <label>Nome completo</label>
+        <input id="profileName" maxlength="100" value="${esc(me.name||'')}" placeholder="Nome completo">
+      </div>
+      <div>
+        <label>Telefone</label>
+        <input id="profilePhone" maxlength="30" value="${esc(me.phone||'')}" placeholder="Ex.: 923 000 000">
+      </div>
+      <div>
+        <label>E-mail da conta</label>
+        <input id="profileEmail" type="email" value="${esc(me.email||'')}" placeholder="teu@email.com">
+        <div class="small mt">A alteração do e-mail pode exigir confirmação no novo endereço.</div>
+      </div>
+      <button class="btn btn-primary" onclick="saveProfile()">Guardar alterações</button>
+    </div>`);
+}
+
+function previewProfilePhoto(input){
+  const file=input?.files?.[0];
+  const box=document.getElementById('profileAvatarPreview');
+  if(!file||!box)return;
+  if(file.size>2*1024*1024){toast('A foto deve ter no máximo 2 MB.');input.value='';return;}
+  const reader=new FileReader();
+  reader.onload=()=>{box.innerHTML=`<div class="avatar" style="width:88px;height:88px"><img src="${esc(reader.result)}" alt="Pré-visualização"></div>`;};
+  reader.readAsDataURL(file);
+}
+
+async function saveProfile(){
+  const name=document.getElementById('profileName')?.value.trim()||'';
+  const phone=document.getElementById('profilePhone')?.value.trim()||'';
+  const email=document.getElementById('profileEmail')?.value.trim().toLowerCase()||'';
+  const file=document.getElementById('profileAvatarFile')?.files?.[0]||null;
+  if(name.length<2){toast('Indica o teu nome completo.');return;}
+  if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Indica um e-mail válido.');return;}
+  try{
+    let avatarData='';
+    if(file){
+      if(file.size>2*1024*1024)throw new Error('A foto deve ter no máximo 2 MB.');
+      avatarData=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||''));r.onerror=()=>reject(new Error('Não foi possível ler a foto.'));r.readAsDataURL(file);});
+    }
+    const updated=await api('/api/me/profile',{method:'PATCH',body:JSON.stringify({name,phone,avatarData})});
+    me=updated.user||updated;
+    if(email!==String(me.email||'').toLowerCase()){
+      const emailResult=await api('/api/me/email',{method:'PATCH',body:JSON.stringify({email})});
+      toast(emailResult.message||'Perfil atualizado. Confirma o novo e-mail se for solicitado.');
+    }else{
+      toast('Perfil atualizado ✓');
+    }
+    closeModal();
+    await loadAccount();
+  }catch(e){toast(e.message||'Não foi possível atualizar o perfil.');}
 }
 
 async function loadWallet(){
