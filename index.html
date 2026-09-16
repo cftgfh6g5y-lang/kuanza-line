@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#087443">
 <meta name="description" content="Kuanza Line — Compra. Vende. Confia.">
 <title>Kuanza Line</title>
+<!-- Kuanza Line Frontend — Gestão administrativa de lojas -->
 <!-- Kuanza Line Frontend 2.0.2 — gestão administrativa de pagamentos -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1201,6 +1202,10 @@ async function go(id){
     await loadAdminPayments();
   }
 
+  if(id === 'adminStores'){
+    await loadAdminStores();
+  }
+
   if(id === 'conversations'){
     await loadConversations();
   }
@@ -1550,26 +1555,18 @@ async function openProduct(id){
         ${esc(product.description || 'O vendedor ainda não adicionou uma descrição.')}
       </div>
 
-      <div class="card mt" style="padding:12px;background:#f8faf9;border:1px solid #dfe8e3">
-        <strong>📦 Stock</strong>
-        <div class="small mt">${Number(product.stock||0)>0 ? `🟢 Disponível · ${Number(product.stock||0)} unidade(s)` : '🔴 Esgotado'}</div>
-      </div>
+      <div class="action-row">
 
-      <div class="action-row mt">
         <button class="btn btn-primary"
-          onclick="addToCart('${esc(product.id)}')" ${Number(product.stock||0)<=0?'disabled':''}>
+          onclick="addToCart('${esc(product.id)}')">
           🛒 Adicionar ao carrinho
-        </button>
-
-        <button class="btn btn-secondary"
-          onclick="payNow('${esc(product.id)}')" ${Number(product.stock||0)<=0?'disabled':''}>
-          💳 Pagar agora
         </button>
 
         <button class="btn btn-secondary"
           onclick="toggleFavorite('${esc(product.id)}')">
           ${favorites.includes(product.id) ? '❤️ Favorito' : '♡ Favoritar'}
         </button>
+
       </div>
 
       <div class="seller-box">
@@ -1953,72 +1950,6 @@ async function submitCheckout(){
   }
 }
 
-async function payNow(productId){
-  if(!token){toast('Inicia sessão para comprar.');return;}
-  let product=products.find(p=>String(p.id)===String(productId));
-  if(!product){try{product=await api('/api/products/'+encodeURIComponent(productId));}catch(e){toast(e.message);return;}}
-  if(Number(product.stock||0)<=0){toast('Este produto está esgotado.');return;}
-  const max=Math.max(1,Number(product.stock||1));
-  openModal(`
-    <div class="modal-head"><h3>💳 Pagar agora</h3><button class="close" onclick="closeModal()">✕</button></div>
-    <div class="notification"><strong>${esc(product.name)}</strong><div class="small mt">Preço unitário: ${money(product.price)} · Stock: ${max}</div></div>
-    <div class="form mt">
-      <div><label>Quantidade</label><input id="payNowQty" type="number" min="1" max="${max}" value="1"></div>
-      <div><label>Nome do destinatário</label><input id="payNowRecipient" value="${esc(me?.name||'')}" placeholder="Nome de quem vai receber"></div>
-      <div><label>Telefone</label><input id="payNowPhone" value="${esc(me?.phone||'')}" placeholder="9xx xxx xxx" inputmode="tel"></div>
-      <div><label>Morada / ponto de entrega</label><textarea id="payNowAddress" rows="3" placeholder="Indica bairro, rua, referência ou ponto de encontro"></textarea></div>
-      <div><label>Forma de entrega</label><select id="payNowDelivery"><option value="delivery">🚚 Entrega</option><option value="pickup">📍 Levantamento</option></select></div>
-      <div><label>Método de pagamento</label><select id="payNowPayment"><option value="bank_transfer">Transferência bancária</option><option value="multicaixa_express">Multicaixa Express</option><option value="card">Cartão</option></select></div>
-      <button id="payNowButton" class="btn btn-primary btn-full" onclick="submitPayNow('${esc(product.id)}')">Criar pedido e ver instruções</button>
-    </div>`);
-}
-
-async function submitPayNow(productId){
-  const button=document.getElementById('payNowButton');
-  const quantity=Math.max(1,Math.floor(Number(document.getElementById('payNowQty')?.value||1)));
-  const recipient=document.getElementById('payNowRecipient')?.value.trim()||'';
-  const phone=document.getElementById('payNowPhone')?.value.trim()||'';
-  const address=document.getElementById('payNowAddress')?.value.trim()||'';
-  const deliveryMethod=document.getElementById('payNowDelivery')?.value||'delivery';
-  const paymentMethod=document.getElementById('payNowPayment')?.value||'bank_transfer';
-  if(!address){toast('Indica a morada ou ponto de entrega.');return;}
-  if(button){button.disabled=true;button.textContent='A criar pedido...';}
-  try{
-    const order=await api('/api/orders',{method:'POST',body:JSON.stringify({items:[{productId,quantity}],paymentMethod,deliveryMethod,deliveryAddress:address,recipient,phone,checkoutMode:'pay_now'})});
-    closeModal();
-    await showPaymentInstructions(order.id);
-  }catch(e){toast(e.message);if(button){button.disabled=false;button.textContent='Criar pedido e ver instruções';}}
-}
-
-async function showPaymentInstructions(orderId){
-  try{
-    const data=await api('/api/orders/'+encodeURIComponent(orderId)+'/payment');
-    const p=data.payment||{};
-    const i=data.paymentInstructions||p.instructions||{};
-    const configured=!!i.configured;
-    openModal(`
-      <div class="modal-head"><h3>💳 Instruções de pagamento</h3><button class="close" onclick="closeModal()">✕</button></div>
-      <div class="notification"><strong>Pedido #${esc(String(orderId).slice(-8))}</strong><div class="small mt">Total: <strong>${money(data.total||0)}</strong></div></div>
-      <div class="card mt" style="padding:14px;background:#f8faf9;border:1px solid #dfe8e3">
-        <div class="small">Referência interna Kuanza Line</div><strong style="font-size:18px;word-break:break-all">${esc(p.internalReference||i.internalReference||'—')}</strong>
-        <div class="small mt">Usa esta referência para identificar o pedido.</div>
-      </div>
-      <div class="card mt" style="padding:14px">
-        <strong>Dados para pagamento</strong>
-        ${configured?`<div class="small mt">Beneficiário: <strong>${esc(i.beneficiary||'—')}</strong></div><div class="small mt">Banco: <strong>${esc(i.bank||'—')}</strong></div><div class="small mt">Conta: <strong>${esc(i.account||'—')}</strong></div>${i.iban?`<div class="small mt">IBAN: <strong>${esc(i.iban)}</strong></div>`:''}${i.entity?`<div class="small mt">Entidade: <strong>${esc(i.entity)}</strong></div>`:''}`:`<div class="notice mt">Os dados bancários ainda não foram configurados pelo administrador. Não faças um pagamento até os dados oficiais aparecerem.</div>`}
-      </div>
-      ${configured?`<button class="btn btn-primary btn-full mt" onclick="openPaymentConfirmation('${esc(orderId)}')">Já paguei — enviar referência</button>`:''}
-      <button class="btn btn-secondary btn-full mt" onclick="closeModal();go('orders')">Ver meus pedidos</button>`);
-  }catch(e){toast(e.message);}
-}
-
-function openPaymentConfirmation(orderId){
-  openModal(`
-    <div class="modal-head"><h3>✅ Confirmar pagamento</h3><button class="close" onclick="closeModal()">✕</button></div>
-    <div class="small">Pedido #${esc(String(orderId).slice(-8))}</div>
-    <div class="form mt"><label>Referência do pagamento</label><input id="payBankReference" maxlength="120" placeholder="Referência/comprovativo bancário"><button id="payBankReferenceButton" class="btn btn-primary btn-full" onclick="submitPaymentReference('${esc(orderId)}','payBankReference')">Enviar referência</button></div>
-    <div class="small mt">A referência será enviada para análise do administrador. A entrega continua separada do pagamento.</div>`);
-}
 function paymentMethodLabel(method){
   const map={
     multicaixa_express:'Multicaixa Express',
@@ -2028,9 +1959,9 @@ function paymentMethodLabel(method){
   return map[String(method||'')] || 'Método não definido';
 }
 
-async function submitPaymentReference(orderId,inputId){
-  const input=document.getElementById(inputId||('paymentReference-'+orderId));
-  const button=document.getElementById(inputId?inputId+'Button':('paymentReferenceButton-'+orderId));
+async function submitPaymentReference(orderId){
+  const input=document.getElementById('paymentReference-'+orderId);
+  const button=document.getElementById('paymentReferenceButton-'+orderId);
   const reference=String(input?.value||'').trim();
 
   if(reference.length<3){
@@ -2101,14 +2032,11 @@ async function loadOrders(){
           const paymentStatus=payment.status||order.paymentStatus||'Pendente';
           const paymentMethod=payment.method||order.paymentMethod||'';
           const paymentReference=payment.reference||order.paymentReference||'';
-          const internalReference=payment.internalReference||'';
           const methodLabel=paymentMethodLabel(paymentMethod);
           if(paymentStatus==='Pendente'){
             return `<div class="card mt" style="padding:12px;background:#f8faf9;border:1px solid #dfe8e3">
               <strong style="font-size:13px">💳 Pagamento</strong>
               <div class="small mt">Método: ${esc(methodLabel)}</div>
-              ${internalReference?`<div class="small mt">Referência interna: <strong>${esc(internalReference)}</strong></div>`:''}
-              <button class="btn btn-secondary btn-full mt" onclick="showPaymentInstructions('${esc(order.id)}')">💳 Ver instruções de pagamento</button>
               <div class="form mt">
                 <input id="paymentReference-${esc(order.id)}" type="text" maxlength="120" placeholder="Referência do pagamento" value="${esc(paymentReference)}">
                 <button id="paymentReferenceButton-${esc(order.id)}" class="btn btn-primary btn-full" onclick="submitPaymentReference('${esc(order.id)}')">Enviar referência</button>
@@ -2120,16 +2048,14 @@ async function loadOrders(){
             return `<div class="card mt" style="padding:12px;background:#fffaf0;border:1px solid #f0dfad">
               <strong style="font-size:13px">⏳ Pagamento aguardando confirmação</strong>
               <div class="small mt">Método: ${esc(methodLabel)}</div>
-              ${internalReference?`<div class="small mt">Referência Kuanza: <strong>${esc(internalReference)}</strong></div>`:''}
-              ${paymentReference?`<div class="small mt">Referência bancária: <strong>${esc(paymentReference)}</strong></div>`:''}
+              ${paymentReference?`<div class="small mt">Referência: <strong>${esc(paymentReference)}</strong></div>`:''}
             </div>`;
           }
           if(paymentStatus==='Pago'){
             return `<div class="card mt" style="padding:12px;background:#f1f9f4;border:1px solid #cce6d6">
               <strong style="font-size:13px;color:#087443">✅ Pagamento confirmado</strong>
               <div class="small mt">Método: ${esc(methodLabel)}</div>
-              ${internalReference?`<div class="small mt">Referência Kuanza: <strong>${esc(internalReference)}</strong></div>`:''}
-              ${paymentReference?`<div class="small mt">Referência bancária: <strong>${esc(paymentReference)}</strong></div>`:''}
+              ${paymentReference?`<div class="small mt">Referência: <strong>${esc(paymentReference)}</strong></div>`:''}
             </div>`;
           }
           return `<div class="card mt" style="padding:12px;background:#fff5f5;border:1px solid #f0d0d0">
@@ -2406,11 +2332,12 @@ async function loadAccount(){
           <div class="row">
             <div>
               <h3>🛡️ Administração</h3>
-              <p class="small mt">Gestão de pagamentos e confirmação de transações da plataforma.</p>
+              <p class="small mt">Gestão de lojas, aprovações e pagamentos da plataforma.</p>
             </div>
             <span class="badge">ADMIN</span>
           </div>
           <button class="btn btn-primary btn-full mt" onclick="go('adminPayments')">💳 Gestão de pagamentos</button>
+          <button class="btn btn-secondary btn-full mt" onclick="go('adminStores')">🏪 Gestão de lojas</button>
         </div>
       ` : ''}
 
@@ -2538,6 +2465,8 @@ function scoreText(score){
 }
 
 async function switchRole(){
+  if(me?.role==='admin'){toast('A conta administrativa não pode mudar de tipo.');return;}
+
 
   if(!token){
     toast('Inicia sessão primeiro.');
@@ -2903,12 +2832,6 @@ async function loadSell(){
           </div>
 
           <div>
-            <label>Stock disponível</label>
-            <input id="productStock" type="number" min="1" step="1" placeholder="Ex.: 10">
-            <div class="small mt">Indica quantas unidades tens disponíveis para venda.</div>
-          </div>
-
-          <div>
             <label>Categoria</label>
 
             <select id="productCategory">
@@ -3097,9 +3020,6 @@ async function publishProduct(){
   const category =
     document.getElementById('productCategory')?.value;
 
-  const stock =
-    Math.floor(Number(document.getElementById('productStock')?.value));
-
   const description =
     document.getElementById('productDescription')?.value.trim();
 
@@ -3110,11 +3030,6 @@ async function publishProduct(){
 
   if(!price || price <= 0){
     toast('Indica um preço válido.');
-    return;
-  }
-
-  if(!Number.isFinite(stock) || stock < 1){
-    toast('Indica pelo menos 1 unidade de stock.');
     return;
   }
 
@@ -3130,7 +3045,6 @@ async function publishProduct(){
       body:JSON.stringify({
         name,
         price,
-        stock,
         cat:category,
         description,
         photos:selectedPhotos.slice(0,10)
@@ -3314,6 +3228,103 @@ async function submitStore(){
   }
 }
 
+async function loadAdminStores(){
+  const root=document.getElementById('appContent');
+  if(!token){
+    root.innerHTML='<div class="page"><div class="empty">Inicia sessão para acessar a gestão de lojas.</div></div>';
+    return;
+  }
+  try{
+    const meData=await api('/api/me');
+    me=meData.user||meData;
+  }catch(e){}
+  if(me?.role!=='admin'){
+    root.innerHTML='<div class="page"><div class="empty">Sem permissão. Esta área é exclusiva para administradores.</div></div>';
+    return;
+  }
+  root.innerHTML=`
+    <div class="page">
+      <div class="section-title">
+        <h2>🏪 Gestão de lojas</h2>
+        <button class="btn btn-secondary" style="width:auto;padding:8px 12px" onclick="loadAdminStores()">Atualizar</button>
+      </div>
+      <div class="card" style="border:1px solid #dfe8e3;background:white">
+        <div class="small">Apenas o administrador pode aprovar ou rejeitar lojas. Uma loja nova começa como <strong>Aguardando aprovação</strong>.</div>
+      </div>
+      <div class="filters mt">
+        <select id="adminStoreFilter" onchange="loadAdminStoreList()">
+          <option value="">Todas</option>
+          <option value="pending" selected>Aguardando aprovação</option>
+          <option value="approved">Aprovadas</option>
+        </select>
+        <button class="btn btn-secondary" onclick="loadAdminStoreList()">🔄 Atualizar lista</button>
+      </div>
+      <div id="adminStoresList" class="mt"><div class="empty">A carregar lojas...</div></div>
+    </div>`;
+  await loadAdminStoreList();
+}
+
+async function loadAdminStoreList(){
+  const target=document.getElementById('adminStoresList');
+  if(!target)return;
+  const status=document.getElementById('adminStoreFilter')?.value||'';
+  try{
+    const qs=status?'?status='+encodeURIComponent(status):'';
+    const list=await api('/api/admin/stores'+qs);
+    const stores=Array.isArray(list)?list:[];
+    if(!stores.length){
+      target.innerHTML='<div class="empty"><div class="emoji">🏪</div><strong>Nenhuma loja encontrada.</strong></div>';
+      return;
+    }
+    target.innerHTML=stores.map(store=>{
+      const owner=store.owner||{};
+      const approved=store.verified===true;
+      const statusLabel=approved?'Aprovada':'Aguardando aprovação';
+      const logo=store.logo||store.logoUrl||'';
+      const ownerName=owner.full_name||owner.name||'Proprietário';
+      const ownerPhone=owner.phone||store.phone||'Sem telefone';
+      const actions=approved
+        ? `<button class="btn btn-danger btn-full mt" onclick="adminUpdateStore('${esc(store.id)}',false)">❌ Rejeitar loja</button>`
+        : `<button class="btn btn-primary btn-full mt" onclick="adminUpdateStore('${esc(store.id)}',true)">✅ Aprovar loja</button>`;
+      return `<div class="card mb" style="padding:14px;border:1px solid #e1e8e4">
+        <div class="row" style="align-items:flex-start">
+          <div style="display:flex;gap:10px;align-items:center;min-width:0">
+            <div class="avatar" style="width:52px;height:52px;border-radius:15px;font-size:20px;overflow:hidden">
+              ${logo?`<img src="${esc(logo)}" style="width:100%;height:100%;object-fit:cover">`:'🏪'}
+            </div>
+            <div style="min-width:0">
+              <strong>${esc(store.name||'Loja')}</strong>
+              <div class="small mt">${esc(ownerName)}</div>
+            </div>
+          </div>
+          <span class="badge">${esc(statusLabel)}</span>
+        </div>
+        <div class="small mt">📍 ${esc(store.location||'Localização não informada')}</div>
+        <div class="small mt">📞 ${esc(ownerPhone)}</div>
+        <div class="small mt">${esc(store.description||'Sem descrição.')}</div>
+        ${actions}
+      </div>`;
+    }).join('');
+  }catch(e){
+    target.innerHTML=`<div class="empty">${esc(e.message||'Não foi possível carregar as lojas.')}</div>`;
+  }
+}
+
+async function adminUpdateStore(storeId,verified){
+  const action=verified?'aprovar':'rejeitar';
+  if(!confirm(`Confirmas que queres ${action} esta loja?`))return;
+  try{
+    await api('/api/admin/stores/'+encodeURIComponent(storeId),{
+      method:'PATCH',
+      body:JSON.stringify({verified})
+    });
+    toast(verified?'Loja aprovada ✓':'Loja rejeitada ✓');
+    await loadAdminStoreList();
+  }catch(e){
+    toast(e.message||'Não foi possível atualizar a loja.');
+  }
+}
+
 async function loadAdminPayments(){
   const root=document.getElementById('appContent');
   if(!token){
@@ -3339,13 +3350,13 @@ async function loadAdminPayments(){
       </div>
       <div class="filters mt">
         <select id="adminPaymentFilter" onchange="loadAdminPaymentList()">
-          <option value="Aguardando confirmação">Aguardando confirmação</option>
+          <option value="Aguardando confirmação" selected>Aguardando confirmação</option>
           <option value="Pendente">Pendente</option>
           <option value="Pago">Pagos</option>
           <option value="Falhou">Falhados</option>
           <option value="Cancelado">Cancelados</option>
           <option value="Reembolsado">Reembolsados</option>
-          <option value="" selected>Todos</option>
+          <option value="">Todos</option>
         </select>
       </div>
       <div id="adminPaymentsList" class="mt"><div class="empty">A carregar pagamentos...</div></div>
@@ -3380,7 +3391,7 @@ async function loadAdminPaymentList(){
           <div class="stat"><strong>${money(order.total)}</strong><small>Total</small></div>
           <div class="stat"><strong>${esc(method)}</strong><small>Método</small></div>
         </div>
-        <div class="notification mt"><div><strong>Referência interna Kuanza Line</strong></div><div class="small mt" style="word-break:break-all">${esc(payment.internalReference||'—')}</div>${reference!=='Sem referência'?`<div class="small mt"><strong>Referência bancária</strong></div><div class="small mt" style="word-break:break-all">${esc(reference)}</div>`:''}</div>
+        <div class="notification mt"><div><strong>Referência</strong></div><div class="small mt" style="word-break:break-all">${esc(reference)}</div></div>
         <div class="small mt">Pedido: <strong>${esc(order.status||'Pendente')}</strong> · Destinatário: ${esc(order.delivery?.recipient||'—')}</div>
         ${actions}
       </div>`;
