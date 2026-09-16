@@ -184,7 +184,7 @@ function calculateScore(db,u){
   return Math.max(0,Math.min(100,Math.round(score)));
 }
 function scoreLabel(score){if(score>=90)return'Excelente';if(score>=75)return'Bom';if(score>=50)return'Regular';if(score>=25)return'Baixo';return'Crítico';}
-function publicUser(u,db,includeEmail=false){if(!u)return null;const completedOrders=db.orders.filter(o=>o.status==='Concluído'&&((o.userId===u.id)|| (Array.isArray(o.items)&&o.items.some(i=>i.sellerId===u.id||i.seller===u.name)))).length;const receivedReviews=db.reviews.filter(r=>r.sellerId===u.id).length;const cancelledOrders=db.orders.filter(o=>o.userId===u.id&&o.status==='Cancelado').length;const score=calculateScore(db,u);const out={id:u.id,name:u.name,role:u.role,score,scoreLabel:scoreLabel(score),avatar:u.avatar||'',verified:!!u.verified,phone:u.phone||'',completedOrders,receivedReviews,cancelledOrders};if(includeEmail)out.email=u.email||'';return out;}
+function publicUser(u,db){if(!u)return null;const completedOrders=db.orders.filter(o=>o.status==='Concluído'&&((o.userId===u.id)|| (Array.isArray(o.items)&&o.items.some(i=>i.sellerId===u.id||i.seller===u.name)))).length;const receivedReviews=db.reviews.filter(r=>r.sellerId===u.id).length;const cancelledOrders=db.orders.filter(o=>o.userId===u.id&&o.status==='Cancelado').length;const score=calculateScore(db,u);return{id:u.id,name:u.name,email:u.email,role:u.role,score,scoreLabel:scoreLabel(score),avatar:u.avatar||'',verified:!!u.verified,completedOrders,receivedReviews,cancelledOrders};}
 function publicProduct(db,p){
   return {
     ...p,
@@ -1176,7 +1176,7 @@ const server=http.createServer(async(req,res)=>{
       write(db);
       return json(res,200,{token:data.session.access_token,user:publicUser(user,db)});
     }
-    if(u.pathname==='/api/me'&&req.method==='GET'){const user=await auth(req);if(!user)return json(res,401,{error:'Não autenticado.'});const pu=publicUser(user,db,true);return json(res,200,{...pu,user:pu});}
+    if(u.pathname==='/api/me'&&req.method==='GET'){const user=await auth(req);if(!user)return json(res,401,{error:'Não autenticado.'});const pu=publicUser(user,db);return json(res,200,{...pu,email:user.email||'',phone:user.phone||'',avatar:user.avatar||'',user:{...pu,email:user.email||'',phone:user.phone||'',avatar:user.avatar||''}});}
 
     if(u.pathname==='/api/me/profile'&&req.method==='PATCH'){
       const user=await auth(req);if(!user)return json(res,401,{error:'Não autenticado.'});
@@ -1187,7 +1187,7 @@ const server=http.createServer(async(req,res)=>{
       if(name.length<2||name.length>100)return json(res,400,{error:'O nome deve ter entre 2 e 100 caracteres.'});
       if(phone.length>30)return json(res,400,{error:'O telefone é demasiado longo.'});
       const accessToken=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'').trim();
-      if(!accessToken||!supabaseAuth)return json(res,401,{error:'Sessão inválida.'});
+      if(!accessToken)return json(res,401,{error:'Sessão inválida.'});
       const supabaseUser=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{global:{headers:{Authorization:`Bearer ${accessToken}`}},auth:{persistSession:false,autoRefreshToken:false}});
       let avatarUrl=user.avatar||'';
       if(avatarData){
@@ -1195,7 +1195,7 @@ const server=http.createServer(async(req,res)=>{
         if(!match)return json(res,400,{error:'A foto deve ser JPG, PNG ou WebP.'});
         const ext=(match[1].toLowerCase()==='jpeg'||match[1].toLowerCase()==='jpg')?'jpg':match[1].toLowerCase();
         const mime=ext==='jpg'?'image/jpeg':`image/${ext}`;
-        let buffer;try{buffer=Buffer.from(match[2],'base64');}catch(e){return json(res,400,{error:'Não foi possível processar a foto.'});}
+        const buffer=Buffer.from(match[2],'base64');
         if(!buffer.length||buffer.length>2*1024*1024)return json(res,400,{error:'A foto deve ter no máximo 2 MB.'});
         if(!supabaseAdmin)return json(res,503,{error:'Serviço de armazenamento não está configurado.'});
         try{
@@ -1210,8 +1210,8 @@ const server=http.createServer(async(req,res)=>{
       const {data:updatedProfile,error}=await supabaseUser.from('profiles').update({full_name:name,phone,avatar_url:avatarUrl,updated_at:new Date().toISOString()}).eq('id',user.id).select('id,full_name,phone,avatar_url,role,verified,score,created_at,updated_at').maybeSingle();
       if(error)return json(res,403,{error:error.message||'Não foi possível atualizar o perfil.'});
       if(!updatedProfile)return json(res,403,{error:'O perfil não foi atualizado. Verifica as permissões da tua conta.'});
-      user.name=String(updatedProfile.full_name||name);user.phone=String(updatedProfile.phone||phone);user.avatar=String(updatedProfile.avatar_url||avatarUrl);user.verified=!!updatedProfile.verified;user.score=Number(updatedProfile.score||user.score||50);cacheUserProfile(user);
-      const pu=publicUser(user,db,true);return json(res,200,{ok:true,...pu,user:pu});
+      user.name=String(updatedProfile.full_name||name);user.phone=String(updatedProfile.phone||phone);user.avatar=String(updatedProfile.avatar_url||avatarUrl);user.verified=!!updatedProfile.verified;user.score=Number(updatedProfile.score||user.score||50);
+      const pu=publicUser(user,db);return json(res,200,{ok:true,...pu,email:user.email||'',phone:user.phone||'',avatar:user.avatar||'',user:{...pu,email:user.email||'',phone:user.phone||'',avatar:user.avatar||''}});
     }
 
     if(u.pathname==='/api/me/email'&&req.method==='PATCH'){
