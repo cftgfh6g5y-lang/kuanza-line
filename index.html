@@ -3195,7 +3195,12 @@ async function loadStore(){
           ? `
             <div class="card">
 
-              <h3>${esc(store.name || 'Minha loja')}</h3>
+              <div class="row" style="align-items:flex-start;gap:10px">
+                <div style="min-width:0;flex:1">
+                  <h3>${esc(store.name || 'Minha loja')}</h3>
+                </div>
+                <button class="btn btn-secondary" style="width:auto;padding:9px 12px" onclick="editStore()">✏️ Editar</button>
+              </div>
 
               <p class="small">
                 ${esc(store.description || 'Sem descrição.')}
@@ -3255,6 +3260,40 @@ async function loadStore(){
       </div>
     `;
   }
+}
+
+function editStore(){
+  const current=document.querySelector('#appContent .card');
+  const name=current?.querySelector('h3')?.textContent?.trim()||'';
+  openModal(`
+    <div class="modal-head"><h3>🏪 Editar loja</h3><button class="close" onclick="closeModal()">✕</button></div>
+    <div class="form">
+      <div><label>Nome da loja</label><input id="storeEditName" maxlength="100" value="${esc(name)}" placeholder="Nome da loja"></div>
+      <div><label>Descrição</label><textarea id="storeEditDescription" maxlength="500" placeholder="Fala sobre a tua loja"></textarea></div>
+      <div><label>Localização</label><input id="storeEditLocation" maxlength="200" placeholder="Bairro, município, província"></div>
+      <div><label>Telefone da loja</label><input id="storeEditPhone" maxlength="40" value="${esc(me?.phone||'')}" placeholder="Telefone"></div>
+      <button class="btn btn-primary" onclick="submitStoreEdit()">Guardar alterações</button>
+    </div>`);
+  (async()=>{
+    try{
+      const data=await api('/api/stores?ownerId='+encodeURIComponent(me?.id||''));
+      const store=(data.stores||[])[0]||data.store||{};
+      const set=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v||'';};
+      set('storeEditName',store.name);set('storeEditDescription',store.description);set('storeEditLocation',store.location);set('storeEditPhone',store.phone||me?.phone||'');
+    }catch(e){toast(e.message);}
+  })();
+}
+
+async function submitStoreEdit(){
+  const name=document.getElementById('storeEditName')?.value.trim()||'';
+  const description=document.getElementById('storeEditDescription')?.value.trim()||'';
+  const location=document.getElementById('storeEditLocation')?.value.trim()||'';
+  const phone=document.getElementById('storeEditPhone')?.value.trim()||'';
+  if(name.length<2){toast('Indica o nome da loja.');return;}
+  try{
+    await api('/api/stores',{method:'PATCH',body:JSON.stringify({name,description,location,phone})});
+    closeModal();toast('Loja atualizada ✓');await loadStore();
+  }catch(e){toast(e.message||'Não foi possível atualizar a loja.');}
 }
 
 function createStore(){
