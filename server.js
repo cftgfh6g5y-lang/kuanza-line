@@ -1237,11 +1237,18 @@ const server=http.createServer(async(req,res)=>{
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
       const ownerId=String(u.query.ownerId||'').trim();
       if(!ownerId)return json(res,400,{error:'Vendedor inválido.'});
-      const [{data:st,error:storeError},{data:products,error:productsError}]=await Promise.all([
-        supabaseAdmin.from('stores').select('id,owner_id,name,description,verified,created_at,updated_at').eq('owner_id',ownerId).maybeSingle(),
-        supabaseAdmin.from('products').select('id,store_id,name,description,price,created_at,updated_at').order('created_at',{ascending:false})
-      ]);
+      const {data:st,error:storeError}=await supabaseAdmin
+        .from('stores')
+        .select('id,owner_id,name,description,verified,created_at,updated_at')
+        .eq('owner_id',ownerId)
+        .maybeSingle();
       if(storeError)return json(res,500,{error:'Não foi possível carregar a loja.',details:storeError.message});
+      if(!st)return json(res,200,{store:null,stores:[],owner:null,products:[]});
+      const {data:products,error:productsError}=await supabaseAdmin
+        .from('products')
+        .select('id,store_id,name,description,price,created_at,updated_at')
+        .eq('store_id',st.id)
+        .order('created_at',{ascending:false});
       if(productsError)return json(res,500,{error:'Não foi possível carregar os produtos da loja.',details:productsError.message});
       const {profilesById,storesByOwner}=await supabaseSellerMaps([ownerId]);
       const ownerProfile=profilesById.get(ownerId)||null;
@@ -1271,20 +1278,23 @@ const server=http.createServer(async(req,res)=>{
       const payload={
         owner_id:user.id,
         name:b.name!==undefined?String(b.name).trim():String(existing?.name||user.name+' Store').trim(),
-        slug:b.slug!==undefined?slugify(b.slug):String(existing?.slug||storeSlug(b.name||existing?.name||user.name+' Store',user.id)),
         description:b.description!==undefined?String(b.description).trim():String(existing?.description||''),
-        logo_url:b.logo!==undefined?String(b.logo||''):String(existing?.logo_url||''),
-        location:b.location!==undefined?String(b.location||'').trim():String(existing?.location||''),
-        phone:b.phone!==undefined?String(b.phone||'').trim():String(existing?.phone||''),
         verified:existing?.verified===true
+      };
+      // Estes campos não existem na tabela stores atual; permanecem no db.json como compatibilidade.
+      const compatibilityStore={
+        slug:b.slug!==undefined?slugify(b.slug):storeSlug(b.name||existing?.name||user.name+' Store',user.id),
+        logo:b.logo!==undefined?String(b.logo||''):'',
+        location:b.location!==undefined?String(b.location||'').trim():'',
+        phone:b.phone!==undefined?String(b.phone||'').trim():''
       };
       if(payload.name.length<2)return json(res,400,{error:'O nome da loja deve ter pelo menos 2 caracteres.'});
       if(payload.name.length>100)return json(res,400,{error:'O nome da loja é demasiado longo.'});
       if(payload.description.length>500)return json(res,400,{error:'A descrição deve ter no máximo 500 caracteres.'});
-      if(payload.location.length>200)return json(res,400,{error:'A localização deve ter no máximo 200 caracteres.'});
-      if(payload.phone.length>40)return json(res,400,{error:'O telefone deve ter no máximo 40 caracteres.'});
-      if(payload.logo_url&&!payload.logo_url.startsWith('data:image/'))return json(res,400,{error:'O logotipo deve ser uma imagem válida.'});
-      if(payload.logo_url.length>5500000)return json(res,400,{error:'A imagem da loja é demasiado grande.'});
+      if(compatibilityStore.location.length>200)return json(res,400,{error:'A localização deve ter no máximo 200 caracteres.'});
+      if(compatibilityStore.phone.length>40)return json(res,400,{error:'O telefone deve ter no máximo 40 caracteres.'});
+      if(compatibilityStore.logo&&!compatibilityStore.logo.startsWith('data:image/'))return json(res,400,{error:'O logotipo deve ser uma imagem válida.'});
+      if(compatibilityStore.logo.length>5500000)return json(res,400,{error:'A imagem da loja é demasiado grande.'});
       let result;
       if(existing){
         result=await supabaseAdmin.from('stores').update({...payload,updated_at:now}).eq('id',existing.id).eq('owner_id',user.id).select('id,owner_id,name,description,verified,created_at,updated_at').single();
@@ -1292,7 +1302,7 @@ const server=http.createServer(async(req,res)=>{
         result=await supabaseAdmin.from('stores').insert({...payload,id:crypto.randomUUID(),created_at:now,updated_at:now}).select('id,owner_id,name,description,verified,created_at,updated_at').single();
       }
       if(result.error)return json(res,500,{error:'Não foi possível guardar a loja no Supabase.',details:result.error.message});
-      const store=supabaseStoreToPublic(result.data,db.stores.find(x=>String(x.id)===String(result.data.id)));
+      const store=supabaseStoreToPublic(result.data,{...(db.stores.find(x=>String(x.id)===String(result.data.id))||{}),...compatibilityStore});
       mirrorStoreToLegacy(db,store);write(db);
       return json(res,200,{...store,store,ok:true});
     }
@@ -1337,6 +1347,9 @@ const server=http.createServer(async(req,res)=>{
       const id=decodeURIComponent(pm[1]);
       const {data:rawProduct,error}=await supabaseAdmin.from('products').select('id,store_id,name,description,price,created_at,updated_at').eq('id',id).maybeSingle();
       if(error)return json(res,500,{error:'Não foi possível carregar o produto.',details:error.message});
+      if(!rawProduct)return json(res,404,{error:'Produto não encontrado.'});
+      const hydrated=await hydrateSupabaseProducts(db,[rawProduct]);
+      const p=hydrated[0];
       if(!p)return json(res,404,{error:'Produto não encontrado.'});
       const {profilesById,storesByOwner}=await supabaseSellerMaps([p.seller_id]);
       const categoryMap=await supabaseCategoryMap([p.category_id]);
