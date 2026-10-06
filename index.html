@@ -1163,6 +1163,31 @@ function saveFavorites(){
   localStorage.setItem('kuanza_favorites',JSON.stringify(favorites));
 }
 
+async function syncCommerceFromServer(){
+  if(!token)return;
+  try{
+    const [favData,cartData]=await Promise.all([
+      api('/api/favorites'),
+      api('/api/cart')
+    ]);
+    const serverFavorites=Array.isArray(favData)?favData:[];
+    favorites=serverFavorites.map(p=>String(p.id));
+    saveFavorites();
+    const serverCart=Array.isArray(cartData)?cartData:[];
+    cart=serverCart.map(item=>({
+      id:String(item.productId),
+      name:item.product?.name||'Produto',
+      price:Number(item.product?.price||0),
+      image:(Array.isArray(item.product?.photos)&&item.product.photos[0])||item.product?.image||'',
+      sellerId:item.product?.sellerId||null,
+      quantity:Number(item.quantity||item.qty||1)
+    }));
+    saveCart();
+  }catch(e){
+    console.warn('Sincronização de favoritos/carrinho:',e.message||e);
+  }
+}
+
 function setActiveNav(id){
   document.querySelectorAll('.nav-btn').forEach(btn=>{
     btn.classList.remove('active');
@@ -1652,204 +1677,119 @@ function changeMainImage(src,el){
   el.classList.add('active');
 }
 
-function toggleFavorite(id){
-  const index = favorites.findIndex(x=>String(x)===String(id));
-
-  if(index >= 0){
-    favorites.splice(index,1);
-    toast('Removido dos favoritos');
-  }else{
-    favorites.push(id);
-    toast('Adicionado aos favoritos ❤️');
-  }
-
+async function toggleFavorite(id){
+  const index=favorites.findIndex(x=>String(x)===String(id));
+  const wasFavorite=index>=0;
+  if(wasFavorite)favorites.splice(index,1);else favorites.push(String(id));
   saveFavorites();
-
-  if(currentProduct){
-    openProduct(currentProduct.id);
+  try{
+    if(token){
+      await api('/api/favorites/'+encodeURIComponent(id),{method:wasFavorite?'DELETE':'POST'});
+    }
+    toast(wasFavorite?'Removido dos favoritos':'Adicionado aos favoritos ❤️');
+    if(currentProduct)await openProduct(currentProduct.id);
+  }catch(e){
+    if(wasFavorite)favorites.push(String(id));else favorites=favorites.filter(x=>String(x)!==String(id));
+    saveFavorites();
+    toast(e.message||'Não foi possível atualizar o favorito.');
   }
 }
 
 async function loadFavorites(){
-  const root = document.getElementById('appContent');
-
-  const list = products.filter(p =>
-    favorites.some(id=>String(id)===String(p.id))
-  );
-
-  root.innerHTML = `
+  const root=document.getElementById('appContent');
+  let list=[];
+  if(token){
+    try{
+      const data=await api('/api/favorites');
+      list=Array.isArray(data)?data:[];
+      favorites=list.map(p=>String(p.id));
+      saveFavorites();
+    }catch(e){toast(e.message);}
+  }else{
+    list=products.filter(p=>favorites.some(id=>String(id)===String(p.id)));
+  }
+  root.innerHTML=`
     <div class="page">
-
-      <div class="section-title">
-        <h2>❤️ Favoritos</h2>
-      </div>
-
+      <div class="section-title"><h2>❤️ Favoritos</h2></div>
       <div id="favoriteProducts" class="products"></div>
-
     </div>
   `;
-
   renderProducts(list,'favoriteProducts');
 }
 
-function addToCart(id){
-  const product = products.find(p=>String(p.id)===String(id));
-
-  if(!product){
-    toast('Produto não encontrado.');
-    return;
-  }
-
-  const existing = cart.find(item=>String(item.id)===String(id));
-
-  if(existing){
-    existing.quantity += 1;
-  }else{
-    cart.push({
-      id:product.id,
-      name:product.name,
-      price:Number(product.price||0),
-      image:(Array.isArray(product.photos) && product.photos[0]) || (Array.isArray(product.images) && product.images[0]) || product.image || '',
-      sellerId:product.sellerId || product.seller?.id || null,
-      quantity:1
-    });
-  }
-
-  saveCart();
-  toast('Produto adicionado ao carrinho 🛒');
+async function addToCart(id){
+  const product=products.find(p=>String(p.id)===String(id));
+  if(!product){toast('Produto não encontrado.');return;}
+  try{
+    if(token){
+      await api('/api/cart',{method:'POST',body:JSON.stringify({productId:id,quantity:1})});
+      await syncCommerceFromServer();
+    }else{
+      const existing=cart.find(item=>String(item.id)===String(id));
+      if(existing)existing.quantity+=1;
+      else cart.push({id:product.id,name:product.name,price:Number(product.price||0),image:(Array.isArray(product.photos)&&product.photos[0])||product.image||'',sellerId:product.sellerId||null,quantity:1});
+      saveCart();
+    }
+    toast('Produto adicionado ao carrinho 🛒');
+  }catch(e){toast(e.message||'Não foi possível adicionar ao carrinho.');}
 }
 
-function changeQuantity(id,delta){
-  const item = cart.find(x=>String(x.id)===String(id));
-
-  if(!item) return;
-
-  item.quantity += delta;
-
-  if(item.quantity <= 0){
-    cart = cart.filter(x=>String(x.id)!==String(id));
-  }
-
-  saveCart();
-  loadCart();
+async function changeQuantity(id,delta){
+  const item=cart.find(x=>String(x.id)===String(id));
+  if(!item)return;
+  const next=Number(item.quantity||1)+Number(delta||0);
+  try{
+    if(token){
+      await api('/api/cart/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({quantity:Math.max(0,next)})});
+      await loadCart();
+    }else{
+      item.quantity=next;
+      if(item.quantity<=0)cart=cart.filter(x=>String(x.id)!==String(id));
+      saveCart();
+      loadCart();
+    }
+  }catch(e){toast(e.message||'Não foi possível atualizar o carrinho.');}
 }
 
 function cartTotal(){
-  return cart.reduce((sum,item)=>
-    sum + Number(item.price||0) * Number(item.quantity||1),0
-  );
+  return cart.reduce((sum,item)=>sum+Number(item.price||0)*Number(item.quantity||1),0);
 }
 
 async function loadCart(){
-  const root = document.getElementById('appContent');
-
+  const root=document.getElementById('appContent');
+  if(token){
+    try{
+      const data=await api('/api/cart');
+      const serverCart=Array.isArray(data)?data:[];
+      cart=serverCart.map(item=>({id:String(item.productId),name:item.product?.name||'Produto',price:Number(item.product?.price||0),image:(Array.isArray(item.product?.photos)&&item.product.photos[0])||item.product?.image||'',sellerId:item.product?.sellerId||null,quantity:Number(item.quantity||item.qty||1)}));
+      saveCart();
+    }catch(e){toast(e.message);return;}
+  }
   if(!cart.length){
-    root.innerHTML = `
-      <div class="page">
-
-        <div class="section-title">
-          <h2>🛒 Carrinho</h2>
-        </div>
-
-        <div class="empty">
-          <div class="emoji">🛒</div>
-          <strong>O teu carrinho está vazio</strong>
-          <p class="small mt">
-            Adiciona produtos para começar a comprar.
-          </p>
-          <button class="btn btn-primary mt" onclick="go('explore')">
-            Explorar produtos
-          </button>
-        </div>
-
-      </div>
-    `;
+    root.innerHTML=`<div class="page"><div class="section-title"><h2>🛒 Carrinho</h2></div><div class="empty"><div class="emoji">🛒</div><strong>O teu carrinho está vazio</strong><p class="small mt">Adiciona produtos para começar a comprar.</p><button class="btn btn-primary mt" onclick="go('explore')">Explorar produtos</button></div></div>`;
     return;
   }
-
-  root.innerHTML = `
+  root.innerHTML=`
     <div class="page">
-
-      <div class="section-title">
-        <h2>🛒 Carrinho</h2>
-      </div>
-
+      <div class="section-title"><h2>🛒 Carrinho</h2></div>
       <div class="card">
-
-        ${cart.map(item=>`
-          <div class="cart-item">
-
-            <img src="${item.image || 'https://placehold.co/200x200?text=Produto'}">
-
-            <div class="cart-info">
-
-              <strong>${esc(item.name)}</strong>
-
-              <div class="price">
-                ${money(item.price)}
-              </div>
-
-              <div class="quantity">
-
-                <button onclick="changeQuantity('${esc(item.id)}',-1)">
-                  −
-                </button>
-
-                <strong>${item.quantity}</strong>
-
-                <button onclick="changeQuantity('${esc(item.id)}',1)">
-                  +
-                </button>
-
-                <button
-                  class="btn-danger"
-                  onclick="removeFromCart('${esc(item.id)}')">
-                  🗑️
-                </button>
-
-              </div>
-
-            </div>
-
-          </div>
-        `).join('')}
-
+        ${cart.map(item=>`<div class="cart-item"><img src="${item.image||'https://placehold.co/200x200?text=Produto'}"><div class="cart-info"><strong>${esc(item.name)}</strong><div class="price">${money(item.price)}</div><div class="quantity"><button onclick="changeQuantity('${esc(item.id)}',-1)">−</button><strong>${item.quantity}</strong><button onclick="changeQuantity('${esc(item.id)}',1)">+</button><button class="btn-danger" onclick="removeFromCart('${esc(item.id)}')">🗑️</button></div></div></div>`).join('')}
       </div>
-
-      <div class="total-box">
-
-        <div class="total-line">
-          <span>Subtotal</span>
-          <strong>${money(cartTotal())}</strong>
-        </div>
-
-        <div class="total-line">
-          <span>Entrega</span>
-          <strong>A combinar</strong>
-        </div>
-
-        <div class="total-line final">
-          <span>Total</span>
-          <span>${money(cartTotal())}</span>
-        </div>
-
-      </div>
-
-      <button class="btn btn-primary btn-full mt"
-        onclick="checkout()">
-        Finalizar compra
-      </button>
-
-    </div>
-  `;
+      <div class="total-box"><div class="total-line"><span>Subtotal</span><strong>${money(cartTotal())}</strong></div><div class="total-line"><span>Entrega</span><strong>A combinar</strong></div><div class="total-line final"><span>Total</span><span>${money(cartTotal())}</span></div></div>
+      <button class="btn btn-primary btn-full mt" onclick="checkout()">Finalizar compra</button>
+    </div>`;
 }
 
-function removeFromCart(id){
-  cart = cart.filter(x=>String(x.id)!==String(id));
-
-  saveCart();
-  toast('Produto removido.');
-  loadCart();
+async function removeFromCart(id){
+  try{
+    if(token){
+      await api('/api/cart/'+encodeURIComponent(id),{method:'DELETE'});
+    }else{
+      cart=cart.filter(x=>String(x.id)!==String(id));saveCart();
+    }
+    toast('Produto removido.');
+    await loadCart();
+  }catch(e){toast(e.message||'Não foi possível remover o produto.');}
 }
 
 async function checkout(){
@@ -2665,6 +2605,7 @@ async function login(){
     localStorage.setItem('kuanza_token',token);
 
     me = data.user || null;
+    await syncCommerceFromServer();
 
     toast('Login efetuado ✓');
 
@@ -3181,109 +3122,140 @@ async function publishProduct(){
 }
 
 async function loadStore(){
-
-  const root = document.getElementById('appContent');
-
+  const root=document.getElementById('appContent');
   if(!token){
-    root.innerHTML = `
-      <div class="page">
-        <div class="empty">
-          Inicia sessão para ver a tua loja.
-        </div>
-      </div>
-    `;
+    root.innerHTML=`<div class="page"><div class="empty">Inicia sessão para ver a tua loja.</div></div>`;
     return;
   }
-
   try{
-
-    const data =
-      await api('/api/stores?ownerId=' + encodeURIComponent(me?.id || ''));
-
-    const stores =
-      Array.isArray(data)
-        ? data
-        : (data.stores || []);
-
-    const store = stores[0];
-
-    root.innerHTML = `
+    const data=await api('/api/stores?ownerId='+encodeURIComponent(me?.id||''));
+    const stores=Array.isArray(data)?data:(data.stores||[]);
+    const store=stores[0];
+    const storeProducts=Array.isArray(data.products)?data.products:[];
+    root.innerHTML=`
       <div class="page">
-
-        <div class="section-title">
-          <h2>🏪 Minha loja</h2>
-        </div>
-
-        ${
-          store
-          ? `
-            <div class="card">
-
-              <div class="row" style="align-items:flex-start;gap:10px">
-                <div style="min-width:0;flex:1">
-                  <h3>${esc(store.name || 'Minha loja')}</h3>
-                </div>
-                <button class="btn btn-secondary" style="width:auto;padding:9px 12px" onclick="editStore()">✏️ Editar</button>
-              </div>
-
-              <p class="small">
-                ${esc(store.description || 'Sem descrição.')}
-              </p>
-
-              <div class="stats">
-
-                <div class="stat">
-                  <strong>${store.rating || 0}</strong>
-                  <small>Avaliação</small>
-                </div>
-
-                <div class="stat">
-                  <strong>${me?.score || 0}</strong>
-                  <small>Score</small>
-                </div>
-
-                <div class="stat">
-                  <strong>${products.filter(p=>String(p.sellerId)===String(me?.id)).length}</strong>
-                  <small>Produtos</small>
-                </div>
-
-              </div>
-
+        <div class="section-title"><h2>🏪 Minha loja</h2></div>
+        ${store?`
+          <div class="card">
+            <div class="row" style="align-items:flex-start;gap:10px">
+              <div style="min-width:0;flex:1"><h3>${esc(store.name||'Minha loja')}</h3></div>
+              <button class="btn btn-secondary" style="width:auto;padding:9px 12px" onclick="editStore()">✏️ Editar</button>
             </div>
-          `
-          : `
-            <div class="empty">
-
-              <div class="emoji">🏪</div>
-
-              <strong>Ainda não tens uma loja.</strong>
-
-              <p class="small mt">
-                Cria a tua loja para começar a vender.
-              </p>
-
-              <button class="btn btn-primary mt"
-                onclick="createStore()">
-                Criar loja
+            <p class="small">${esc(store.description||'Sem descrição.')}</p>
+            <div class="stats">
+              <div class="stat"><strong>${store.rating||0}</strong><small>Avaliação</small></div>
+              <div class="stat"><strong>${me?.score||0}</strong><small>Score</small></div>
+              <button type="button" class="stat" style="border:0;cursor:pointer;background:transparent" onclick="openStoreProducts()">
+                <strong>${storeProducts.length}</strong>
+                <small>Produtos<br><span class="small">Tocar para gerir</span></small>
               </button>
-
             </div>
-          `
-        }
-
-      </div>
-    `;
-
+          </div>
+        `:`
+          <div class="empty">
+            <div class="emoji">🏪</div>
+            <strong>Ainda não tens uma loja.</strong>
+            <p class="small mt">Cria a tua loja para começar a vender.</p>
+            <button class="btn btn-primary mt" onclick="createStore()">Criar loja</button>
+          </div>
+        `}
+      </div>`;
   }catch(e){
-
-    root.innerHTML = `
-      <div class="page">
-        <div class="empty">
-          ${esc(e.message)}
-        </div>
-      </div>
-    `;
+    root.innerHTML=`<div class="page"><div class="empty">${esc(e.message||'Não foi possível carregar a loja.')}</div></div>`;
   }
+}
+
+async function openStoreProducts(){
+  const root=document.getElementById('appContent');
+  try{
+    const data=await api('/api/stores?ownerId='+encodeURIComponent(me?.id||''));
+    const items=Array.isArray(data.products)?data.products:[];
+    root.innerHTML=`
+      <div class="page">
+        <div class="section-title">
+          <h2>📦 Meus produtos</h2>
+          <button class="btn btn-secondary" style="width:auto;padding:8px 12px" onclick="loadStore()">← Loja</button>
+        </div>
+        ${items.length?items.map(p=>`
+          <div class="card mt">
+            <div class="row" style="align-items:flex-start;gap:12px">
+              <div style="min-width:0;flex:1">
+                <h3>${esc(p.name||'Produto')}</h3>
+                <p class="small"><strong>${Number(p.price||0).toLocaleString('pt-PT')} Kz</strong></p>
+                <p class="small">Stock: <strong>${Number(p.stock||0)}</strong> · ${esc(p.status||'active')}</p>
+              </div>
+            </div>
+            ${Array.isArray(p.photos)&&p.photos.length?`<div class="photo-grid mt">${p.photos.slice(0,5).map(url=>`<img src="${esc(url)}" alt="Foto do produto" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px">`).join('')}</div>`:''}
+            <div class="quick-grid mt">
+              <button class="quick" onclick="addProductStock('${esc(p.id)}')"><span class="emoji">➕</span>Stock<small>Aumentar stock</small></button>
+              <button class="quick" onclick="editProduct('${esc(p.id)}')"><span class="emoji">✏️</span>Editar<small>Alterar produto</small></button>
+              <button class="quick" onclick="deleteProduct('${esc(p.id)}')"><span class="emoji">🗑️</span>Eliminar<small>Remover produto</small></button>
+            </div>
+          </div>`).join(''):`
+          <div class="empty"><div class="emoji">📦</div><strong>Ainda não tens produtos.</strong><button class="btn btn-primary mt" onclick="go('sell')">Publicar produto</button></div>
+        `}
+      </div>`;
+  }catch(e){
+    root.innerHTML=`<div class="page"><div class="empty">${esc(e.message||'Não foi possível carregar os produtos.')}</div></div>`;
+  }
+}
+
+async function addProductStock(id){
+  const current=await api('/api/products/'+encodeURIComponent(id));
+  const value=prompt('Quantas unidades queres adicionar ao stock?','1');
+  if(value===null)return;
+  const qty=Math.floor(Number(value));
+  if(!Number.isFinite(qty)||qty<1){toast('Indica uma quantidade válida.');return;}
+  try{
+    const next=Number(current.stock||0)+qty;
+    await api('/api/products/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({stock:next})});
+    toast('Stock atualizado ✓');
+    await openStoreProducts();
+  }catch(e){toast(e.message||'Não foi possível atualizar o stock.');}
+}
+
+async function editProduct(id){
+  try{
+    const p=await api('/api/products/'+encodeURIComponent(id));
+    const options=categories.filter(c=>c!=='Todos');
+    openModal(`
+      <div class="modal-head"><h3>✏️ Editar produto</h3><button class="close" onclick="closeModal()">✕</button></div>
+      <div class="form">
+        <label>Nome<input id="editProductName" maxlength="150" value="${esc(p.name||'')}"></label>
+        <label>Preço em Kz<input id="editProductPrice" type="number" min="1" value="${Number(p.price||0)}"></label>
+        <label>Stock<input id="editProductStock" type="number" min="0" step="1" value="${Number(p.stock||0)}"></label>
+        <label>Categoria<select id="editProductCategory"><option value="">Manter categoria atual</option>${options.map(c=>`<option value="${esc(c)}" ${String(c)===String(p.cat||p.category||'')?'selected':''}>${esc(c)}</option>`).join('')}</select></label>
+        <label>Descrição<textarea id="editProductDescription" maxlength="5000">${esc(p.description||'')}</textarea></label>
+        <div class="small">As fotos atuais serão mantidas. A substituição de fotos fica para uma etapa própria.</div>
+        <button class="btn btn-primary btn-full" onclick="saveProductEdit('${esc(p.id)}')">Guardar alterações</button>
+      </div>`);
+  }catch(e){toast(e.message||'Não foi possível abrir o produto.');}
+}
+
+async function saveProductEdit(id){
+  const payload={
+    name:document.getElementById('editProductName')?.value.trim()||'',
+    price:Number(document.getElementById('editProductPrice')?.value||0),
+    stock:Math.max(0,Math.floor(Number(document.getElementById('editProductStock')?.value||0))),
+    description:document.getElementById('editProductDescription')?.value.trim()||''
+  };
+  const category=document.getElementById('editProductCategory')?.value||'';
+  if(category)payload.category=category;
+  try{
+    await api('/api/products/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify(payload)});
+    closeModal();
+    toast('Produto atualizado ✓');
+    await openStoreProducts();
+  }catch(e){toast(e.message||'Não foi possível atualizar o produto.');}
+}
+
+async function deleteProduct(id){
+  if(!confirm('Eliminar este produto da tua loja? Esta ação não pode ser desfeita.'))return;
+  try{
+    await api('/api/products/'+encodeURIComponent(id),{method:'DELETE'});
+    toast('Produto eliminado ✓');
+    await loadStore();
+  }catch(e){toast(e.message||'Não foi possível eliminar o produto.');}
 }
 
 function editStore(){
@@ -4093,6 +4065,7 @@ async function init(){
       me =
         data.user ||
         data;
+      await syncCommerceFromServer();
 
     }catch(e){
 
