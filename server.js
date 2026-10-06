@@ -1246,7 +1246,7 @@ const server=http.createServer(async(req,res)=>{
       if(!st)return json(res,200,{store:null,stores:[],owner:null,products:[]});
       const {data:products,error:productsError}=await supabaseAdmin
         .from('products')
-        .select('id,store_id,name,description,price,created_at,updated_at')
+        .select('id,store_id,name,description,price,stock,status,created_at,updated_at')
         .eq('store_id',st.id)
         .order('created_at',{ascending:false});
       if(productsError)return json(res,500,{error:'Não foi possível carregar os produtos da loja.',details:productsError.message});
@@ -1312,7 +1312,7 @@ const server=http.createServer(async(req,res)=>{
       const q=String(u.query.search||'').trim().toLowerCase();
       const cat=String(u.query.cat||'Todos').trim();
       const sort=String(u.query.sort||'').trim();
-      let query=supabaseAdmin.from('products').select('id,store_id,name,description,price,created_at,updated_at');
+      let query=supabaseAdmin.from('products').select('id,store_id,name,description,price,stock,status,created_at,updated_at');
       if(cat&&cat!=='Todos'){
         const category=await supabaseCategory(cat);
         if(!category)return json(res,200,[]);
@@ -1345,7 +1345,7 @@ const server=http.createServer(async(req,res)=>{
     if(pm&&req.method==='GET'){
       if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
       const id=decodeURIComponent(pm[1]);
-      const {data:rawProduct,error}=await supabaseAdmin.from('products').select('id,store_id,name,description,price,created_at,updated_at').eq('id',id).maybeSingle();
+      const {data:rawProduct,error}=await supabaseAdmin.from('products').select('id,store_id,name,description,price,stock,status,created_at,updated_at').eq('id',id).maybeSingle();
       if(error)return json(res,500,{error:'Não foi possível carregar o produto.',details:error.message});
       if(!rawProduct)return json(res,404,{error:'Produto não encontrado.'});
       const hydrated=await hydrateSupabaseProducts(db,[rawProduct]);
@@ -1387,8 +1387,8 @@ const server=http.createServer(async(req,res)=>{
       if(storeError)return json(res,500,{error:'Não foi possível verificar a loja do vendedor.',details:storeError.message});
       if(!store)return json(res,400,{error:'Cria a tua loja antes de publicar produtos.'});
       const now=new Date().toISOString();
-       const payload={id:crypto.randomUUID(),store_id:store.id,name,description,price,created_at:now,updated_at:now};
-       const {data:rawProduct,error}=await supabaseAdmin.from('products').insert(payload).select('id,store_id,name,description,price,created_at,updated_at').single();
+       const payload={id:crypto.randomUUID(),store_id:store.id,name,description,price,stock,status:'active',created_at:now,updated_at:now};
+       const {data:rawProduct,error}=await supabaseAdmin.from('products').insert(payload).select('id,store_id,name,description,price,stock,status,created_at,updated_at').single();
        const p=rawProduct?{...rawProduct,seller_id:user.id,category_id:category.id,slug:productSlug(name),stock,status:'active',views:0}:null;
       if(error)return json(res,500,{error:'Não foi possível publicar o produto no Supabase.',details:error.message});
 
@@ -1410,44 +1410,120 @@ const server=http.createServer(async(req,res)=>{
       if(!user)return json(res,401,{error:'Inicia sessão.'});
       if(user.role!=='seller')return json(res,403,{error:'Apenas vendedores podem editar produtos.'});
       const id=decodeURIComponent(pm[1]);
-      const {data:rawExisting,error:findError}=await supabaseAdmin.from('products').select('id,store_id,name,description,price,created_at,updated_at').eq('id',id).maybeSingle();
+      const {data:rawExisting,error:findError}=await supabaseAdmin
+        .from('products')
+        .select('id,store_id,name,description,price,stock,status,created_at,updated_at')
+        .eq('id',id)
+        .maybeSingle();
       if(findError)return json(res,500,{error:'Não foi possível consultar o produto.',details:findError.message});
-      if(!existing)return json(res,404,{error:'Produto não encontrado.'});
-      if(String(existing.seller_id)!==String(user.id))return json(res,403,{error:'Sem permissão para editar este produto.'});
+      if(!rawExisting)return json(res,404,{error:'Produto não encontrado.'});
+
+      const {data:store,error:storeError}=await supabaseAdmin
+        .from('stores')
+        .select('id,owner_id')
+        .eq('id',rawExisting.store_id)
+        .maybeSingle();
+      if(storeError)return json(res,500,{error:'Não foi possível verificar a loja do produto.',details:storeError.message});
+      if(!store||String(store.owner_id)!==String(user.id))return json(res,403,{error:'Sem permissão para editar este produto.'});
+
+      const existing=(await hydrateSupabaseProducts(db,[rawExisting]))[0]||rawExisting;
       const legacy=db.products.find(x=>String(x.id)===String(existing.id))||{};
       const b=await body(req,10*1024*1024);
-      const name=b.name!==undefined?String(b.name).trim():existing.name;
-      const categoryValue=b.categoryId!==undefined?String(b.categoryId).trim():(b.cat!==undefined?String(b.cat).trim():(b.category!==undefined?String(b.category).trim():String(existing.category_id||'')));
-      const price=b.price!==undefined?Number(b.price):Number(existing.price);
+      const name=b.name!==undefined?String(b.name).trim():String(existing.name||'');
+      const price=b.price!==undefined?Number(b.price):Number(existing.price||0);
       const description=b.description!==undefined?String(b.description).trim():String(existing.description||'');
       const stock=b.stock!==undefined?Math.max(0,Number.isFinite(Number(b.stock))?Math.floor(Number(b.stock)):0):Number(existing.stock||0);
-      const status=b.status!==undefined?String(b.status||'active'):String(existing.status||'active');
+      const status=b.status!==undefined?(String(b.status||'active').trim()||'active'):String(existing.status||'active');
+      const categoryValue=b.categoryId!==undefined?String(b.categoryId).trim():(b.cat!==undefined?String(b.cat).trim():(b.category!==undefined?String(b.category).trim():''));
       const condition=b.condition!==undefined?String(b.condition||'Usado').trim():String(legacy.condition||'Usado');
       const location=b.location!==undefined?String(b.location||'').trim():String(legacy.location||'');
-      const photos=b.photos!==undefined?(Array.isArray(b.photos)?b.photos.slice(0,10):[]):(Array.isArray(legacy.photos)?legacy.photos:[]);
-      if(!name||price<=0||!categoryValue)return json(res,400,{error:'Preenche nome, preço e categoria.'});
-      if(!validPhotos(photos))return json(res,400,{error:'O produto precisa de pelo menos 5 fotos reais. Podes adicionar até 10.'});
+      const photosProvided=Object.prototype.hasOwnProperty.call(b,'photos');
+      const photos=photosProvided?(Array.isArray(b.photos)?b.photos.slice(0,10):[]):(Array.isArray(legacy.photos)?legacy.photos:[]);
+
+      if(!name||price<=0)return json(res,400,{error:'Preenche nome e preço válidos.'});
+      if(stock<0)return json(res,400,{error:'O stock não pode ser negativo.'});
       if(description.length<15)return json(res,400,{error:'A descrição é obrigatória e deve ter pelo menos 15 caracteres.'});
       if(description.length>5000)return json(res,400,{error:'A descrição é demasiado longa.'});
       if(condition.length<2||condition.length>50)return json(res,400,{error:'A condição do produto é inválida.'});
       if(location.length>200)return json(res,400,{error:'A localização deve ter no máximo 200 caracteres.'});
-      const category=await supabaseCategory(categoryValue);
-      if(!category)return json(res,400,{error:'Categoria não encontrada ou inativa.'});
-       const patch={name,price,description,updated_at:new Date().toISOString()};
-       const {data:rawUpdated,error}=await supabaseAdmin.from('products').update(patch).eq('id',id).eq('store_id',existing.store_id).select('id,store_id,name,description,price,created_at,updated_at').single();
-       const p=rawUpdated?{...rawUpdated,seller_id:user.id,category_id:category.id,slug:b.slug!==undefined?(slugify(b.slug)||productSlug(name)):String(existing.slug||productSlug(name)),stock,status,views:Number(existing.views||0)}:null;
-      if(error)return json(res,500,{error:'Não foi possível atualizar o produto.',details:error.message});
+      if(photosProvided&&!validPhotos(photos))return json(res,400,{error:'O produto precisa de pelo menos 5 fotos reais. Podes adicionar até 10.'});
 
-      if(b.photos!==undefined){
-        const photoResult=await replaceProductImages(p.id,photos);
+      const patch={name,price,description,stock,status,updated_at:new Date().toISOString()};
+      const {data:rawUpdated,error:updateError}=await supabaseAdmin
+        .from('products')
+        .update(patch)
+        .eq('id',id)
+        .eq('store_id',rawExisting.store_id)
+        .select('id,store_id,name,description,price,stock,status,created_at,updated_at')
+        .single();
+      if(updateError)return json(res,500,{error:'Não foi possível atualizar o produto.',details:updateError.message});
+
+      const category=categoryValue?await supabaseCategory(categoryValue):null;
+      const finalCategoryId=category?.id||existing.category_id||'';
+      if(categoryValue&&!category)return json(res,400,{error:'Categoria não encontrada ou inativa.'});
+
+      if(photosProvided){
+        const photoResult=await replaceProductImages(id,photos);
         if(!photoResult.ok)return json(res,500,{error:'Não foi possível atualizar as fotos do produto.',details:photoResult.error});
       }
 
-      const out=supabaseProductToPublic(p,undefined,undefined,{...legacy,emoji:b.emoji!==undefined?String(b.emoji||'📦'):legacy.emoji,rating:legacy.rating||5,score:legacy.score||50,seller:legacy.seller||user.name,condition,location,photos},category);
-      const {profilesById,storesByOwner}=await supabaseSellerMaps([p.seller_id]);
-      const finalOut=supabaseProductToPublic(p,profilesById.get(String(p.seller_id)),storesByOwner.get(String(p.seller_id)),{...legacy,emoji:b.emoji!==undefined?String(b.emoji||'📦'):legacy.emoji,rating:legacy.rating||5,score:legacy.score||50,seller:legacy.seller||user.name,condition,location,photos},category);
+      const p={...rawUpdated,seller_id:user.id,category_id:finalCategoryId,slug:String(existing.slug||productSlug(name)),stock,status,views:Number(existing.views||0)};
+      const {profilesById,storesByOwner}=await supabaseSellerMaps([user.id]);
+      const finalPhotos=photosProvided?photos:(await getProductImages([id])).get(String(id))||[];
+      const finalOut=supabaseProductToPublic(
+        p,
+        profilesById.get(String(user.id)),
+        storesByOwner.get(String(user.id)),
+        {...legacy,emoji:legacy.emoji||'📦',rating:legacy.rating||5,score:legacy.score||50,seller:legacy.seller||user.name,condition,location,photos:finalPhotos},
+        category
+      );
       mirrorProductToLegacy(db,finalOut);write(db);
       return json(res,200,finalOut);
+    }
+
+    if(pm&&req.method==='DELETE'){
+      if(!supabaseAdmin)return json(res,503,{error:'Supabase não está configurado no servidor.'});
+      const user=await auth(db,req);
+      if(!user)return json(res,401,{error:'Inicia sessão.'});
+      if(user.role!=='seller')return json(res,403,{error:'Apenas vendedores podem eliminar produtos.'});
+      const id=decodeURIComponent(pm[1]);
+      const {data:product,error:productError}=await supabaseAdmin
+        .from('products')
+        .select('id,store_id')
+        .eq('id',id)
+        .maybeSingle();
+      if(productError)return json(res,500,{error:'Não foi possível consultar o produto.',details:productError.message});
+      if(!product)return json(res,404,{error:'Produto não encontrado.'});
+      const {data:store,error:storeError}=await supabaseAdmin
+        .from('stores')
+        .select('id,owner_id')
+        .eq('id',product.store_id)
+        .maybeSingle();
+      if(storeError)return json(res,500,{error:'Não foi possível verificar a loja.',details:storeError.message});
+      if(!store||String(store.owner_id)!==String(user.id))return json(res,403,{error:'Sem permissão para eliminar este produto.'});
+
+      const images=await getProductImages([id]);
+      const urls=images.get(String(id))||[];
+      const {error:cartError}=await supabaseAdmin.from('cart_items').delete().eq('product_id',id);
+      if(cartError)return json(res,500,{error:'Não foi possível limpar o carrinho ligado ao produto.',details:cartError.message});
+      const {error:favError}=await supabaseAdmin.from('favorites').delete().eq('product_id',id);
+      if(favError)return json(res,500,{error:'Não foi possível limpar os favoritos ligados ao produto.',details:favError.message});
+      const {error:imageError}=await supabaseAdmin.from('product_images').delete().eq('product_id',id);
+      if(imageError)return json(res,500,{error:'Não foi possível remover as fotos do produto.',details:imageError.message});
+      const paths=[];
+      for(const imageUrl of urls){
+        const marker='/' + SUPABASE_PRODUCT_IMAGES_BUCKET + '/';
+        const idx=String(imageUrl).indexOf(marker);
+        if(idx>=0)paths.push(String(imageUrl).slice(idx+marker.length));
+      }
+      if(paths.length){try{await supabaseAdmin.storage.from(SUPABASE_PRODUCT_IMAGES_BUCKET).remove(paths);}catch(_){} }
+
+      const {error:deleteError}=await supabaseAdmin.from('products').delete().eq('id',id).eq('store_id',product.store_id);
+      if(deleteError)return json(res,409,{error:'Não foi possível eliminar o produto.',details:deleteError.message});
+      const legacyIndex=db.products.findIndex(x=>String(x.id)===id);
+      if(legacyIndex>=0)db.products.splice(legacyIndex,1);
+      write(db);
+      return json(res,200,{ok:true,id});
     }
 
     const fav=u.pathname.match(/^\/api\/favorites\/([^/]+)$/);
@@ -1458,7 +1534,7 @@ const server=http.createServer(async(req,res)=>{
       if(error)return json(res,500,{error:'Não foi possível carregar os favoritos.',details:error.message});
       const ids=(rows||[]).map(x=>String(x.product_id));
       if(!ids.length)return json(res,200,[]);
-      const {data:products,error:pe}=await supabaseAdmin.from('products').select('id,store_id,name,description,price,created_at,updated_at').in('id',ids);
+      const {data:products,error:pe}=await supabaseAdmin.from('products').select('id,store_id,name,description,price,stock,status,created_at,updated_at').in('id',ids);
       if(pe)return json(res,500,{error:'Não foi possível carregar os produtos favoritos.',details:pe.message});
       const {profilesById,storesByOwner}=await supabaseSellerMaps((products||[]).map(p=>p.seller_id));
       const categoryMap=await supabaseCategoryMap((products||[]).map(p=>p.category_id));
@@ -1495,7 +1571,7 @@ const server=http.createServer(async(req,res)=>{
       if(error)return json(res,500,{error:'Não foi possível carregar o carrinho.',details:error.message});
       const ids=(rows||[]).map(x=>String(x.product_id));
       if(!ids.length)return json(res,200,[]);
-      const {data:products,error:pe}=await supabaseAdmin.from('products').select('id,store_id,name,description,price,created_at,updated_at').in('id',ids);
+      const {data:products,error:pe}=await supabaseAdmin.from('products').select('id,store_id,name,description,price,stock,status,created_at,updated_at').in('id',ids);
       if(pe)return json(res,500,{error:'Não foi possível carregar os produtos do carrinho.',details:pe.message});
       const {profilesById,storesByOwner}=await supabaseSellerMaps((products||[]).map(p=>p.seller_id));
       const categoryMap=await supabaseCategoryMap((products||[]).map(p=>p.category_id));
