@@ -125,7 +125,7 @@ async function auth(db,req){
       if(!adminError&&adminRow)permanentAdmin=true;
     }catch(e){}
   }
-  const effectiveRole=permanentAdmin?'admin':(['buyer','seller','admin'].includes(p.role)?p.role:'buyer');
+  const effectiveRole=permanentAdmin?'admin':(['buyer','seller'].includes(p.role)?p.role:'buyer');
   const user={
     id:au.id,
     name:String(p.full_name||au.user_metadata?.full_name||au.user_metadata?.name||au.email?.split('@')[0]||'Utilizador'),
