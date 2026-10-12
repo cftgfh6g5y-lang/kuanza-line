@@ -1951,11 +1951,36 @@ const server=http.createServer(async(req,res)=>{
     }
     if(u.pathname==='/api/reviews'&&req.method==='POST'){
       const user=await auth(db,req); if(!user)return json(res,401,{error:'Inicia sessão para avaliar.'});
-      const b=await body(req); const productId=String(b.productId||''); const product=db.products.find(x=>x.id===productId);
+      const b=await body(req); const productId=String(b.productId||'').trim(); const product=db.products.find(x=>String(x.id)===productId);
       if(!product)return json(res,404,{error:'Produto não encontrado.'});
-      if(product.sellerId===user.id)return json(res,400,{error:'Não podes avaliar o teu próprio produto.'});
-      const rating=Math.round(Number(b.rating||0)); if(rating<1||rating>5)return json(res,400,{error:'A avaliação deve ser de 1 a 5 estrelas.'});
-      if(db.reviews.some(r=>r.productId===productId&&r.buyerId===user.id))return json(res,409,{error:'Já avalieste este produto.'});
+      if(String(product.sellerId)===String(user.id))return json(res,400,{error:'Não podes avaliar o teu próprio produto.'});
+
+      // SECURITY: only a buyer with a delivered/completed order containing this
+      // exact product may submit a review. In production, read orders from
+      // Supabase instead of trusting a potentially stale local JSON mirror.
+      let buyerOrders=[];
+      if(supabaseAdmin){
+        try{
+          buyerOrders=await getSupabaseOrdersForBuyer(user.id,db);
+          for(const order of buyerOrders)await mirrorOrderToLegacy(db,order);
+        }catch(e){
+          console.error('Não foi possível validar a compra para avaliação:',e.message||e);
+          return json(res,503,{error:'Não foi possível confirmar a compra neste momento. Tenta novamente.'});
+        }
+      }else{
+        buyerOrders=db.orders.filter(order=>String(order.userId||order.buyerId||'')===String(user.id));
+      }
+      const eligibleOrder=buyerOrders.some(order=>
+        String(order.userId||order.buyerId||'')===String(user.id) &&
+        ['Entregue','Concluído'].includes(String(order.status||'')) &&
+        Array.isArray(order.items) &&
+        order.items.some(item=>String(item.productId||item.product_id||'')===productId)
+      );
+      if(!eligibleOrder)return json(res,403,{error:'Só podes avaliar este produto depois de uma compra concluída e entregue.'});
+
+      const rating=Number(b.rating);
+      if(!Number.isInteger(rating)||rating<1||rating>5)return json(res,400,{error:'A avaliação deve ser de 1 a 5 estrelas.'});
+      if(db.reviews.some(r=>String(r.productId)===productId&&String(r.buyerId)===String(user.id)))return json(res,409,{error:'Já avalieste este produto.'});
       const comment=String(b.comment||'').trim().slice(0,500);
       const review={id:crypto.randomUUID(),productId,sellerId:product.sellerId,buyerId:user.id,rating,comment,createdAt:new Date().toISOString()};
       db.reviews.unshift(review); const seller=db.users.find(x=>x.id===product.sellerId); if(seller){seller.score=calculateScore(db,seller);notify(db,seller.id,'review','Nova avaliação',`Recebeste uma nova avaliação de ${review.rating} estrelas.`,{productId:product.id,rating:review.rating});} write(db);
